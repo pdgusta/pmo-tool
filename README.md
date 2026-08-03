@@ -40,44 +40,44 @@ pode ser importado por formatos compatíveis.
 
 ## Conheça o PMO Tool
 
-Os espaços abaixo estão prontos para receber as capturas reais, sem links ou imagens fictícias.
+As capturas abaixo usam o portfólio fictício de demonstração e apresentam algumas das principais áreas da aplicação.
 
 ### Visão executiva do portfólio
 
 Veja rapidamente onde a liderança precisa agir, com indicadores consolidados e alertas de
 governança.
 
-> [INSERIR PRINT 1 — Tela “Painel executivo” com os dados de demonstração carregados, mostrando KPIs, farol do portfólio, curva S e alertas de governança.]
+![Painel executivo do PMO Tool com KPIs, farol do portfólio, curva S e alertas de governança](docs/images/readme/painel-executivo.png)
 
 ### Portfólio organizado para o trabalho diário
 
 Alterne entre uma visão analítica em tabela e o acompanhamento visual do fluxo dos projetos.
 
-> [INSERIR PRINT 2 — Tela “Portfólio” mostrando a visualização em tabela ou kanban, com projetos em diferentes estágios.]
+![Portfólio do PMO Tool na visualização kanban, com projetos distribuídos por estágio](docs/images/readme/portfolio-kanban.png)
 
 ### Roadmap integrado
 
 Enxergue o plano no tempo e identifique relações que atravessam projetos e programas.
 
-> [INSERIR PRINT 3 — Tela “Roadmap” mostrando projetos, marcos, gates, baseline e dependências entre projetos.]
+![Roadmap do PMO Tool com projetos, marcos, gates, baseline e dependências](docs/images/readme/roadmap.png)
 
 ### Riscos e issues consolidados
 
 Priorize exposição, pendências e responsáveis a partir de uma visão comum do portfólio.
 
-> [INSERIR PRINT 4 — Tela “Riscos e issues” mostrando a matriz 5×5 e o registro consolidado.]
+![Riscos e issues do PMO Tool com matriz de risco 5 por 5 e registro consolidado](docs/images/readme/riscos-e-issues.png)
 
 ### Financeiro e valor agregado
 
 Acompanhe tendências de prazo e custo com indicadores de EVM e curvas consolidadas.
 
-> [INSERIR PRINT 5 — Tela “Financeiro e EVM” mostrando a curva S e indicadores como SPI, CPI, EAC e VAC.]
+![Financeiro e EVM do PMO Tool com curva S, CAPEX, OPEX e indicadores de valor agregado](docs/images/readme/financeiro-e-evm.png)
 
 ### Importação sob controle
 
 Revise cada alteração proposta antes de incorporar dados externos ao portfólio.
 
-> [INSERIR PRINT 6 — Tela “Importar e exportar” ou o diff de reconciliação campo a campo antes de confirmar uma importação.]
+![Importação e exportação no PMO Tool com área para arquivos e exemplos compatíveis](docs/images/readme/importar-e-exportar.png)
 
 ## Principais benefícios e funcionalidades
 
