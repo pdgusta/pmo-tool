@@ -1,0 +1,127 @@
+name: Validate and draft release
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+concurrency:
+  group: pmo-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate-package-and-draft:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve deterministic metadata
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $model = Get-Content -LiteralPath '.\src\js\10-model.js' -Raw -Encoding UTF8
+          $match = [regex]::Match($model, 'model\.APP_VERSION\s*=\s*[''"](?<version>[^''"]+)[''"]')
+          if (-not $match.Success) { throw 'APP_VERSION not found.' }
+          $sourceVersion = $match.Groups['version'].Value
+
+          if ($env:GITHUB_REF -like 'refs/tags/*') {
+            if ($env:GITHUB_REF_NAME -notmatch '^v(?<version>(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$') {
+              throw "Stable release tag must be vX.Y.Z: $env:GITHUB_REF_NAME"
+            }
+            $version = $Matches['version']
+            if ($version -ne $sourceVersion) {
+              throw "Tag $version differs from APP_VERSION $sourceVersion."
+            }
+          }
+          else {
+            $version = $sourceVersion
+          }
+
+          $timestamp = (git show -s --format=%cI $env:GITHUB_SHA).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($timestamp)) {
+            throw 'Could not resolve commit timestamp.'
+          }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8 -Value "PMO_BUILD_VERSION=$version"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8 -Value "PMO_BUILD_COMMIT=$env:GITHUB_SHA"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8 -Value "PMO_BUILD_TIMESTAMP=$timestamp"
+
+      - name: Pin development JavaScript runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.0'
+
+      - name: Run PowerShell 5.1 tests
+        run: |
+          .\tests\Run-Tests.ps1 `
+            -Version $env:PMO_BUILD_VERSION `
+            -Commit $env:PMO_BUILD_COMMIT `
+            -BuildTimestamp $env:PMO_BUILD_TIMESTAMP
+
+      - name: Validate architecture context
+        run: .\tools\validar-contexto.ps1 -Detalhado
+
+      - name: Exercise updater recovery journals
+        run: .\tests\Test-UpdaterRecovery.ps1
+
+      - name: Exercise local persistence and update API
+        run: .\tests\Invoke-ServerIntegration.ps1
+
+      - name: Build release assets
+        run: |
+          .\tools\New-ReleasePackage.ps1 `
+            -Version $env:PMO_BUILD_VERSION `
+            -Commit $env:PMO_BUILD_COMMIT `
+            -BuildTimestamp $env:PMO_BUILD_TIMESTAMP `
+            -OutputDirectory '.\artifacts'
+
+          $zip = ".\artifacts\pmo-tool-$env:PMO_BUILD_VERSION-windows.zip"
+          $manifest = ".\artifacts\pmo-tool-$env:PMO_BUILD_VERSION-manifest.json"
+          .\tools\Test-ReleasePackage.ps1 -ZipPath $zip -ManifestPath $manifest
+
+      - name: Preserve validated workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmo-tool-validated-${{ github.run_id }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create immutable-candidate draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release view $env:GITHUB_REF_NAME --json id 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $env:GITHUB_REF_NAME already exists; assets will not be replaced."
+          }
+
+          $assets = @(Get-ChildItem -LiteralPath '.\artifacts' -File | Sort-Object Name | ForEach-Object { $_.FullName })
+          if ($assets.Count -ne 3) {
+            throw "Expected exactly three release assets, found $($assets.Count)."
+          }
+          gh release create $env:GITHUB_REF_NAME $assets `
+            --draft `
+            --verify-tag `
+            --generate-notes `
+            --title "PMO Tool $env:GITHUB_REF_NAME"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'GitHub draft release creation failed.'
+          }
+          Write-Host 'Draft created. Human review and publication are required.'

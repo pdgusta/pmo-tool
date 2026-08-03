@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "repository": "OWNER/pmo-tool",
+  "channel": "stable",
+  "port": 8090,
+  "checkIntervalHours": 24,
+  "dataDir": "data",
+  "configDir": "config",
+  "stateDir": "state",
+  "retention": {
+    "versions": 2,
+    "snapshots": 3,
+    "portfolioBackups": 30
+  }
+}

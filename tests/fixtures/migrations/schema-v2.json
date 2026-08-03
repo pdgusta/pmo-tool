@@ -1,0 +1,34 @@
+{
+  "meta": { "schemaVersion": 2, "orgName": "Fixture v2", "xMeta": "preservar-v2" },
+  "settings": {
+    "gates": [
+      { "id": "g0", "codigo": "G0", "nome": "Inicio", "ordem": 0, "xGate": "preservar" }
+    ],
+    "taxonomias": {},
+    "xSettings": { "origem": 2 }
+  },
+  "pessoas": [],
+  "programas": [],
+  "projetos": [
+    {
+      "id": "prj-v2",
+      "codigo": "PRJ-V2",
+      "nome": "Projeto Sintetico v2",
+      "estagio": "ideacao",
+      "gateAtual": "g0",
+      "anexos": [],
+      "xProjeto": { "origem": 2 }
+    }
+  ],
+  "anexos": [],
+  "auditLog": [
+    { "id": "aud-v2", "acao": "fixture" }
+  ],
+  "imports": [
+    { "id": "imp-v2", "kind": "fixture" }
+  ],
+  "visoesSalvas": [
+    { "id": "view-v2", "nome": "Fixture" }
+  ],
+  "xTopo": { "origem": 2 }
+}

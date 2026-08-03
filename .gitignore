@@ -1,0 +1,41 @@
+# Estado persistente e configuracao de cada instalacao
+/data/
+/config/*
+!/config/install.example.json
+/state/*
+!/state/active.example.json
+!/state/update.example.json
+/versions/
+/staging/
+/logs/
+
+# Saidas reproduziveis de build e release
+/dist/
+/artifacts/
+/release-artifacts/
+*.zip
+*.sha256
+
+# Temporarios e logs
+*.tmp
+*.temp
+*.bak
+*.log
+*.stackdump
+/tests/.tmp/
+
+# Configuracao local de ferramentas e sistema operacional
+.vs/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+.DS_Store
+
+# Segredos locais
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key

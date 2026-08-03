@@ -1,0 +1,261 @@
+/* =============================================================================
+   50-charts.css — cromo da biblioteca de graficos (PMO.chart)
+   -----------------------------------------------------------------------------
+   Somente tokens de 00-theme.css. Nenhuma cor literal.
+   Geometria de marca/eixo vive no JS (SVG); aqui fica o cromo de HTML:
+   superficie do grafico, tooltip singleton, legenda, legenda de escala,
+   empty state, foco e o gemeo tabular.
+
+   REGRA: todo grafico renderiza sobre --sup-1 (superficie contra a qual a
+   paleta foi validada). Por isso .pmo-cht carrega o background explicitamente,
+   mesmo dentro de um card que ja seja --sup-1.
+   ============================================================================= */
+
+/* ------------------------------------------------------------------ moldura */
+.pmo-cht {
+  background: var(--sup-1);
+  color: var(--tinta-2);
+  font-family: var(--fonte);
+  font-size: var(--ts-peq);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  min-width: 0;
+  position: relative;
+}
+
+/* legenda ao lado (donut em container largo) */
+.pmo-cht[data-lado="lado"] {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--e-4);
+  flex-wrap: nowrap;
+}
+
+.pmo-cht-plot { min-width: 0; flex: 1 1 auto; }
+.pmo-cht-plot[hidden] { display: none; }
+
+.pmo-cht-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* o viewBox ja inclui a faixa de rotulos do eixo x: nunca gera scroll interno */
+}
+
+.pmo-cht-svg text { font-family: var(--fonte); }
+.pmo-cht-svg text.e-tab { font-variant-numeric: tabular-nums; }
+/* figura de valor grande: figuras proporcionais, nunca tabular-nums */
+.pmo-cht-svg text.e-figura { font-variant-numeric: normal; }
+
+.pmo-cht-marcas { transition: opacity var(--transicao); }
+
+/* --------------------------------------------------------------------- foco */
+.pmo-cht-svg [tabindex] { outline: none; cursor: default; }
+.pmo-cht-svg [tabindex]:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 1px;
+}
+.pmo-cht-svg [tabindex].e-clicavel { cursor: pointer; }
+.pmo-cht-svg .e-acerto { fill: transparent; }
+
+/* -------------------------------------------------------------- empty state */
+.pmo-cht-vazio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--tinta-3);
+  font-size: var(--ts-peq);
+  padding: var(--e-4);
+}
+.pmo-cht-vazio[hidden] { display: none; }
+
+/* -------------------------------------------------- rodape (legenda/escala) */
+.pmo-cht-rodape {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  min-width: 0;
+}
+.pmo-cht-rodape:empty { display: none; }
+.pmo-cht[data-lado="lado"] .pmo-cht-rodape { flex: 0 1 auto; max-width: 52%; }
+
+/* ------------------------------------------------------------------ legenda */
+.pmo-cht-leg {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2) var(--e-4);
+  min-width: 0;
+}
+.pmo-cht-leg.e-coluna { flex-direction: column; flex-wrap: nowrap; gap: var(--e-2); }
+.pmo-cht-leg > li {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  min-width: 0;
+  font-size: var(--ts-peq);
+  color: var(--tinta-2);
+  line-height: 1.35;
+}
+.pmo-cht-leg .pmo-cht-sw { flex: 0 0 auto; display: block; }
+.pmo-cht-leg .pmo-cht-leg-r {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pmo-cht-leg .pmo-cht-leg-v {
+  margin-left: auto;
+  padding-left: var(--e-3);
+  color: var(--tinta-1);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------- legenda de escala (cont.) */
+.pmo-cht-esc {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  flex-wrap: wrap;
+  font-size: var(--ts-mic);
+  color: var(--tinta-3);
+}
+.pmo-cht-esc-tit { color: var(--tinta-2); }
+.pmo-cht-esc-barra {
+  display: flex;
+  height: 10px;
+  flex: 0 1 180px;
+  min-width: 90px;
+  border-radius: var(--raio-1);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--borda);
+}
+.pmo-cht-esc-barra > span { flex: 1 1 auto; }
+.pmo-cht-esc-lim { font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------------ tooltip */
+.pmo-cht-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  max-width: 300px;
+  padding: var(--e-2) var(--e-3);
+  background: var(--sup-inv);
+  color: var(--tinta-inv);
+  border-radius: var(--raio-2);
+  box-shadow: var(--sombra-3);
+  font-family: var(--fonte);
+  font-size: var(--ts-peq);
+  line-height: 1.45;
+}
+.pmo-cht-tip[hidden] { display: none; }
+.pmo-cht-tip-t {
+  font-size: var(--ts-mic);
+  opacity: 0.7;
+  margin-bottom: var(--e-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pmo-cht-tip-l {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--e-2);
+}
+/* chave de serie: traco curto (nao caixa) na densidade do tooltip */
+.pmo-cht-tip-k {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--k, currentColor);
+}
+.pmo-cht-tip-k.e-quad { height: 8px; border-radius: 2px; }
+.pmo-cht-tip-k.e-ponto { width: 8px; height: 8px; border-radius: 50%; margin: 0 2px; }
+.pmo-cht-tip-k.e-trac {
+  height: 0;
+  background: none;
+  border-top: 2px dashed var(--k, currentColor);
+}
+/* valor lidera, rotulo segue */
+.pmo-cht-tip-n {
+  opacity: 0.78;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pmo-cht-tip-v {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pmo-cht-tip-l.e-forte .pmo-cht-tip-n { opacity: 1; }
+.pmo-cht-tip-nota {
+  margin-top: var(--e-1);
+  font-size: var(--ts-mic);
+  opacity: 0.66;
+}
+
+/* ------------------------------------------------------- gemeo tabular (a11y) */
+.pmo-cht-tab-rolo { overflow-x: auto; max-width: 100%; }
+.pmo-cht-tab {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ts-peq);
+  color: var(--tinta-1);
+}
+.pmo-cht-tab caption {
+  caption-side: top;
+  text-align: left;
+  color: var(--tinta-2);
+  font-size: var(--ts-mic);
+  padding-bottom: var(--e-2);
+}
+.pmo-cht-tab th,
+.pmo-cht-tab td {
+  padding: var(--e-1) var(--e-2);
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--grade);
+}
+.pmo-cht-tab thead th {
+  background: var(--sup-2);
+  color: var(--tinta-2);
+  font-weight: 600;
+}
+.pmo-cht-tab thead th:first-child,
+.pmo-cht-tab th[scope="row"] { text-align: left; }
+.pmo-cht-tab td { font-variant-numeric: tabular-nums; }
+.pmo-cht-tab tbody tr:hover { background: var(--sup-3); }
+
+.pmo-cht-det { font-size: var(--ts-peq); color: var(--tinta-2); }
+.pmo-cht-det > summary { cursor: pointer; padding: var(--e-1) 0; }
+.pmo-cht-det > summary:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+.pmo-cht-det[open] > summary { margin-bottom: var(--e-2); }
+
+/* ------------------------------------------------------------- sr-only local */
+.pmo-cht-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------------------ estreito */
+@media (max-width: 560px) {
+  .pmo-cht[data-lado="lado"] { flex-direction: column; align-items: stretch; }
+  .pmo-cht[data-lado="lado"] .pmo-cht-rodape { max-width: 100%; }
+}

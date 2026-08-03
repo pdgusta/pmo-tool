@@ -1,0 +1,44 @@
+{
+  "meta": { "schemaVersion": 4, "orgName": "Fixture v4", "xMeta": "preservar-v4" },
+  "settings": {
+    "tema": "escuro",
+    "salvarEmDisco": false,
+    "gates": [
+      { "id": "g0", "codigo": "G0", "nome": "Inicio", "ordem": 0 }
+    ],
+    "taxonomias": {},
+    "xSettings": { "origem": 4 }
+  },
+  "pessoas": [],
+  "programas": [],
+  "projetos": [
+    {
+      "id": "prj-v4",
+      "codigo": "PRJ-V4",
+      "nome": "Projeto Sintetico v4",
+      "estagio": "ideacao",
+      "gateAtual": "g0",
+      "anexos": ["anx-v4.txt"],
+      "xProjeto": { "origem": 4 }
+    }
+  ],
+  "anexos": [
+    {
+      "id": "anx-v4.txt",
+      "projetoId": "prj-v4",
+      "entidadeRef": null,
+      "nomeArquivo": "fixture.txt",
+      "xAnexo": "preservar"
+    }
+  ],
+  "auditLog": [
+    { "id": "aud-v4", "acao": "fixture" }
+  ],
+  "imports": [
+    { "id": "imp-v4", "kind": "fixture" }
+  ],
+  "visoesSalvas": [
+    { "id": "view-v4", "nome": "Fixture" }
+  ],
+  "xTopo": { "origem": 4 }
+}

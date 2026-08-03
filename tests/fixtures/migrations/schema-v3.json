@@ -1,0 +1,39 @@
+{
+  "meta": { "schemaVersion": 3, "orgName": "Fixture v3", "xMeta": "preservar-v3" },
+  "settings": { "salvarEmDisco": true, "xSettings": { "origem": 3 } },
+  "pessoas": [],
+  "programas": [],
+  "projetos": [
+    {
+      "id": "prj-v3",
+      "codigo": "PRJ-V3",
+      "nome": "Projeto Sintetico v3",
+      "estagio": "ideacao",
+      "gateAtual": "g0",
+      "riscos": [
+        { "id": "rsk-v3", "titulo": "Risco sintetico", "status": "fechado" }
+      ],
+      "anexos": ["anx-v3.txt"],
+      "xProjeto": { "origem": 3 }
+    }
+  ],
+  "anexos": [
+    {
+      "id": "anx-v3.txt",
+      "projetoId": "prj-v3",
+      "entidadeRef": { "tipo": "risco", "id": "rsk-v3" },
+      "nomeArquivo": "fixture.txt",
+      "xAnexo": "preservar"
+    }
+  ],
+  "auditLog": [
+    { "id": "aud-v3", "acao": "fixture" }
+  ],
+  "imports": [
+    { "id": "imp-v3", "kind": "fixture" }
+  ],
+  "visoesSalvas": [
+    { "id": "view-v3", "nome": "Fixture" }
+  ],
+  "xTopo": { "origem": 3 }
+}

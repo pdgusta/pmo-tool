@@ -1,0 +1,566 @@
+{
+  "schemaVersion": 1,
+  "constraints": {
+    "l0MaxCharacters": 320,
+    "l0MaxWords": 60
+  },
+  "entries": [
+    {
+      "id": "protocolo-contexto",
+      "title": "Protocolo de contexto L0/L1/L2",
+      "kind": "protocol",
+      "l0": "Define como agentes descobrem domínios pelo índice, avançam de L0 para L1 e L2, interpretam estado atual versus alvo e validam relações sem carregar o repositório inteiro.",
+      "l1": "docs/context/README.md",
+      "l2": [
+        "tools/validar-contexto.ps1"
+      ],
+      "tags": ["agentes", "contexto", "documentacao"],
+      "criticality": "high",
+      "dependsOn": []
+    },
+    {
+      "id": "modelo-schema",
+      "title": "Modelo e evolução de schema",
+      "kind": "domain",
+      "l0": "Define o bundle canônico, entidades, versões e migrações. Toda leitura ou escrita persistente depende deste contrato e deve rejeitar schema futuro sem alterar dados.",
+      "l1": "docs/context/modelo-schema.md",
+      "l2": [
+        "src/js/10-model.js",
+        "tests/Invoke-ModelMigrationTests.ps1",
+        "tests/model-migration.test.mjs",
+        "tests/fixtures/migrations/schema-v1.json",
+        "tests/fixtures/migrations/schema-v2.json",
+        "tests/fixtures/migrations/schema-v3.json",
+        "tests/fixtures/migrations/schema-v4.json"
+      ],
+      "tags": ["bundle", "migracao", "modelo", "schema"],
+      "criticality": "critical",
+      "dependsOn": []
+    },
+    {
+      "id": "persistencia-hibrida",
+      "title": "Persistência híbrida",
+      "kind": "domain",
+      "l0": "Coordena o bundle em memória, IndexedDB e réplica em disco, escolhe a cópia mais recente e concentra mutações. Falhas devem ser visíveis e nunca destruir a última cópia válida.",
+      "l1": "docs/context/persistencia-hibrida.md",
+      "l2": [
+        "src/js/20-store.js",
+        "serve.ps1",
+        "tools/portable-common.ps1",
+        "tests/Run-Tests.ps1",
+        "tests/Invoke-ServerIntegration.ps1"
+      ],
+      "tags": ["disco", "indexeddb", "persistencia", "store"],
+      "criticality": "critical",
+      "dependsOn": ["modelo-schema"]
+    },
+    {
+      "id": "anexos",
+      "title": "Cofre de anexos",
+      "kind": "domain",
+      "l0": "Separa metadados do bundle e blobs armazenados no IndexedDB ou disco. Update, backup e restauração só são seguros após conferir presença, tamanho e hash de cada blob.",
+      "l1": "docs/context/anexos.md",
+      "l2": [
+        "src/js/20-store.js",
+        "src/js/66-views-dados.js",
+        "serve.ps1"
+      ],
+      "tags": ["anexos", "blobs", "cofre", "integridade"],
+      "criticality": "critical",
+      "dependsOn": ["persistencia-hibrida"]
+    },
+    {
+      "id": "importacao-reconciliacao",
+      "title": "Importação e reconciliação",
+      "kind": "domain",
+      "l0": "Converte arquivos externos em candidatos, calcula diferenças e só aplica campos aprovados via Store. Parsers não podem sobrescrever o portfólio diretamente nem prometer conteúdo que não leem.",
+      "l1": "docs/context/importacao-reconciliacao.md",
+      "l2": [
+        "src/js/30-import.js",
+        "src/js/66-views-dados.js"
+      ],
+      "tags": ["diff", "importacao", "parsers", "reconciliacao"],
+      "criticality": "high",
+      "dependsOn": ["modelo-schema", "persistencia-hibrida", "anexos"]
+    },
+    {
+      "id": "auditoria-retencao",
+      "title": "Auditoria e retenção",
+      "kind": "domain",
+      "l0": "Registra mutações e histórico de importações como dados do usuário. A arquitetura portátil deve preservar esses registros e tornar qualquer política de retenção explícita e não destrutiva.",
+      "l1": "docs/context/auditoria-retencao.md",
+      "l2": [
+        "src/js/20-store.js",
+        "src/js/30-import.js",
+        "src/js/70-views-config.js"
+      ],
+      "tags": ["auditoria", "historico", "retencao", "undo"],
+      "criticality": "high",
+      "dependsOn": ["persistencia-hibrida"]
+    },
+    {
+      "id": "runtime-portatil",
+      "title": "Runtime portátil",
+      "kind": "domain",
+      "l0": "Mantém versões imutáveis do código separadas de dados, configuração, estado e logs persistentes. O launcher seleciona a versão ativa e conserva a origem localhost:8090.",
+      "l1": "docs/context/runtime-portatil.md",
+      "l2": [
+        "pmo.ps1",
+        "atualizar.ps1",
+        "bootstrap.json",
+        "serve.ps1",
+        "tools/portable-common.ps1",
+        "tools/New-PortableInstall.ps1",
+        "config/install.example.json",
+        "state/active.example.json",
+        "state/update.example.json",
+        "src/shell.html",
+        "tests/Run-Tests.ps1",
+        "tests/Invoke-ServerIntegration.ps1"
+      ],
+      "tags": ["bootstrap", "launcher", "portabilidade", "runtime"],
+      "criticality": "critical",
+      "dependsOn": ["persistencia-hibrida", "anexos"]
+    },
+    {
+      "id": "update-snapshot-rollback",
+      "title": "Update, snapshot e rollback",
+      "kind": "domain",
+      "l0": "Define atualização transacional em staging, snapshot completo e ativação por ponteiro. Qualquer falha mantém a versão anterior e os dados intactos; rollback de schema exige snapshot compatível.",
+      "l1": "docs/context/update-snapshot-rollback.md",
+      "l2": [
+        "atualizar.ps1",
+        "tools/update-runtime.ps1",
+        "tests/Test-UpdaterRecovery.ps1",
+        "tests/Run-Tests.ps1",
+        "tests/Invoke-ServerIntegration.ps1",
+        "docs/context/runbooks/atualizar-maquina-b.md",
+        "docs/context/runbooks/rollback-restauracao.md"
+      ],
+      "tags": ["rollback", "snapshot", "transacao", "update"],
+      "criticality": "critical",
+      "dependsOn": ["runtime-portatil", "auditoria-retencao"]
+    },
+    {
+      "id": "build-release",
+      "title": "Build e release",
+      "kind": "domain",
+      "l0": "Produz o HTML autocontido e o pacote de runtime, associa versão, commit e hashes e publica somente após gates. Artefatos de release jamais contêm diretórios persistentes.",
+      "l1": "docs/context/build-release.md",
+      "l2": [
+        "build.ps1",
+        "src/shell.html",
+        "tools/New-ReleasePackage.ps1",
+        "tools/Test-ReleasePackage.ps1",
+        ".github/workflows/release.yml",
+        "tests/Run-Tests.ps1",
+        "tests/validate-built-html.mjs",
+        "docs/context/runbooks/publicar-release.md"
+      ],
+      "tags": ["artefato", "build", "github", "release"],
+      "criticality": "critical",
+      "dependsOn": ["update-snapshot-rollback"]
+    },
+    {
+      "id": "operacao-recuperacao",
+      "title": "Operação e recuperação",
+      "kind": "domain",
+      "l0": "Orienta operação da máquina B, diagnóstico, preservação de evidências e recuperação segura. Incidentes nunca autorizam apagar staging, snapshots ou dados antes de uma cópia forense.",
+      "l1": "docs/context/operacao-recuperacao.md",
+      "l2": [
+        "docs/context/runbooks/incidente-maquina-b.md"
+      ],
+      "tags": ["diagnostico", "incidente", "operacao", "recuperacao"],
+      "criticality": "critical",
+      "dependsOn": ["build-release", "update-snapshot-rollback"]
+    },
+    {
+      "id": "runbook-publicar-release",
+      "title": "Runbook de publicação",
+      "kind": "runbook",
+      "l0": "Checklist humano para revisar o draft, provar integridade e recuperação e publicar uma release estável sem dados de usuário.",
+      "l1": "docs/context/runbooks/publicar-release.md",
+      "l2": [
+        "build.ps1"
+      ],
+      "tags": ["github", "publicacao", "release", "runbook"],
+      "criticality": "high",
+      "dependsOn": ["build-release"]
+    },
+    {
+      "id": "runbook-atualizar-maquina-b",
+      "title": "Runbook de atualização da máquina B",
+      "kind": "runbook",
+      "l0": "Procedimento operacional para preparar, autorizar, observar e verificar uma atualização estável na máquina B sem manipular manualmente dados persistentes.",
+      "l1": "docs/context/runbooks/atualizar-maquina-b.md",
+      "l2": [
+        "serve.ps1"
+      ],
+      "tags": ["maquina-b", "runbook", "update"],
+      "criticality": "critical",
+      "dependsOn": ["operacao-recuperacao"]
+    },
+    {
+      "id": "runbook-rollback-restauracao",
+      "title": "Runbook de rollback e restauração",
+      "kind": "runbook",
+      "l0": "Decide entre voltar somente o ponteiro ou restaurar um snapshot, sempre preservando o estado produzido após o update antes de qualquer reversão de dados.",
+      "l1": "docs/context/runbooks/rollback-restauracao.md",
+      "l2": [
+        "docs/context/update-snapshot-rollback.md"
+      ],
+      "tags": ["restauracao", "rollback", "runbook", "snapshot"],
+      "criticality": "critical",
+      "dependsOn": ["operacao-recuperacao"]
+    },
+    {
+      "id": "runbook-incidente-maquina-b",
+      "title": "Runbook de incidente da máquina B",
+      "kind": "runbook",
+      "l0": "Contém ações de contenção e coleta para falhas de inicialização, persistência, atualização ou porta, priorizando preservação de dados e evidências.",
+      "l1": "docs/context/runbooks/incidente-maquina-b.md",
+      "l2": [
+        "docs/context/operacao-recuperacao.md"
+      ],
+      "tags": ["incidente", "maquina-b", "recuperacao", "runbook"],
+      "criticality": "critical",
+      "dependsOn": ["operacao-recuperacao"]
+    }
+  ],
+  "contracts": [
+    {
+      "id": "versoes-modelo",
+      "ownerId": "modelo-schema",
+      "path": "src/js/10-model.js",
+      "requiredPatterns": [
+        "model\\.SCHEMA_VERSION\\s*=\\s*[0-9]+",
+        "model\\.APP_VERSION\\s*=\\s*'[0-9]+\\.[0-9]+\\.[0-9]+'",
+        "model\\.portfolioVazio\\s*=\\s*function",
+        "model\\.MIGRADORES\\s*=",
+        "model\\.migrarComRelatorio\\s*=\\s*function",
+        "model\\.migrar\\s*=\\s*function",
+        "model\\.prepararSomenteLeitura\\s*=\\s*function",
+        "model\\.validar\\s*=\\s*function"
+      ]
+    },
+    {
+      "id": "porta-unica-mutacao",
+      "ownerId": "persistencia-hibrida",
+      "path": "src/js/20-store.js",
+      "requiredPatterns": [
+        "store\\.init\\s*=\\s*async function",
+        "store\\.mutate\\s*=\\s*async function",
+        "store\\.salvarAgora\\s*=\\s*async function",
+        "store\\.prepararAtualizacao\\s*=\\s*async function"
+      ]
+    },
+    {
+      "id": "api-anexos",
+      "ownerId": "anexos",
+      "path": "src/js/20-store.js",
+      "requiredPatterns": [
+        "store\\.anexoAdicionar\\s*=\\s*async function",
+        "store\\.anexoObter\\s*=\\s*async function",
+        "store\\.anexoRemover\\s*=\\s*async function",
+        "store\\.inventariarAnexos\\s*=\\s*async function",
+        "store\\.ressincronizarAnexos\\s*=\\s*async function"
+      ]
+    },
+    {
+      "id": "api-importacao",
+      "ownerId": "importacao-reconciliacao",
+      "path": "src/js/30-import.js",
+      "requiredPatterns": [
+        "imp\\.lerArquivo\\s*=\\s*async function",
+        "imp\\.reconciliar\\s*=\\s*function",
+        "imp\\.aplicar\\s*=\\s*async function"
+      ]
+    },
+    {
+      "id": "marcadores-build",
+      "ownerId": "build-release",
+      "path": "src/shell.html",
+      "requiredPatterns": [
+        "<!--@inject:css-->",
+        "<!--@inject:js-->",
+        "@@BUILD_VERSION@@"
+      ]
+    },
+    {
+      "id": "build-reproduzivel",
+      "ownerId": "build-release",
+      "path": "build.ps1",
+      "requiredPatterns": [
+        "\\[string\\]\\s*\\$Version",
+        "\\[string\\]\\s*\\$Commit",
+        "\\[string\\]\\s*\\$BuildTimestamp",
+        "\\[string\\]\\s*\\$OutputPath",
+        "pmo-build-commit",
+        "pmo-build-timestamp"
+      ]
+    },
+    {
+      "id": "pacote-release-seguro",
+      "ownerId": "build-release",
+      "path": "tools/Test-ReleasePackage.ps1",
+      "requiredPatterns": [
+        "MaxFileCount",
+        "MaxEntryBytes",
+        "MaxTotalBytes",
+        "MaxCompressedEntryBytes",
+        "MaxCompressedTotalBytes",
+        "MaxCompressionRatio",
+        "Testar-CaminhoPermitido",
+        "release\\.json",
+        "SHA256",
+        "Arquivo sem hash no release\\.json"
+      ]
+    },
+    {
+      "id": "api-local-persistencia",
+      "ownerId": "persistencia-hibrida",
+      "path": "serve.ps1",
+      "requiredPatterns": [
+        "/api/health",
+        "/api/portfolio",
+        "/api/attachments"
+      ]
+    },
+    {
+      "id": "migracao-validada",
+      "ownerId": "modelo-schema",
+      "path": "src/js/10-model.js",
+      "requiredPatterns": [
+        "function\\s+validarIntegridadeMigracao",
+        "function\\s+garantirContagensNaoDiminuiram",
+        "function\\s+validarConfiguracaoFinal",
+        "model\\.validar\\(final\\)",
+        "normalizacao final nao e idempotente",
+        "contagens:\\s*\\{\\s*antes:",
+        "invariantes:\\s*\\{\\s*integridade:\\s*true",
+        "validacoes:\\s*\\{\\s*integridadeFinal:\\s*true"
+      ]
+    },
+    {
+      "id": "selecao-segura-replicas",
+      "ownerId": "persistencia-hibrida",
+      "path": "src/js/20-store.js",
+      "requiredPatterns": [
+        "Date\\.parse\\(tIdb\\)",
+        "Date\\.parse\\(tDisco\\)",
+        "conflitoTemporal\\s*=\\s*true",
+        "store\\.somenteLeitura\\s*=\\s*true"
+      ]
+    },
+    {
+      "id": "remocao-anexo-recuperavel",
+      "ownerId": "anexos",
+      "path": "src/js/20-store.js",
+      "requiredPatterns": [
+        "store\\.anexoRemover\\s*=\\s*async function",
+        "store\\.salvarAgora\\(\\{\\s*forcarDisco:\\s*true\\s*\\}\\)",
+        "orfaoRecuperavel"
+      ]
+    },
+    {
+      "id": "escrita-persistente-atomica",
+      "ownerId": "persistencia-hibrida",
+      "path": "tools/portable-common.ps1",
+      "requiredPatterns": [
+        "function\\s+Write-PmoJsonAtomic",
+        "function\\s+Write-PmoBytesAtomic",
+        "function\\s+Repair-PmoAtomicBytes",
+        "function\\s+Copy-PmoFileDurable",
+        "function\\s+Copy-PmoDirectoryDurable",
+        "\\.Flush\\(\\$true\\)",
+        "\\[System\\.IO\\.File\\]::Replace",
+        "\\[System\\.IO\\.File\\]::Move"
+      ]
+    },
+    {
+      "id": "updater-recuperavel",
+      "ownerId": "update-snapshot-rollback",
+      "path": "tools/update-runtime.ps1",
+      "requiredPatterns": [
+        "function\\s+Test-AppReady",
+        "function\\s+Complete-ActivationIfReady",
+        "function\\s+Finalize-RestoreRecovery",
+        "function\\s+Recover-InterruptedUpdate",
+        "function\\s+Assert-RestorePendingCorrelation",
+        "rollback-prepared",
+        "restore-prepared",
+        "pendingActivationId",
+        "restoreId"
+      ]
+    },
+    {
+      "id": "workflow-gates-release",
+      "ownerId": "build-release",
+      "path": ".github/workflows/release.yml",
+      "requiredPatterns": [
+        "Run-Tests\\.ps1",
+        "node-version:\\s*'22\\.22\\.0'",
+        "validar-contexto\\.ps1 -Detalhado",
+        "Test-UpdaterRecovery\\.ps1",
+        "Invoke-ServerIntegration\\.ps1"
+      ]
+    },
+    {
+      "id": "html-compilado-validado",
+      "ownerId": "build-release",
+      "path": "tests/validate-built-html.mjs",
+      "requiredPatterns": [
+        "scripts\\.length !== 1",
+        "new vm\\.Script",
+        "@@BUILD_VERSION@@",
+        "pmo-build-timestamp"
+      ]
+    },
+    {
+      "id": "runtime-ativo-integro",
+      "ownerId": "runtime-portatil",
+      "path": "pmo.ps1",
+      "requiredPatterns": [
+        "isolatedDirectories",
+        "Get-PmoActiveRuntimeValidation",
+        "bootstrapProtocolVersion",
+        "activeReleaseManifestSha256",
+        "Test-PmoInventory",
+        "Enter-PmoMutex"
+      ]
+    },
+    {
+      "id": "servidor-instancia-unica",
+      "ownerId": "runtime-portatil",
+      "path": "serve.ps1",
+      "requiredPatterns": [
+        "DataDir, ConfigDir e StateDir devem ser diretorios distintos",
+        "\\$serveRuntimeMutex\\s*=\\s*Enter-PmoMutex\\s+\\$installRoot\\s+'runtime'\\s+0",
+        "if\\s*\\(-not\\s+\\$HealthOnly\\)"
+      ]
+    },
+    {
+      "id": "inventario-sem-reparse",
+      "ownerId": "runtime-portatil",
+      "path": "tools/portable-common.ps1",
+      "requiredPatterns": [
+        "function\\s+Get-PmoDirectoryInventory",
+        "ReparsePoint",
+        "function\\s+Test-PmoInventory"
+      ]
+    },
+    {
+      "id": "selecao-updater-por-journal",
+      "ownerId": "update-snapshot-rollback",
+      "path": "atualizar.ps1",
+      "requiredPatterns": [
+        "Resolve-JournalUpdater",
+        "Test-RestoreJournalRelevant",
+        "updaterRuntimeVersion",
+        "updaterReleaseManifestSha256",
+        "activeReleaseManifestSha256",
+        "previousReleaseManifestSha256",
+        "Test-UpdaterCandidate"
+      ]
+    },
+    {
+      "id": "limites-e-restore-updater",
+      "ownerId": "update-snapshot-rollback",
+      "path": "tools/update-runtime.ps1",
+      "requiredPatterns": [
+        "function\\s+Assert-ReleaseAssetBounds",
+        "function\\s+Assert-UpdateCapacity",
+        "function\\s+Test-PmoArchiveCompression",
+        "EmergencyBestEffort",
+        "Assert-SnapshotReadableByActiveRuntime",
+        "previousReleaseManifestSha256"
+      ]
+    },
+    {
+      "id": "restore-correlacionado",
+      "ownerId": "update-snapshot-rollback",
+      "path": "tools/update-runtime.ps1",
+      "requiredPatterns": [
+        "function\\s+New-RestoreOperationId",
+        "function\\s+New-RestoreJournal",
+        "function\\s+Assert-RestorePendingCorrelation",
+        "function\\s+Complete-RestoreJournal",
+        "restoreId",
+        "restore-pending correlacionado"
+      ]
+    },
+    {
+      "id": "recovery-bloqueado-sem-escrita",
+      "ownerId": "update-snapshot-rollback",
+      "path": "tools/update-runtime.ps1",
+      "requiredPatterns": [
+        "function\\s+Read-PmoJsonStrictReadOnly",
+        "function\\s+Recover-InterruptedUpdate",
+        "Enter-PmoMutex\\s+\\$InstallRoot\\s+'runtime'\\s+0",
+        "Runtime em uso; recovery nao iniciou nenhuma mutacao",
+        "-NoFile:\\$Recover"
+      ]
+    },
+    {
+      "id": "roots-e-remocoes-gerenciadas",
+      "ownerId": "runtime-portatil",
+      "path": "tools/update-runtime.ps1",
+      "requiredPatterns": [
+        "function\\s+Assert-PmoDistinctRoots",
+        "name='config'",
+        "function\\s+Assert-PmoManagedPath",
+        "function\\s+Remove-PmoManagedTree",
+        "arvore gerenciada contem reparse point"
+      ]
+    },
+    {
+      "id": "normalizacao-e-delete-seguro",
+      "ownerId": "runtime-portatil",
+      "path": "tools/portable-common.ps1",
+      "requiredPatterns": [
+        "function\\s+Get-PmoNormalizedFullPath",
+        "GetPathRoot",
+        "function\\s+Assert-PmoTreeWithoutReparse",
+        "function\\s+Remove-PmoManagedTree",
+        "Test-PmoSubPath"
+      ]
+    },
+    {
+      "id": "testes-recovery-final",
+      "ownerId": "update-snapshot-rollback",
+      "path": "tests/Test-UpdaterRecovery.ps1",
+      "requiredPatterns": [
+        "Updater adulterado foi executado antes de validar o pin",
+        "restore-stale-completed",
+        "restore-pending correlacionado",
+        "outra activationId",
+        "Recover ocupado alterou active.json"
+      ]
+    },
+    {
+      "id": "testes-roots-e-durabilidade",
+      "ownerId": "persistencia-hibrida",
+      "path": "tests/Run-Tests.ps1",
+      "requiredPatterns": [
+        "Copy-PmoFileDurable",
+        "Copy-PmoDirectoryDurable",
+        "Normalizacao deve preservar a raiz do volume",
+        "dataDir igual a raiz do volume com cwd externo",
+        "dataDir ancestral de roots operacionais",
+        "dataDir junction",
+        "Delete gerenciado com junction descendente"
+      ]
+    },
+    {
+      "id": "testes-integracao-handshakes",
+      "ownerId": "runtime-portatil",
+      "path": "tests/Invoke-ServerIntegration.ps1",
+      "requiredPatterns": [
+        "Single-instance lock nao recusou",
+        "Parametro antigo LauncherLockHeld ainda permite bypass",
+        "recovery confirmado nao foi limpo corretamente",
+        "app-ready com activationId divergente"
+      ]
+    }
+  ]
+}

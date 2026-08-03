@@ -1,0 +1,41 @@
+{
+  "meta": { "schemaVersion": 1, "orgName": "Fixture v1", "xMeta": "preservar-v1" },
+  "settings": { "xSettings": { "origem": 1 } },
+  "pessoas": [
+    { "id": "p-v1", "nome": "Pessoa Sintetica" }
+  ],
+  "programas": [
+    { "id": "prg-v1", "codigo": "SYN-V1", "nome": "Programa Sintetico" }
+  ],
+  "projetos": [
+    {
+      "id": "prj-v1",
+      "codigo": "PRJ-V1",
+      "nome": "Projeto Sintetico v1",
+      "programaId": "prg-v1",
+      "estagio": "ideacao",
+      "gateAtual": "g0",
+      "finance": {
+        "curvaPlanejada": [
+          { "periodo": "2026-01", "pv": 10, "xCurva": "preservar" }
+        ]
+      },
+      "riscos": [
+        { "id": "rsk-v1", "titulo": "Risco sintetico", "status": "fechado", "xRisco": true }
+      ],
+      "anexos": [],
+      "xProjeto": { "origem": 1 }
+    }
+  ],
+  "anexos": [],
+  "auditLog": [
+    { "id": "aud-v1", "acao": "fixture" }
+  ],
+  "imports": [
+    { "id": "imp-v1", "kind": "fixture" }
+  ],
+  "visoesSalvas": [
+    { "id": "view-v1", "nome": "Fixture" }
+  ],
+  "xTopo": { "origem": 1 }
+}

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="PMO Tool — governança de portfólio de projetos de TI. Aplicação local, autocontida, sem dependências externas.">
+<meta name="generator" content="PMO Tool @@BUILD_VERSION@@">
+<title>PMO Tool — Governança de Portfólio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M8 22V10h5a4 4 0 0 1 0 8H8m12 4v-6m0 0V10' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<!--@inject:css-->
+</head>
+<body>
+
+<a class="pular-para-conteudo" href="#conteudo">Pular para o conteúdo</a>
+
+<div id="app" class="app" data-carregando="1">
+
+  <!-- ============================ barra superior ============================ -->
+  <header class="topo" role="banner">
+    <div class="topo__marca">
+      <button class="botao-icone topo__menu" id="btn-menu" type="button"
+              aria-label="Alternar menu de navegação" aria-expanded="true" aria-controls="nav-lateral"></button>
+      <span class="topo__logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="26" height="26" role="img" aria-label="PMO Tool">
+          <rect width="32" height="32" rx="7" fill="var(--acento)"></rect>
+          <path d="M8 22V10h5a4 4 0 0 1 0 8H8m12 4v-6m0 0V10" stroke="#fff" stroke-width="2.4"
+                fill="none" stroke-linecap="round"></path>
+        </svg>
+      </span>
+      <span class="topo__titulo">
+        <strong>PMO Tool</strong>
+        <span class="topo__org" id="topo-org">—</span>
+      </span>
+    </div>
+
+    <div class="topo__busca">
+      <label class="sr-only" for="busca-global">Buscar projeto, risco, decisão ou anexo</label>
+      <span class="topo__busca-ic" aria-hidden="true"></span>
+      <input type="search" id="busca-global" class="campo campo--busca"
+             placeholder="Buscar projeto, risco, decisão…  ( / )" autocomplete="off" spellcheck="false">
+      <div class="paleta" id="paleta-busca" role="listbox" aria-label="Resultados da busca" hidden></div>
+    </div>
+
+    <div class="topo__acoes">
+      <div class="data-status" id="data-status-host">
+        <label class="sr-only" for="input-data-status">Data de status do portfólio</label>
+        <span class="data-status__rot">Data de status</span>
+        <input type="date" id="input-data-status" class="campo campo--data">
+      </div>
+
+      <div class="topo__sep" role="separator"></div>
+
+      <button class="botao-icone" id="btn-desfazer" type="button" title="Desfazer (Ctrl+Z)"
+              aria-label="Desfazer última alteração" disabled></button>
+      <button class="botao-icone" id="btn-refazer" type="button" title="Refazer (Ctrl+Shift+Z)"
+              aria-label="Refazer alteração" disabled></button>
+
+      <button class="chip-status" id="btn-persistencia" type="button"
+              aria-label="Estado da persistência de dados">
+        <span class="chip-status__pt" id="persist-ponto" aria-hidden="true"></span>
+        <span class="chip-status__txt" id="persist-txt">carregando…</span>
+      </button>
+
+      <button class="botao-icone" id="btn-tema" type="button" title="Alternar tema claro/escuro"
+              aria-label="Alternar tema claro ou escuro"></button>
+      <button class="botao-icone" id="btn-ajuda" type="button" title="Atalhos e ajuda (?)"
+              aria-label="Atalhos de teclado e ajuda"></button>
+    </div>
+  </header>
+
+  <!-- ========================= navegação lateral ========================= -->
+  <nav class="nav" id="nav-lateral" aria-label="Navegação principal">
+    <div class="nav__rolagem" id="nav-itens"></div>
+    <div class="nav__pe">
+      <div class="nav__pe-linha" id="nav-contagem"></div>
+      <div class="nav__pe-linha nav__pe-versao">versão @@BUILD_VERSION@@</div>
+    </div>
+  </nav>
+
+  <!-- =============================== conteúdo =============================== -->
+  <main class="conteudo" id="conteudo" tabindex="-1">
+    <div class="cabecalho-view" id="cabecalho-view">
+      <div class="cabecalho-view__esq">
+        <h1 class="cabecalho-view__titulo" id="view-titulo">Carregando…</h1>
+        <p class="cabecalho-view__sub" id="view-sub"></p>
+      </div>
+      <div class="cabecalho-view__dir" id="view-acoes"></div>
+    </div>
+
+    <!-- Uma única linha de filtros acima de tudo que ela escopa. -->
+    <div class="barra-filtros" id="barra-filtros" hidden></div>
+
+    <div class="view" id="view-host" aria-live="polite"></div>
+  </main>
+
+  <!-- ================================ painéis ================================ -->
+  <div class="drawer-fundo" id="drawer-fundo" hidden></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="false" aria-labelledby="drawer-titulo" hidden>
+    <header class="drawer__topo">
+      <h2 class="drawer__titulo" id="drawer-titulo"></h2>
+      <div class="drawer__acoes" id="drawer-acoes"></div>
+      <button class="botao-icone" id="drawer-fechar" type="button" aria-label="Fechar painel"></button>
+    </header>
+    <div class="drawer__corpo" id="drawer-corpo"></div>
+  </aside>
+
+  <div class="modal-fundo" id="modal-fundo" hidden>
+    <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+      <header class="modal__topo">
+        <h2 class="modal__titulo" id="modal-titulo"></h2>
+        <button class="botao-icone" id="modal-fechar" type="button" aria-label="Fechar"></button>
+      </header>
+      <div class="modal__corpo" id="modal-corpo"></div>
+      <footer class="modal__pe" id="modal-pe"></footer>
+    </div>
+  </div>
+
+  <!-- Zona de arraste global para anexos e arquivos de import -->
+  <div class="dropzona-global" id="dropzona-global" hidden aria-hidden="true">
+    <div class="dropzona-global__cartao">
+      <div class="dropzona-global__ic" aria-hidden="true"></div>
+      <strong>Solte o arquivo aqui</strong>
+      <span>Arquivos de projeto (.xml, .xer, .pmxml, .mpp), planilhas (.csv, .xlsx) ou documentos para anexar</span>
+    </div>
+  </div>
+
+  <div class="tela-carregando" id="tela-carregando">
+    <div class="tela-carregando__cartao">
+      <div class="girador" aria-hidden="true"></div>
+      <p>Carregando portfólio…</p>
+    </div>
+  </div>
+</div>
+
+<noscript>
+  <div class="noscript">
+    <h1>PMO Tool</h1>
+    <p>Esta aplicação precisa de JavaScript habilitado para funcionar. Todo o processamento acontece
+    localmente no seu navegador — nenhum dado é enviado para fora da sua máquina.</p>
+  </div>
+</noscript>
+
+<!--@inject:js-->
+</body>
+</html>

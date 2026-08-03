@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<APIBusinessObjects xmlns="http://xmlns.oracle.com/Primavera/P6/V19.12/API/BusinessObjects"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Project>
+    <ObjectId>4821</ObjectId>
+    <Id>PRJ-0203</Id>
+    <Name>Programa Zero Trust — Onda 1</Name>
+    <Status>Active</Status>
+    <DataDate>2026-07-31T00:00:00</DataDate>
+    <PlannedStartDate>2025-11-03T08:00:00</PlannedStartDate>
+    <MustFinishByDate>2026-12-15T17:00:00</MustFinishByDate>
+    <ScheduledFinishDate>2026-12-15T17:00:00</ScheduledFinishDate>
+    <FinishDate>2026-12-15T17:00:00</FinishDate>
+    <StartDate>2025-11-03T08:00:00</StartDate>
+    <ProjectFlag>true</ProjectFlag>
+    <StrategicPriority>100</StrategicPriority>
+    <StatusReviewer>Alex Marchetti</StatusReviewer>
+    <Description>Onda 1 do programa Zero Trust: segmentacao de rede, identidade forte e microssegmentacao dos ambientes criticos.</Description>
+
+    <WBS>
+      <ObjectId>90010</ObjectId>
+      <Code>ZT</Code>
+      <Name>Programa Zero Trust — Onda 1</Name>
+      <SequenceNumber>1</SequenceNumber>
+    </WBS>
+    <WBS>
+      <ObjectId>90011</ObjectId>
+      <ParentObjectId>90010</ParentObjectId>
+      <Code>ZT.1</Code>
+      <Name>Descoberta e arquitetura</Name>
+      <SequenceNumber>2</SequenceNumber>
+    </WBS>
+    <WBS>
+      <ObjectId>90012</ObjectId>
+      <ParentObjectId>90010</ParentObjectId>
+      <Code>ZT.2</Code>
+      <Name>Identidade e acesso</Name>
+      <SequenceNumber>3</SequenceNumber>
+    </WBS>
+    <WBS>
+      <ObjectId>90013</ObjectId>
+      <ParentObjectId>90010</ParentObjectId>
+      <Code>ZT.3</Code>
+      <Name>Segmentacao de rede</Name>
+      <SequenceNumber>4</SequenceNumber>
+    </WBS>
+    <WBS>
+      <ObjectId>90014</ObjectId>
+      <ParentObjectId>90010</ParentObjectId>
+      <Code>ZT.4</Code>
+      <Name>Monitoracao e resposta</Name>
+      <SequenceNumber>5</SequenceNumber>
+    </WBS>
+    <WBS>
+      <ObjectId>90015</ObjectId>
+      <ParentObjectId>90010</ParentObjectId>
+      <Code>ZT.5</Code>
+      <Name>Governanca e encerramento</Name>
+      <SequenceNumber>6</SequenceNumber>
+    </WBS>
+
+    <Activity>
+      <ObjectId>500101</ObjectId><Id>ZT1000</Id><Name>Kickoff do programa e alinhamento com o comite</Name>
+      <Type>Start Milestone</Type><Status>Completed</Status><WBSObjectId>90010</WBSObjectId>
+      <PlannedStartDate>2025-11-03T08:00:00</PlannedStartDate><PlannedFinishDate>2025-11-03T08:00:00</PlannedFinishDate>
+      <ActualStartDate>2025-11-03T08:00:00</ActualStartDate><ActualFinishDate>2025-11-03T08:00:00</ActualFinishDate>
+      <PercentComplete>100</PercentComplete><PlannedDuration>0</PlannedDuration>
+      <AtCompletionCost>0</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500102</ObjectId><Id>ZT1010</Id><Name>Inventario de ativos e superficie de exposicao</Name>
+      <Type>Task Dependent</Type><Status>Completed</Status><WBSObjectId>90011</WBSObjectId>
+      <PlannedStartDate>2025-11-04T08:00:00</PlannedStartDate><PlannedFinishDate>2026-01-16T17:00:00</PlannedFinishDate>
+      <ActualStartDate>2025-11-04T08:00:00</ActualStartDate><ActualFinishDate>2026-02-06T17:00:00</ActualFinishDate>
+      <PercentComplete>100</PercentComplete><PlannedDuration>440</PlannedDuration>
+      <AtCompletionCost>620000</AtCompletionCost><ActualCost>688000</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500103</ObjectId><Id>ZT1020</Id><Name>Arquitetura de referencia Zero Trust</Name>
+      <Type>Task Dependent</Type><Status>Completed</Status><WBSObjectId>90011</WBSObjectId>
+      <PlannedStartDate>2026-01-19T08:00:00</PlannedStartDate><PlannedFinishDate>2026-03-13T17:00:00</PlannedFinishDate>
+      <ActualStartDate>2026-02-09T08:00:00</ActualStartDate><ActualFinishDate>2026-04-03T17:00:00</ActualFinishDate>
+      <PercentComplete>100</PercentComplete><PlannedDuration>320</PlannedDuration>
+      <AtCompletionCost>540000</AtCompletionCost><ActualCost>612000</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500104</ObjectId><Id>ZT1030</Id><Name>G2 — Baseline de escopo e orcamento aprovada</Name>
+      <Type>Finish Milestone</Type><Status>Completed</Status><WBSObjectId>90011</WBSObjectId>
+      <PlannedStartDate>2026-03-16T08:00:00</PlannedStartDate><PlannedFinishDate>2026-03-16T08:00:00</PlannedFinishDate>
+      <ActualStartDate>2026-04-06T08:00:00</ActualStartDate><ActualFinishDate>2026-04-06T08:00:00</ActualFinishDate>
+      <PercentComplete>100</PercentComplete><PlannedDuration>0</PlannedDuration>
+      <AtCompletionCost>0</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500105</ObjectId><Id>ZT2000</Id><Name>Implantacao de MFA resistente a phishing</Name>
+      <Type>Task Dependent</Type><Status>Completed</Status><WBSObjectId>90012</WBSObjectId>
+      <PlannedStartDate>2026-03-17T08:00:00</PlannedStartDate><PlannedFinishDate>2026-05-29T17:00:00</PlannedFinishDate>
+      <ActualStartDate>2026-04-07T08:00:00</ActualStartDate><ActualFinishDate>2026-06-19T17:00:00</ActualFinishDate>
+      <PercentComplete>100</PercentComplete><PlannedDuration>440</PlannedDuration>
+      <AtCompletionCost>980000</AtCompletionCost><ActualCost>1124000</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500106</ObjectId><Id>ZT2010</Id><Name>Revisao de acessos privilegiados (PAM)</Name>
+      <Type>Task Dependent</Type><Status>In Progress</Status><WBSObjectId>90012</WBSObjectId>
+      <PlannedStartDate>2026-05-04T08:00:00</PlannedStartDate><PlannedFinishDate>2026-08-14T17:00:00</PlannedFinishDate>
+      <ActualStartDate>2026-05-25T08:00:00</ActualStartDate>
+      <PercentComplete>68</PercentComplete><PlannedDuration>600</PlannedDuration>
+      <AtCompletionCost>860000</AtCompletionCost><ActualCost>640000</ActualCost><CriticalPath>false</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500107</ObjectId><Id>ZT2020</Id><Name>Federacao de identidade com parceiros</Name>
+      <Type>Task Dependent</Type><Status>In Progress</Status><WBSObjectId>90012</WBSObjectId>
+      <PlannedStartDate>2026-06-01T08:00:00</PlannedStartDate><PlannedFinishDate>2026-09-11T17:00:00</PlannedFinishDate>
+      <ActualStartDate>2026-06-22T08:00:00</ActualStartDate>
+      <PercentComplete>42</PercentComplete><PlannedDuration>560</PlannedDuration>
+      <AtCompletionCost>720000</AtCompletionCost><ActualCost>352000</ActualCost><CriticalPath>false</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500108</ObjectId><Id>ZT2030</Id><Name>Politica de acesso condicional por risco</Name>
+      <Type>Task Dependent</Type><Status>In Progress</Status><WBSObjectId>90012</WBSObjectId>
+      <PlannedStartDate>2026-06-15T08:00:00</PlannedStartDate><PlannedFinishDate>2026-09-25T17:00:00</PlannedFinishDate>
+      <ActualStartDate>2026-07-06T08:00:00</ActualStartDate>
+      <PercentComplete>28</PercentComplete><PlannedDuration>560</PlannedDuration>
+      <AtCompletionCost>640000</AtCompletionCost><ActualCost>210000</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500109</ObjectId><Id>ZT3000</Id><Name>Desenho da microssegmentacao do datacenter</Name>
+      <Type>Task Dependent</Type><Status>Completed</Status><WBSObjectId>90013</WBSObjectId>
+      <PlannedStartDate>2026-03-17T08:00:00</PlannedStartDate><PlannedFinishDate>2026-05-15T17:00:00</PlannedFinishDate>
+      <ActualStartDate>2026-04-07T08:00:00</ActualStartDate><ActualFinishDate>2026-06-05T17:00:00</ActualFinishDate>
+      <PercentComplete>100</PercentComplete><PlannedDuration>360</PlannedDuration>
+      <AtCompletionCost>480000</AtCompletionCost><ActualCost>556000</ActualCost><CriticalPath>false</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500110</ObjectId><Id>ZT3010</Id><Name>Piloto de microssegmentacao — ambiente de cartoes</Name>
+      <Type>Task Dependent</Type><Status>In Progress</Status><WBSObjectId>90013</WBSObjectId>
+      <PlannedStartDate>2026-05-18T08:00:00</PlannedStartDate><PlannedFinishDate>2026-08-28T17:00:00</PlannedFinishDate>
+      <ActualStartDate>2026-06-08T08:00:00</ActualStartDate>
+      <PercentComplete>55</PercentComplete><PlannedDuration>600</PlannedDuration>
+      <AtCompletionCost>910000</AtCompletionCost><ActualCost>548000</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500111</ObjectId><Id>ZT3020</Id><Name>Rollout de microssegmentacao — onda A</Name>
+      <Type>Task Dependent</Type><Status>Not Started</Status><WBSObjectId>90013</WBSObjectId>
+      <PlannedStartDate>2026-08-31T08:00:00</PlannedStartDate><PlannedFinishDate>2026-11-06T17:00:00</PlannedFinishDate>
+      <PercentComplete>0</PercentComplete><PlannedDuration>400</PlannedDuration>
+      <AtCompletionCost>1180000</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500112</ObjectId><Id>ZT3030</Id><Name>Substituicao de regras legadas de firewall</Name>
+      <Type>Task Dependent</Type><Status>Not Started</Status><WBSObjectId>90013</WBSObjectId>
+      <PlannedStartDate>2026-09-14T08:00:00</PlannedStartDate><PlannedFinishDate>2026-11-20T17:00:00</PlannedFinishDate>
+      <PercentComplete>0</PercentComplete><PlannedDuration>400</PlannedDuration>
+      <AtCompletionCost>530000</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>false</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500113</ObjectId><Id>ZT4000</Id><Name>Integracao de telemetria no SIEM</Name>
+      <Type>Task Dependent</Type><Status>In Progress</Status><WBSObjectId>90014</WBSObjectId>
+      <PlannedStartDate>2026-06-01T08:00:00</PlannedStartDate><PlannedFinishDate>2026-09-04T17:00:00</PlannedFinishDate>
+      <ActualStartDate>2026-06-22T08:00:00</ActualStartDate>
+      <PercentComplete>46</PercentComplete><PlannedDuration>520</PlannedDuration>
+      <AtCompletionCost>680000</AtCompletionCost><ActualCost>318000</ActualCost><CriticalPath>false</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500114</ObjectId><Id>ZT4010</Id><Name>Casos de uso de deteccao para acesso anomalo</Name>
+      <Type>Task Dependent</Type><Status>Not Started</Status><WBSObjectId>90014</WBSObjectId>
+      <PlannedStartDate>2026-09-07T08:00:00</PlannedStartDate><PlannedFinishDate>2026-10-30T17:00:00</PlannedFinishDate>
+      <PercentComplete>0</PercentComplete><PlannedDuration>320</PlannedDuration>
+      <AtCompletionCost>420000</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>false</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500115</ObjectId><Id>ZT4020</Id><Name>Exercicio de mesa com o time de resposta</Name>
+      <Type>Task Dependent</Type><Status>Not Started</Status><WBSObjectId>90014</WBSObjectId>
+      <PlannedStartDate>2026-11-02T08:00:00</PlannedStartDate><PlannedFinishDate>2026-11-13T17:00:00</PlannedFinishDate>
+      <PercentComplete>0</PercentComplete><PlannedDuration>80</PlannedDuration>
+      <AtCompletionCost>160000</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>false</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500116</ObjectId><Id>ZT5000</Id><Name>G3 — Autorizacao de rollout completo</Name>
+      <Type>Finish Milestone</Type><Status>Completed</Status><WBSObjectId>90015</WBSObjectId>
+      <PlannedStartDate>2026-05-29T08:00:00</PlannedStartDate><PlannedFinishDate>2026-05-29T08:00:00</PlannedFinishDate>
+      <ActualStartDate>2026-06-19T08:00:00</ActualStartDate><ActualFinishDate>2026-06-19T08:00:00</ActualFinishDate>
+      <PercentComplete>100</PercentComplete><PlannedDuration>0</PlannedDuration>
+      <AtCompletionCost>0</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500117</ObjectId><Id>ZT5010</Id><Name>Auditoria independente de conformidade</Name>
+      <Type>Task Dependent</Type><Status>Not Started</Status><WBSObjectId>90015</WBSObjectId>
+      <PlannedStartDate>2026-11-09T08:00:00</PlannedStartDate><PlannedFinishDate>2026-11-27T17:00:00</PlannedFinishDate>
+      <PercentComplete>0</PercentComplete><PlannedDuration>120</PlannedDuration>
+      <AtCompletionCost>240000</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500118</ObjectId><Id>ZT5020</Id><Name>G4 — Aprovacao de go-live da onda 1</Name>
+      <Type>Finish Milestone</Type><Status>Not Started</Status><WBSObjectId>90015</WBSObjectId>
+      <PlannedStartDate>2026-11-30T08:00:00</PlannedStartDate><PlannedFinishDate>2026-11-30T08:00:00</PlannedFinishDate>
+      <PercentComplete>0</PercentComplete><PlannedDuration>0</PlannedDuration>
+      <AtCompletionCost>0</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500119</ObjectId><Id>ZT5030</Id><Name>Transferencia para sustentacao e licoes aprendidas</Name>
+      <Type>Task Dependent</Type><Status>Not Started</Status><WBSObjectId>90015</WBSObjectId>
+      <PlannedStartDate>2026-12-01T08:00:00</PlannedStartDate><PlannedFinishDate>2026-12-11T17:00:00</PlannedFinishDate>
+      <PercentComplete>0</PercentComplete><PlannedDuration>80</PlannedDuration>
+      <AtCompletionCost>190000</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+    <Activity>
+      <ObjectId>500120</ObjectId><Id>ZT5040</Id><Name>G5 — Encerramento formal da onda 1</Name>
+      <Type>Finish Milestone</Type><Status>Not Started</Status><WBSObjectId>90015</WBSObjectId>
+      <PlannedStartDate>2026-12-15T08:00:00</PlannedStartDate><PlannedFinishDate>2026-12-15T08:00:00</PlannedFinishDate>
+      <PercentComplete>0</PercentComplete><PlannedDuration>0</PlannedDuration>
+      <AtCompletionCost>0</AtCompletionCost><ActualCost>0</ActualCost><CriticalPath>true</CriticalPath>
+    </Activity>
+
+    <Relationship><ObjectId>7001</ObjectId><PredecessorActivityObjectId>500101</PredecessorActivityObjectId><SuccessorActivityObjectId>500102</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7002</ObjectId><PredecessorActivityObjectId>500102</PredecessorActivityObjectId><SuccessorActivityObjectId>500103</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7003</ObjectId><PredecessorActivityObjectId>500103</PredecessorActivityObjectId><SuccessorActivityObjectId>500104</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7004</ObjectId><PredecessorActivityObjectId>500104</PredecessorActivityObjectId><SuccessorActivityObjectId>500105</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7005</ObjectId><PredecessorActivityObjectId>500104</PredecessorActivityObjectId><SuccessorActivityObjectId>500109</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7006</ObjectId><PredecessorActivityObjectId>500105</PredecessorActivityObjectId><SuccessorActivityObjectId>500106</SuccessorActivityObjectId><Type>Start to Start</Type><Lag>160</Lag></Relationship>
+    <Relationship><ObjectId>7007</ObjectId><PredecessorActivityObjectId>500105</PredecessorActivityObjectId><SuccessorActivityObjectId>500116</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7008</ObjectId><PredecessorActivityObjectId>500106</PredecessorActivityObjectId><SuccessorActivityObjectId>500107</SuccessorActivityObjectId><Type>Start to Start</Type><Lag>160</Lag></Relationship>
+    <Relationship><ObjectId>7009</ObjectId><PredecessorActivityObjectId>500106</PredecessorActivityObjectId><SuccessorActivityObjectId>500108</SuccessorActivityObjectId><Type>Start to Start</Type><Lag>240</Lag></Relationship>
+    <Relationship><ObjectId>7010</ObjectId><PredecessorActivityObjectId>500109</PredecessorActivityObjectId><SuccessorActivityObjectId>500110</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7011</ObjectId><PredecessorActivityObjectId>500110</PredecessorActivityObjectId><SuccessorActivityObjectId>500111</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7012</ObjectId><PredecessorActivityObjectId>500111</PredecessorActivityObjectId><SuccessorActivityObjectId>500112</SuccessorActivityObjectId><Type>Start to Start</Type><Lag>80</Lag></Relationship>
+    <Relationship><ObjectId>7013</ObjectId><PredecessorActivityObjectId>500110</PredecessorActivityObjectId><SuccessorActivityObjectId>500113</SuccessorActivityObjectId><Type>Start to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7014</ObjectId><PredecessorActivityObjectId>500113</PredecessorActivityObjectId><SuccessorActivityObjectId>500114</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7015</ObjectId><PredecessorActivityObjectId>500114</PredecessorActivityObjectId><SuccessorActivityObjectId>500115</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7016</ObjectId><PredecessorActivityObjectId>500111</PredecessorActivityObjectId><SuccessorActivityObjectId>500117</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7017</ObjectId><PredecessorActivityObjectId>500117</PredecessorActivityObjectId><SuccessorActivityObjectId>500118</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7018</ObjectId><PredecessorActivityObjectId>500118</PredecessorActivityObjectId><SuccessorActivityObjectId>500119</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+    <Relationship><ObjectId>7019</ObjectId><PredecessorActivityObjectId>500119</PredecessorActivityObjectId><SuccessorActivityObjectId>500120</SuccessorActivityObjectId><Type>Finish to Start</Type><Lag>0</Lag></Relationship>
+  </Project>
+</APIBusinessObjects>

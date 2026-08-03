@@ -1,0 +1,242 @@
+/* =============================================================================
+   00-theme.css — tokens de tema do PMO Tool
+   -----------------------------------------------------------------------------
+   FONTE UNICA DE VERDADE de cor, tipografia, espacamento e raio.
+   Nenhum outro arquivo pode declarar cor literal (hex/rgb) fora daqui.
+
+   Paleta de dados: instancia de referencia validada da metodologia de dataviz
+   (bandas de luminosidade, piso de croma, separacao CVD adjacente >= 8 OKLab*100,
+   piso de visao normal >= 15, contraste). Ordem dos slots categoricos e o
+   mecanismo de seguranca CVD -- NAO reordenar, NAO gerar um 9o slot.
+
+   IMPORTANTE: graficos sempre renderizam sobre --sup-1 (a superficie contra a
+   qual a paleta foi validada). Nunca colocar grafico sobre --sup-2/--sup-3.
+   ============================================================================= */
+
+:root {
+  color-scheme: light;
+
+  /* ---------------------------------------------------------- superficies */
+  --plano:      #f9f9f7;   /* plano da pagina */
+  --sup-1:      #fcfcfb;   /* card / superficie de grafico (validada) */
+  --sup-2:      #f2f1ed;   /* elevacao sutil: cabecalho de tabela, chip */
+  --sup-3:      #e9e8e3;   /* hover / faixa alternada */
+  --sup-inv:    #0b0b0b;   /* tooltip, inversao */
+
+  /* ----------------------------------------------------------------- tinta */
+  --tinta-1:    #0b0b0b;   /* primaria */
+  --tinta-2:    #52514e;   /* secundaria */
+  --tinta-3:    #898781;   /* muda: eixo, rotulo, placeholder */
+  --tinta-inv:  #fcfcfb;   /* sobre --sup-inv */
+
+  /* -------------------------------------------------------- cromo grafico */
+  --grade:      #e1e0d9;   /* linha de grade (hairline) */
+  --eixo:       #c3c2b7;   /* linha de base / eixo */
+  --borda:      rgba(11, 11, 11, 0.10);
+  --borda-2:    rgba(11, 11, 11, 0.18);
+
+  /* -------------------------------------------- paleta categorica (fixa) */
+  --serie-1: #2a78d6;  /* azul     */
+  --serie-2: #eb6834;  /* laranja  */
+  --serie-3: #1baf7a;  /* agua     */
+  --serie-4: #eda100;  /* amarelo  */
+  --serie-5: #e87ba4;  /* magenta  */
+  --serie-6: #008300;  /* verde    */
+  --serie-7: #4a3aa7;  /* violeta  */
+  --serie-8: #e34948;  /* vermelho */
+
+  /* --------------------------- rampa sequencial (magnitude) — hue: azul */
+  --seq-100: #cde2fb;  --seq-150: #b7d3f6;  --seq-200: #9ec5f4;
+  --seq-250: #86b6ef;  --seq-300: #6da7ec;  --seq-350: #5598e7;
+  --seq-400: #3987e5;  --seq-450: #2a78d6;  --seq-500: #256abf;
+  --seq-550: #1c5cab;  --seq-600: #184f95;  --seq-650: #104281;
+  --seq-700: #0d366b;
+  /* piso ordinal no modo claro: nao usar mais claro que --seq-250 */
+  --seq-ordinal-min: var(--seq-250);
+
+  /* ------------------------ divergente (polaridade) — azul <-> vermelho */
+  --div-frio:   #2a78d6;
+  --div-quente: #d03b3b;
+  --div-neutro: #f0efec;
+
+  /* ------------------------------- status (reservado — nunca como serie) */
+  --st-bom:     #0ca30c;
+  --st-aviso:   #fab219;
+  --st-serio:   #ec835a;
+  --st-critico: #d03b3b;
+  --st-neutro:  #898781;
+
+  /* delta em texto */
+  --delta-bom:  #006300;
+  --delta-ruim: #d03b3b;
+
+  /* ------------------------------------------------------ RAG do portfolio
+     verde/ambar/vermelho reusam os tokens de status (o significado E status).
+     azul (concluido) e cinza (suspenso) NAO sao status: azul e o slot
+     categorico 1, cinza e tinta muda. Todo RAG carrega cor + rotulo + icone. */
+  --rag-verde:      var(--st-bom);
+  --rag-ambar:      var(--st-aviso);
+  --rag-vermelho:   var(--st-critico);
+  --rag-azul:       var(--serie-1);
+  --rag-cinza:      var(--st-neutro);
+
+  --rag-verde-bg:    #e6f6e6;
+  --rag-ambar-bg:    #fdf3dc;
+  --rag-vermelho-bg: #fbe7e7;
+  --rag-azul-bg:     #e4eefb;
+  --rag-cinza-bg:    #eeeeec;
+
+  /* ---------------------------------------------------------------- acento
+     Cromo de UI (nav ativa, botao primario, foco). Compartilha o hue do slot 1
+     mas nao e uma serie: nunca usar --acento para codificar dado. */
+  --acento:       #2a78d6;
+  --acento-forte: #1c5cab;
+  --acento-bg:    #e4eefb;
+  --foco:         #2a78d6;
+
+  /* ------------------------------------------------------------ tipografia */
+  --fonte: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fonte-mono: ui-monospace, "Cascadia Mono", "Consolas", "SF Mono", monospace;
+
+  --ts-hero:  clamp(1.75rem, 1.2rem + 1.6vw, 2.5rem);
+  --ts-kpi:   clamp(1.35rem, 1rem + 1vw, 1.9rem);
+  --ts-h1:    1.375rem;
+  --ts-h2:    1.0625rem;
+  --ts-h3:    0.9375rem;
+  --ts-corpo: 0.875rem;
+  --ts-peq:   0.8125rem;
+  --ts-mic:   0.75rem;
+
+  /* -------------------------------------------------------------- espaco */
+  --e-1: 4px;   --e-2: 8px;   --e-3: 12px;  --e-4: 16px;
+  --e-5: 24px;  --e-6: 32px;  --e-7: 48px;  --e-8: 64px;
+
+  --raio-1: 4px;  --raio-2: 8px;  --raio-3: 12px;  --raio-pill: 999px;
+
+  --sombra-1: 0 1px 2px rgba(11, 11, 11, 0.05), 0 0 0 1px var(--borda);
+  --sombra-2: 0 4px 12px rgba(11, 11, 11, 0.08), 0 0 0 1px var(--borda);
+  --sombra-3: 0 12px 32px rgba(11, 11, 11, 0.14), 0 0 0 1px var(--borda);
+
+  --larg-nav: 232px;
+  --alt-topo: 56px;
+  --transicao: 140ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* =============================== modo escuro ===============================
+   Passos proprios para a superficie escura, validados como conjunto.
+   Nao e inversao automatica. Declarado nos dois escopos: a media query cobre
+   a preferencia do SO; [data-tema] cobre o botao de tema e precisa vencer nos
+   dois sentidos (o :not() deixa o carimbo claro ganhar do SO escuro). */
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-tema="claro"])) {
+    color-scheme: dark;
+
+    --plano:   #0d0d0d;
+    --sup-1:   #1a1a19;
+    --sup-2:   #232322;
+    --sup-3:   #2c2c2a;
+    --sup-inv: #fcfcfb;
+
+    --tinta-1:   #ffffff;
+    --tinta-2:   #c3c2b7;
+    --tinta-3:   #898781;
+    --tinta-inv: #0b0b0b;
+
+    --grade: #2c2c2a;
+    --eixo:  #383835;
+    --borda:   rgba(255, 255, 255, 0.10);
+    --borda-2: rgba(255, 255, 255, 0.20);
+
+    --serie-1: #3987e5;  --serie-2: #d95926;  --serie-3: #199e70;
+    --serie-4: #c98500;  --serie-5: #d55181;  --serie-6: #008300;
+    --serie-7: #9085e9;  --serie-8: #e66767;
+
+    --div-frio:   #3987e5;
+    --div-quente: #d03b3b;
+    --div-neutro: #383835;
+
+    /* piso ordinal no modo escuro: nao usar mais escuro que --seq-600 */
+    --seq-ordinal-min: var(--seq-600);
+
+    --delta-bom: #0ca30c;
+
+    --rag-verde-bg:    #122c12;
+    --rag-ambar-bg:    #33280a;
+    --rag-vermelho-bg: #331414;
+    --rag-azul-bg:     #12233a;
+    --rag-cinza-bg:    #262624;
+
+    --acento:       #3987e5;
+    --acento-forte: #86b6ef;
+    --acento-bg:    #12233a;
+    --foco:         #86b6ef;
+
+    --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--borda);
+    --sombra-2: 0 4px 12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--borda);
+    --sombra-3: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--borda);
+  }
+}
+
+:root[data-tema="escuro"] {
+  color-scheme: dark;
+
+  --plano:   #0d0d0d;
+  --sup-1:   #1a1a19;
+  --sup-2:   #232322;
+  --sup-3:   #2c2c2a;
+  --sup-inv: #fcfcfb;
+
+  --tinta-1:   #ffffff;
+  --tinta-2:   #c3c2b7;
+  --tinta-3:   #898781;
+  --tinta-inv: #0b0b0b;
+
+  --grade: #2c2c2a;
+  --eixo:  #383835;
+  --borda:   rgba(255, 255, 255, 0.10);
+  --borda-2: rgba(255, 255, 255, 0.20);
+
+  --serie-1: #3987e5;  --serie-2: #d95926;  --serie-3: #199e70;
+  --serie-4: #c98500;  --serie-5: #d55181;  --serie-6: #008300;
+  --serie-7: #9085e9;  --serie-8: #e66767;
+
+  --div-frio:   #3987e5;
+  --div-quente: #d03b3b;
+  --div-neutro: #383835;
+
+  --seq-ordinal-min: var(--seq-600);
+
+  --delta-bom: #0ca30c;
+
+  --rag-verde-bg:    #122c12;
+  --rag-ambar-bg:    #33280a;
+  --rag-vermelho-bg: #331414;
+  --rag-azul-bg:     #12233a;
+  --rag-cinza-bg:    #262624;
+
+  --acento:       #3987e5;
+  --acento-forte: #86b6ef;
+  --acento-bg:    #12233a;
+  --foco:         #86b6ef;
+
+  --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--borda);
+  --sombra-2: 0 4px 12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--borda);
+  --sombra-3: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--borda);
+}
+
+/* ============================== preferencias ============================== */
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --transicao: 0ms; }
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Canal de textura: opt-in por a11y, impressao ou forced-colors. Nunca decorativo. */
+:root[data-textura="on"] { --textura-ativa: 1; }
+@media print { :root { --textura-ativa: 1; } }
+@media (forced-colors: active) { :root { --textura-ativa: 1; } }

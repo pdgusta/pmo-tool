@@ -1,0 +1,87 @@
+ERMHDR	19.12	2026-07-31	Project	admin	PMO Nortávia	Portfolio	PMO	BRL
+%T	CURRTYPE
+%F	curr_id	decimal_digit_cnt	curr_symbol	curr_short_name	group_digit_cnt	base_exch_rate	group_digit	decimal_symbol	digit_group_symbol	pos_curr_fmt_type	neg_curr_fmt_type	curr_type
+%R	1	2	R$	BRL	3	1	.	,	.	#1.1	(#1.1)	Real
+%T	PROJECT
+%F	proj_id	proj_short_name	proj_name	plan_start_date	plan_end_date	scd_end_date	last_recalc_date	fy_start_month_num	clndr_id	task_code_prefix	task_code_base	task_code_step	def_duration_type	guid
+%R	1001	PRJ-0501	Migração para Nuvem — Onda 2	2026-01-19 08:00	2027-05-28 17:00	2027-08-13 17:00	2026-07-31 08:00	1	1	A	1000	10	DT_FixedDUR2	{4f2a9c31-7b58-4d12-9e03-1a6c55d40501}
+%T	CALENDAR
+%F	clndr_id	clndr_name	proj_id	default_flag	clndr_type	day_hr_cnt	week_hr_cnt	month_hr_cnt	year_hr_cnt
+%R	1	Padrão Nortávia 5x8	1001	Y	CA_Base	8	40	176	2000
+%R	2	Sustentação 6x8	1001	N	CA_Project	8	48	208	2400
+%T	PROJWBS
+%F	wbs_id	proj_id	parent_wbs_id	seq_num	proj_node_flag	sum_data_flag	status_code	wbs_short_name	wbs_name
+%R	2001	1001		1000	Y	Y	WBS_Active	PRJ-0501	Migração para Nuvem — Onda 2
+%R	2002	1001	2001	1010	N	Y	WBS_Active	GOV	Governança e Planejamento
+%R	2003	1001	2001	1020	N	Y	WBS_Active	AVA	Avaliação e Desenho da Landing Zone
+%R	2004	1001	2001	1030	N	Y	WBS_Active	MIG	Migração de Cargas
+%R	2005	1001	2004	1040	N	Y	WBS_Active	MIG-A	Onda 2A — Aplicações de Canal
+%R	2006	1001	2004	1050	N	Y	WBS_Active	MIG-B	Onda 2B — Bases de Dados
+%R	2007	1001	2001	1060	N	Y	WBS_Active	EST	Estabilização e Encerramento
+%T	RSRC
+%F	rsrc_id	clndr_id	rsrc_short_name	rsrc_name	rsrc_title_name	rsrc_type	cost_qty_type	curr_id	def_qty_per_hr
+%R	3001	1	VPONTES	Vera Pontes	Gerente de Infraestrutura	RT_Labor	QT_Hour	1	1
+%R	3002	1	YBENCARD	Yuri Bencardino	Arquiteto de Soluções	RT_Labor	QT_Hour	1	1
+%R	3003	1	ITRANCOS	Ivo Trancoso	Especialista em Segurança	RT_Labor	QT_Hour	1	1
+%R	3004	1	EKOBAYAS	Emi Kobayashi	Líder de QA	RT_Labor	QT_Hour	1	1
+%R	3005	1	DLOUREIR	Dara Loureiro	Arquiteta de Dados	RT_Labor	QT_Hour	1	1
+%T	TASK
+%F	task_id	proj_id	wbs_id	clndr_id	task_code	task_name	task_type	status_code	target_start_date	target_end_date	act_start_date	act_end_date	target_drtn_hr_cnt	remain_drtn_hr_cnt	phys_complete_pct	target_cost	act_reg_cost
+%R	4001	1001	2002	1	A1000	Mobilização e plano de migração	TT_Task	TK_Complete	2026-01-19 08:00	2026-03-13 17:00	2026-01-19 08:00	2026-03-18 17:00	320	0	100	420000	448000
+%R	4002	1001	2002	1	A1010	Marco — Gate G3 autorizado	TT_Mile	TK_Complete	2026-03-20 08:00	2026-03-20 08:00	2026-03-25 08:00	2026-03-25 08:00	0	0	100	0	0
+%R	4003	1001	2002	1	A1020	Escritório do projeto e reporting mensal	TT_Task	TK_Active	2026-03-23 08:00	2027-05-28 17:00	2026-03-23 08:00		2400	1200	50	980000	490000
+%R	4004	1001	2002	1	A1030	Gestão de mudanças e comunicação	TT_Task	TK_Active	2026-04-01 08:00	2027-04-30 17:00	2026-04-06 08:00		1080	486	55	480000	264000
+%R	4005	1001	2003	1	A1100	Inventário de aplicações e dependências	TT_Task	TK_Complete	2026-02-02 08:00	2026-05-29 17:00	2026-02-02 08:00	2026-06-05 17:00	640	0	100	980000	1046000
+%R	4006	1001	2003	1	A1110	Desenho da landing zone	TT_Task	TK_Complete	2026-03-02 08:00	2026-06-30 17:00	2026-03-09 08:00	2026-07-10 17:00	680	0	100	1140000	1210000
+%R	4007	1001	2003	1	A1120	Padrões de segurança e rede na nuvem	TT_Task	TK_Complete	2026-04-01 08:00	2026-07-17 17:00	2026-04-06 08:00	2026-07-24 17:00	600	0	100	860000	902000
+%R	4008	1001	2003	1	A1130	Marco — Landing zone homologada	TT_Mile	TK_Complete	2026-07-27 08:00	2026-07-27 08:00	2026-07-29 08:00	2026-07-29 08:00	0	0	100	0	0
+%R	4009	1001	2003	1	A1140	Plano de ondas e critérios de corte	TT_Task	TK_Active	2026-06-01 08:00	2026-08-31 17:00	2026-06-08 08:00		480	24	95	540000	513000
+%R	4010	1001	2005	1	A1200	Preparação de ambientes — Onda 2A	TT_Task	TK_Complete	2026-05-04 08:00	2026-07-24 17:00	2026-05-11 08:00	2026-07-31 17:00	480	0	100	760000	798000
+%R	4011	1001	2005	1	A1210	Refatoração de aplicações de canal	TT_Task	TK_Active	2026-06-15 08:00	2026-12-18 17:00	2026-06-22 08:00		1040	416	60	1840000	1104000
+%R	4012	1001	2005	1	A1220	Migração dos serviços de canal	TT_Task	TK_NotStart	2026-08-03 08:00	2027-01-29 17:00			1000	1000	0	1420000	0
+%R	4013	1001	2005	1	A1230	Testes de aceitação — Onda 2A	TT_Task	TK_NotStart	2026-11-02 08:00	2027-02-26 17:00			680	680	0	720000	0
+%R	4014	1001	2005	1	A1240	Marco — Onda 2A em produção	TT_FinMile	TK_NotStart	2027-03-01 08:00	2027-03-01 08:00			0	0	0	0	0
+%R	4015	1001	2006	1	A1300	Perfilagem e classificação de bases	TT_Task	TK_Active	2026-06-01 08:00	2026-09-30 17:00	2026-06-15 08:00		680	136	80	640000	512000
+%R	4016	1001	2006	1	A1310	Replicação e sincronização de dados	TT_Task	TK_NotStart	2026-09-01 08:00	2027-02-26 17:00			1000	1000	0	1700000	0
+%R	4017	1001	2006	1	A1320	Migração das bases críticas	TT_Task	TK_NotStart	2026-12-01 08:00	2027-04-16 17:00			800	800	0	1990000	0
+%R	4018	1001	2006	1	A1330	Ensaios de reversão e contingência	TT_Task	TK_NotStart	2027-02-01 08:00	2027-04-30 17:00			520	520	0	480000	0
+%R	4019	1001	2006	1	A1340	Marco — Onda 2B em produção	TT_FinMile	TK_NotStart	2027-05-03 08:00	2027-05-03 08:00			0	0	0	0	0
+%R	4020	1001	2007	1	A1400	Otimização de custos de nuvem (FinOps)	TT_Task	TK_NotStart	2027-03-01 08:00	2027-05-14 17:00			440	440	0	380000	0
+%R	4021	1001	2007	1	A1410	Transferência para sustentação	TT_Task	TK_NotStart	2027-04-01 08:00	2027-05-21 17:00			296	296	0	260000	0
+%R	4022	1001	2007	1	A1420	Descomissionamento dos ambientes legados	TT_Task	TK_NotStart	2027-04-19 08:00	2027-05-27 17:00			240	240	0	320000	0
+%R	4023	1001	2007	1	A1430	Lições aprendidas e encerramento	TT_Task	TK_NotStart	2027-05-17 08:00	2027-05-27 17:00			72	72	0	140000	0
+%R	4024	1001	2007	1	A1440	Marco — Encerramento da Onda 2	TT_FinMile	TK_NotStart	2027-05-28 08:00	2027-05-28 08:00			0	0	0	0	0
+%T	TASKPRED
+%F	task_pred_id	task_id	pred_task_id	proj_id	pred_proj_id	pred_type	lag_hr_cnt
+%R	5001	4002	4001	1001	1001	PR_FS	0
+%R	5002	4003	4002	1001	1001	PR_FS	0
+%R	5003	4005	4001	1001	1001	PR_SS	40
+%R	5004	4006	4005	1001	1001	PR_SS	80
+%R	5005	4007	4006	1001	1001	PR_SS	120
+%R	5006	4008	4007	1001	1001	PR_FS	0
+%R	5007	4009	4006	1001	1001	PR_SS	400
+%R	5008	4010	4006	1001	1001	PR_SS	240
+%R	5009	4011	4010	1001	1001	PR_SS	200
+%R	5010	4012	4011	1001	1001	PR_SS	240
+%R	5011	4013	4012	1001	1001	PR_SS	480
+%R	5012	4014	4013	1001	1001	PR_FS	0
+%R	5013	4015	4005	1001	1001	PR_FS	0
+%R	5014	4016	4015	1001	1001	PR_SS	480
+%R	5015	4017	4016	1001	1001	PR_SS	480
+%R	5016	4019	4018	1001	1001	PR_FS	0
+%R	5017	4024	4023	1001	1001	PR_FS	0
+%T	TASKRSRC
+%F	taskrsrc_id	task_id	proj_id	rsrc_id	target_qty	remain_qty	act_reg_qty	target_cost	act_reg_cost	remain_cost	target_start_date	target_end_date	cost_per_qty
+%R	6001	4001	1001	3001	2400	0	2560	420000	448000	0	2026-01-19 08:00	2026-03-13 17:00	175
+%R	6002	4003	1001	3001	5600	2800	2800	980000	490000	490000	2026-03-23 08:00	2027-05-28 17:00	175
+%R	6003	4004	1001	3001	2400	1080	1320	480000	264000	216000	2026-04-01 08:00	2027-04-30 17:00	200
+%R	6004	4005	1001	3002	4000	0	4270	980000	1046000	0	2026-02-02 08:00	2026-05-29 17:00	245
+%R	6005	4006	1001	3002	4560	0	4840	1140000	1210000	0	2026-03-02 08:00	2026-06-30 17:00	250
+%R	6006	4007	1001	3003	3440	0	3608	860000	902000	0	2026-04-01 08:00	2026-07-17 17:00	250
+%R	6007	4010	1001	3001	4000	0	4200	760000	798000	0	2026-05-04 08:00	2026-07-24 17:00	190
+%R	6008	4011	1001	3002	8000	3200	4800	1840000	1104000	736000	2026-06-15 08:00	2026-12-18 17:00	230
+%R	6009	4009	1001	3001	3000	150	2850	540000	513000	27000	2026-06-01 08:00	2026-08-31 17:00	180
+%R	6010	4015	1001	3005	3200	640	2560	640000	512000	128000	2026-06-01 08:00	2026-09-30 17:00	200
+%R	6011	4013	1001	3004	4800	4800	0	720000	0	720000	2026-11-02 08:00	2027-02-26 17:00	150
+%R	6012	4017	1001	3005	9950	9950	0	1990000	0	1990000	2026-12-01 08:00	2027-04-16 17:00	200
+%E

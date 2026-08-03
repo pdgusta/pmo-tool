@@ -1,0 +1,13 @@
+﻿Codigo;DataStatus;PercentualFisico;CustoRealAcumulado;CustoComprometido;PrevisaoTermino;RAG;Observacao
+PRJ-0101;31/07/2026;38,80;13.480.000,00;19.200.000,00;30/06/2027;vermelho;Replanejamento em curso com o fornecedor da frente de integração. Comitê acionado.
+PRJ-0102;31/07/2026;63,50;6.372.600,00;7.900.000,00;23/01/2027;ambar;Janela de cutover renegociada com Operações para janeiro.
+PRJ-0103;31/07/2026;9,20;640.000,00;1.180.000,00;14/10/2027;ambar;Dependência da onda 2 de nuvem confirmada; início do descomissionamento adiado.
+PRJ-0201;31/07/2026;66,00;2.080.000,00;2.640.000,00;27/11/2026;verde;Fase 2 dentro do plano. Auditoria interna sem apontamentos no período.
+PRJ-0202;31/07/2026;71,50;1.310.000,00;1.560.000,00;30/10/2026;verde;Rotação de credenciais concluída em 4 dos 5 domínios.
+PRJ-0203;31/07/2026;51,00;5.248.000,00;6.400.000,00;15/12/2026;vermelho;Atraso acumulado de 76 dias. Solicitada revisão de baseline ao comitê.
+PRJ-0301;31/07/2026;60,40;8.640.000,00;10.100.000,00;13/01/2027;ambar;Qualidade das fontes de origem abaixo do esperado; régua de bloqueio ativada.
+PRJ-0302;31/07/2026;41,00;900.000,00;1.180.000,00;29/01/2027;verde;Catálogo de dados publicado para os dois primeiros domínios.
+PRJ-0401;31/07/2026;64,00;5.180.000,00;6.400.000,00;13/11/2026;verde;Submissão às lojas de aplicativos antecipada em duas semanas.
+PRJ-0402;31/07/2026;96,00;4.920.000,00;5.100.000,00;14/08/2026;verde;Em estabilização. Transferência para sustentação agendada.
+PRJ-0501;31/07/2026;43,90;7.287.000,00;9.100.000,00;13/08/2027;ambar;Onda 2 com atraso de 27 dias por indisponibilidade de circuitos da operadora.
+PRJ-0502;31/07/2026;56,00;2.240.000,00;2.900.000,00;11/12/2026;verde;SD-WAN implantado em 61% das agências.

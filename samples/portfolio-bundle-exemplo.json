@@ -1,0 +1,219 @@
+{
+  "meta": {
+    "schemaVersion": 1,
+    "appVersion": "1.0.0",
+    "orgName": "Nortávia Serviços Financeiros S.A.",
+    "moeda": "BRL",
+    "inicioAnoFiscal": 1,
+    "dataStatus": "2026-07-31",
+    "geradoEm": "2026-07-30T12:00:00.000Z",
+    "salvoEm": "2026-07-30T12:00:00.000Z"
+  },
+  "settings": {
+    "unidadesNegocio": [
+      { "id": "bu-ti", "nome": "Tecnologia da Informação", "sigla": "TI" },
+      { "id": "bu-risco", "nome": "Risco e Compliance", "sigla": "RSC" }
+    ]
+  },
+  "pessoas": [
+    { "id": "p-02", "nome": "Rafa Quintela", "papel": "Gerente de Projetos Sr.", "buId": "bu-ti", "capacidadeHorasMes": 160, "custoHora": 180, "ativo": true },
+    { "id": "p-08", "nome": "Ivo Trancoso", "papel": "Especialista em Segurança", "buId": "bu-risco", "capacidadeHorasMes": 160, "custoHora": 240, "ativo": true },
+    { "id": "p-11", "nome": "Théo Baladi", "papel": "Diretor de TI", "buId": "bu-ti", "capacidadeHorasMes": 40, "custoHora": 400, "ativo": true }
+  ],
+  "programas": [
+    { "id": "prg-06", "codigo": "PRG-06", "nome": "Resiliência Operacional", "objetivo": "Elevar a continuidade dos serviços críticos e reduzir o tempo de recuperação.", "sponsorId": "p-11", "donoId": "p-08", "driverIds": ["drv-resiliencia"], "status": "ativo" },
+    { "id": "prg-07", "codigo": "PRG-07", "nome": "Automação de Processos", "objetivo": "Reduzir esforço manual em processos de retaguarda.", "sponsorId": "p-11", "donoId": "p-02", "driverIds": ["drv-eficiencia"], "status": "ativo" }
+  ],
+  "projetos": [
+    {
+      "id": "prj-21",
+      "codigo": "PRJ-0606",
+      "nome": "Plano de Continuidade de Negócios — Revisão 2027",
+      "programaId": "prg-06",
+      "descricao": "Revisão completa do BIA e dos planos de continuidade dos processos críticos, com testes de mesa e failover assistido.",
+      "objetivo": "Reduzir o RTO dos serviços críticos de 8h para 2h.",
+      "sponsorId": "p-11",
+      "pmId": "p-08",
+      "buId": "bu-risco",
+      "categoria": "run",
+      "tipo": "seguranca",
+      "driverIds": ["drv-resiliencia"],
+      "prioridade": 2,
+      "obrigatorio": true,
+      "estagio": "execucao",
+      "gateAtual": "g3",
+      "ragManual": null,
+      "dates": {
+        "baselineInicio": "2026-03-02",
+        "baselineFim": "2027-02-26",
+        "previstoInicio": "2026-03-02",
+        "previstoFim": "2027-03-19",
+        "realInicio": "2026-03-09",
+        "realFim": null,
+        "dataStatus": "2026-07-31"
+      },
+      "progress": { "pctFisico": 38 },
+      "finance": {
+        "moeda": "BRL",
+        "orcamentoCapex": 1680000,
+        "orcamentoOpex": 720000,
+        "custoBaseline": 2400000,
+        "comprometido": 1180000,
+        "custoReal": 964000,
+        "contingencia": 192000,
+        "eacManual": null,
+        "curvaPlanejada": [
+          { "periodo": "2026-03", "pv": 96000 },
+          { "periodo": "2026-04", "pv": 168000 },
+          { "periodo": "2026-05", "pv": 228000 },
+          { "periodo": "2026-06", "pv": 264000 },
+          { "periodo": "2026-07", "pv": 276000 },
+          { "periodo": "2026-08", "pv": 276000 },
+          { "periodo": "2026-09", "pv": 264000 },
+          { "periodo": "2026-10", "pv": 228000 },
+          { "periodo": "2026-11", "pv": 192000 },
+          { "periodo": "2026-12", "pv": 156000 },
+          { "periodo": "2027-01", "pv": 132000 },
+          { "periodo": "2027-02", "pv": 120000 }
+        ],
+        "curvaReal": [
+          { "periodo": "2026-03", "ev": 72000, "ac": 84000 },
+          { "periodo": "2026-04", "ev": 144000, "ac": 168000 },
+          { "periodo": "2026-05", "ev": 204000, "ac": 224000 },
+          { "periodo": "2026-06", "ev": 240000, "ac": 248000 },
+          { "periodo": "2026-07", "ev": 252000, "ac": 240000 }
+        ]
+      },
+      "beneficios": [
+        { "id": "ben-21a", "nome": "Redução do tempo de recuperação de serviços críticos", "tipo": "reducao-risco", "valorEsperado": 1900000, "valorRealizado": 0, "unidade": "BRL", "prazo": "2027-06-30", "status": "previsto", "donoId": "p-11", "metodoMedicao": "Teste de failover semestral com cronometragem auditada." },
+        { "id": "ben-21b", "nome": "Custo evitado com indisponibilidade", "tipo": "evitar-custo", "valorEsperado": 1250000, "valorRealizado": 0, "unidade": "BRL", "prazo": "2027-12-31", "status": "previsto", "donoId": "p-11", "metodoMedicao": "Comparativo de horas de indisponibilidade ano a ano." }
+      ],
+      "marcos": [
+        { "id": "mrc-21a", "nome": "BIA revisado e aprovado", "gateId": "g2", "baselineData": "2026-05-29", "previstoData": "2026-06-12", "realData": "2026-06-18", "critico": true, "peso": 3, "responsavelId": "p-08", "observacao": "" },
+        { "id": "mrc-21b", "nome": "Planos de continuidade reescritos", "gateId": null, "baselineData": "2026-09-30", "previstoData": "2026-10-16", "realData": null, "critico": false, "peso": 1, "responsavelId": "p-08", "observacao": "" },
+        { "id": "mrc-21c", "nome": "Teste de mesa com as áreas de negócio", "gateId": null, "baselineData": "2026-11-27", "previstoData": "2026-12-11", "realData": null, "critico": true, "peso": 1, "responsavelId": "p-08", "observacao": "" },
+        { "id": "mrc-21d", "nome": "Failover assistido em produção", "gateId": "g4", "baselineData": "2027-01-29", "previstoData": "2027-02-19", "realData": null, "critico": true, "peso": 3, "responsavelId": "p-08", "observacao": "" }
+      ],
+      "gates": [
+        { "id": "gt-21a", "gateId": "g1", "previstoData": "2026-03-27", "realData": "2026-03-27", "decisao": "aprovado", "forum": "comite-executivo", "aprovadorId": "p-11", "condicoes": "", "notas": "Business case aprovado sem ressalvas." },
+        { "id": "gt-21b", "gateId": "g2", "previstoData": "2026-05-29", "realData": "2026-06-18", "decisao": "condicional", "forum": "comite-executivo", "aprovadorId": "p-11", "condicoes": "Reapresentar o plano de testes com as áreas de negócio em 30 dias.", "notas": "" },
+        { "id": "gt-21c", "gateId": "g3", "previstoData": "2026-06-30", "realData": "2026-07-08", "decisao": "aprovado", "forum": "comite-portfolio", "aprovadorId": "p-11", "condicoes": "", "notas": "Verba liberada integralmente." },
+        { "id": "gt-21d", "gateId": "g4", "previstoData": "2027-02-19", "realData": null, "decisao": "pendente", "forum": "comite-portfolio", "aprovadorId": null, "condicoes": "", "notas": "Aguardando evidências do failover assistido." }
+      ],
+      "riscos": [
+        { "id": "rsk-21a", "codigo": "R-0606-1", "titulo": "Áreas de negócio indisponíveis para o teste de mesa", "descricao": "Fechamento contábil concorre com a janela de teste.", "categoria": "recurso", "probabilidade": 4, "impacto": 3, "exposicaoCusto": 180000, "impactoDias": 30, "resposta": "mitigar", "mitigacao": "Agendar o teste fora da janela de fechamento e obter compromisso formal dos diretores.", "contingencia": "", "donoId": "p-08", "prazo": "2026-10-30", "status": "em-tratamento", "abertoEm": "2026-04-15", "fechadoEm": null, "revisadoEm": "2026-07-20" },
+        { "id": "rsk-21b", "codigo": "R-0606-2", "titulo": "Falha no failover assistido em produção", "descricao": "Risco de indisponibilidade não planejada durante o teste real.", "categoria": "tecnico", "probabilidade": 3, "impacto": 5, "exposicaoCusto": 420000, "impactoDias": 45, "resposta": "mitigar", "mitigacao": "Ensaio prévio em ambiente espelho e janela de baixo movimento com plano de rollback.", "contingencia": "Acionar plano de retorno imediato ao site primário.", "donoId": "p-08", "prazo": "2027-01-30", "status": "aberto", "abertoEm": "2026-06-02", "fechadoEm": null, "revisadoEm": "2026-07-25" }
+      ],
+      "issues": [
+        { "id": "iss-21a", "codigo": "I-0606-1", "titulo": "Inventário de processos críticos desatualizado", "descricao": "Duas áreas não responderam ao levantamento no prazo.", "severidade": 3, "donoId": "p-08", "abertaEm": "2026-06-25", "prazo": "2026-08-15", "resolvidaEm": null, "status": "em-tratamento", "escalada": false, "resolucao": "" }
+      ],
+      "decisoes": [
+        { "id": "dec-21a", "codigo": "D-0606-1", "titulo": "Autorizar janela de indisponibilidade programada para o failover", "contexto": "O teste real exige parada de 2h em serviço crítico.", "forum": "comite-executivo", "solicitadaEm": "2026-07-10", "decididaEm": null, "prazoLimite": "2026-09-30", "status": "pendente", "decisao": "", "decisorId": "p-11", "impacto": "Sem a janela, o teste vira simulação e o benefício não se comprova.", "anexos": [] }
+      ],
+      "mudancas": [
+        { "id": "chg-21a", "codigo": "CR-0606-1", "titulo": "Inclusão de dois processos críticos identificados no BIA revisado", "justificativa": "O BIA revelou dependências não mapeadas no levantamento original.", "tipo": "escopo", "solicitadaEm": "2026-06-22", "solicitanteId": "p-08", "impactoCusto": 186000, "impactoDias": 21, "impactoEscopo": "Dois processos adicionais entram no plano de continuidade.", "status": "aprovada", "decididaEm": "2026-07-08", "aprovadorId": "p-11", "forum": "ccb", "afetaBaseline": true }
+      ],
+      "dependencias": [],
+      "alocacoes": [
+        { "id": "alc-21a", "pessoaId": "p-08", "papel": "Gerente do projeto", "alocacaoPct": 45, "de": "2026-03-02", "ate": "2027-03-19" },
+        { "id": "alc-21b", "pessoaId": "p-02", "papel": "Apoio de planejamento", "alocacaoPct": 15, "de": "2026-03-02", "ate": "2026-12-31" }
+      ],
+      "statusReports": [
+        { "id": "sr-21a", "periodo": "2026-07", "reportadoEm": "2026-07-28", "autorId": "p-08", "ragGeral": "ambar", "ragEscopo": "ambar", "ragPrazo": "ambar", "ragCusto": "verde", "ragQualidade": "verde", "ragRisco": "ambar", "destaques": "BIA revisado e aprovado no G2. Planos de continuidade reescritos para 6 dos 9 processos críticos.", "pontosAtencao": "Mudança de escopo aprovada acrescentou 21 dias ao cronograma. Duas áreas ainda não liberaram agenda para o teste de mesa.", "proximosPassos": "Concluir a reescrita dos planos restantes e fechar a agenda do teste de mesa até 30/08.", "pedidosComite": "Autorização da janela de indisponibilidade programada para o failover assistido.", "spiSnapshot": 0.94, "cpiSnapshot": 0.95, "pctFisicoSnapshot": 38 }
+      ],
+      "anexos": [],
+      "links": {
+        "sharepointSite": "https://contoso.sharepoint.exemplo/sites/pmo-continuidade",
+        "bibliotecaDocs": "https://contoso.sharepoint.exemplo/sites/pmo-continuidade/Documentos",
+        "planoPlanner": "",
+        "arquivoProjeto": "PRJ-0606-cronograma.mpp",
+        "canalTeams": "",
+        "wiki": ""
+      },
+      "tags": ["run", "seguranca", "obrigatorio"],
+      "importSource": null,
+      "criadoEm": "2026-01-20T09:00:00.000Z",
+      "atualizadoEm": "2026-07-31T18:30:00.000Z"
+    },
+    {
+      "id": "prj-22",
+      "codigo": "PRJ-0607",
+      "nome": "Robotização da Retaguarda de Cartões",
+      "programaId": "prg-07",
+      "descricao": "Automação de quatro processos manuais de retaguarda de cartões com RPA e integração ao core.",
+      "objetivo": "Liberar 1.400 horas/mês da equipe de retaguarda.",
+      "sponsorId": "p-11",
+      "pmId": "p-02",
+      "buId": "bu-ti",
+      "categoria": "grow",
+      "tipo": "processo",
+      "driverIds": ["drv-eficiencia"],
+      "prioridade": 3,
+      "obrigatorio": false,
+      "estagio": "planejamento",
+      "gateAtual": "g2",
+      "ragManual": null,
+      "dates": {
+        "baselineInicio": "2026-08-03",
+        "baselineFim": "2027-05-28",
+        "previstoInicio": "2026-08-03",
+        "previstoFim": "2027-05-28",
+        "realInicio": null,
+        "realFim": null,
+        "dataStatus": "2026-07-31"
+      },
+      "progress": { "pctFisico": 0 },
+      "finance": {
+        "moeda": "BRL",
+        "orcamentoCapex": 1240000,
+        "orcamentoOpex": 380000,
+        "custoBaseline": 1620000,
+        "comprometido": 145000,
+        "custoReal": 42000,
+        "contingencia": 129600,
+        "eacManual": null,
+        "curvaPlanejada": [],
+        "curvaReal": []
+      },
+      "beneficios": [
+        { "id": "ben-22a", "nome": "Ganho de produtividade na retaguarda", "tipo": "produtividade", "valorEsperado": 2600000, "valorRealizado": 0, "unidade": "BRL", "prazo": "2027-12-31", "status": "previsto", "donoId": "p-11", "metodoMedicao": "Horas de esforço manual medidas antes e depois por processo." }
+      ],
+      "marcos": [
+        { "id": "mrc-22a", "nome": "Baseline aprovada", "gateId": "g2", "baselineData": "2026-09-30", "previstoData": "2026-09-30", "realData": null, "critico": true, "peso": 3, "responsavelId": "p-02", "observacao": "" },
+        { "id": "mrc-22b", "nome": "Primeiro robô em produção", "gateId": null, "baselineData": "2026-12-18", "previstoData": "2026-12-18", "realData": null, "critico": true, "peso": 1, "responsavelId": "p-02", "observacao": "" }
+      ],
+      "gates": [
+        { "id": "gt-22a", "gateId": "g1", "previstoData": "2026-07-24", "realData": "2026-07-24", "decisao": "aprovado", "forum": "comite-executivo", "aprovadorId": "p-11", "condicoes": "", "notas": "Business case aprovado no comitê de 24/07." },
+        { "id": "gt-22b", "gateId": "g2", "previstoData": "2026-09-30", "realData": null, "decisao": "pendente", "forum": "comite-executivo", "aprovadorId": null, "condicoes": "", "notas": "Aguardando fechamento do desenho dos quatro processos." }
+      ],
+      "riscos": [
+        { "id": "rsk-22a", "codigo": "R-0607-1", "titulo": "Processos mudam antes da automação entrar em produção", "descricao": "Retaguarda de cartões passa por revisão de política no mesmo período.", "categoria": "negocio", "probabilidade": 3, "impacto": 3, "exposicaoCusto": 160000, "impactoDias": 30, "resposta": "mitigar", "mitigacao": "Congelar o desenho dos processos após o G2 e tratar alterações por controle de mudanças.", "contingencia": "", "donoId": "p-02", "prazo": "2026-10-15", "status": "aberto", "abertoEm": "2026-07-05", "fechadoEm": null, "revisadoEm": "2026-07-28" }
+      ],
+      "issues": [],
+      "decisoes": [],
+      "mudancas": [],
+      "dependencias": [],
+      "alocacoes": [
+        { "id": "alc-22a", "pessoaId": "p-02", "papel": "Gerente do projeto", "alocacaoPct": 30, "de": "2026-08-03", "ate": "2027-05-28" }
+      ],
+      "statusReports": [],
+      "anexos": [],
+      "links": {
+        "sharepointSite": "",
+        "bibliotecaDocs": "",
+        "planoPlanner": "",
+        "arquivoProjeto": "",
+        "canalTeams": "",
+        "wiki": ""
+      },
+      "tags": ["grow", "processo"],
+      "importSource": null,
+      "criadoEm": "2026-05-11T09:00:00.000Z",
+      "atualizadoEm": "2026-07-31T18:30:00.000Z"
+    }
+  ],
+  "anexos": [],
+  "auditLog": [],
+  "imports": [],
+  "visoesSalvas": []
+}

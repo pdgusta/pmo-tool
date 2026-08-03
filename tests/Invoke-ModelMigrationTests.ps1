@@ -1,0 +1,20 @@
+<# Executa os testes JS do contrato de migracao. Compativel com Windows PowerShell 5.1. #>
+[CmdletBinding()]
+param([string] $NodePath)
+
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+$testDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$testPath = Join-Path $testDir 'model-migration.test.mjs'
+
+if ([string]::IsNullOrWhiteSpace($NodePath)) {
+    $node = Get-Command node.exe -ErrorAction SilentlyContinue
+    if (-not $node) { $node = Get-Command node -ErrorAction SilentlyContinue }
+    if ($node) { $NodePath = $node.Source }
+}
+if ([string]::IsNullOrWhiteSpace($NodePath) -or -not (Test-Path -LiteralPath $NodePath -PathType Leaf)) {
+    throw 'Node.js nao encontrado. Informe -NodePath com um runtime Node.js disponivel.'
+}
+
+& $NodePath $testPath
+if ($LASTEXITCODE -ne 0) { throw "Testes de migracao falharam com codigo $LASTEXITCODE." }

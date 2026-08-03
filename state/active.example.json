@@ -1,0 +1,12 @@
+{
+  "formatVersion": 1,
+  "bootstrapVersion": "1.0.0",
+  "bootstrapProtocolVersion": 1,
+  "activeVersion": "1.4.1",
+  "previousVersion": null,
+  "activeSchemaVersion": 4,
+  "previousSchemaVersion": null,
+  "activeReleaseManifestSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "previousReleaseManifestSha256": null,
+  "activatedAt": "2026-08-02T00:00:00Z"
+}

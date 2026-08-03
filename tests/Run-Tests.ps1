@@ -1,0 +1,422 @@
+<#
+    Suite sem dependencias para build e release.
+    Deve executar em Windows PowerShell 5.1.
+#>
+[CmdletBinding()]
+param(
+    [string] $Version,
+    [string] $Commit = '0123456789abcdef0123456789abcdef01234567',
+    [string] $BuildTimestamp = '2026-01-01T00:00:00Z',
+    [string] $NodePath
+)
+
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+
+$testDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$raiz = Split-Path -Parent $testDir
+$modeloPath = Join-Path (Join-Path (Join-Path $raiz 'src') 'js') '10-model.js'
+. (Join-Path (Join-Path $raiz 'tools') 'portable-common.ps1')
+
+if ([string]::IsNullOrWhiteSpace($NodePath)) {
+    $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+    if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
+    if ($nodeCommand) { $NodePath = $nodeCommand.Source }
+}
+if ([string]::IsNullOrWhiteSpace($NodePath) -or -not (Test-Path -LiteralPath $NodePath -PathType Leaf)) {
+    throw 'Node.js de desenvolvimento e obrigatorio para validar migracoes e o JavaScript do artefato.'
+}
+
+function Assert-Igual($Esperado, $Atual, [string] $Mensagem) {
+    if ($Esperado -ne $Atual) {
+        throw "$Mensagem`nEsperado: $Esperado`nAtual: $Atual"
+    }
+}
+
+function Assert-Throws([scriptblock] $Acao, [string] $Padrao, [string] $Mensagem) {
+    $falhou = $false
+    try {
+        & $Acao | Out-Null
+    }
+    catch {
+        $falhou = $true
+        if ($Padrao -and $_.Exception.Message -notmatch $Padrao) {
+            throw "$Mensagem gerou erro inesperado: $($_.Exception.Message)"
+        }
+    }
+    if (-not $falhou) {
+        throw "$Mensagem deveria ter sido rejeitado."
+    }
+}
+
+function Invoke-PmoExternal([string]$Root,[string[]]$Arguments) {
+    $launcher = Join-Path $Root 'pmo.ps1'
+    # Windows PowerShell promove stderr de um processo nativo a ErrorRecord.
+    # Os casos negativos abaixo precisam capturar essa saída e o exit code sem
+    # deixar que ErrorActionPreference=Stop encerre o próprio test harness.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $lines = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $launcher @Arguments 2>&1 | ForEach-Object { [string]$_ })
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    return [pscustomobject]@{ ExitCode=$exitCode; Output=($lines -join [Environment]::NewLine) }
+}
+
+function Assert-PmoExternalFails([string]$Root,[string[]]$Arguments,[string]$Pattern,[string]$Message) {
+    $result = Invoke-PmoExternal $Root $Arguments
+    if ($result.ExitCode -eq 0) { throw "$Message deveria ter sido rejeitado." }
+    if ($Pattern -and [string]$result.Output -notmatch $Pattern) {
+        throw "$Message gerou erro inesperado: $($result.Output)"
+    }
+}
+
+function Criar-ZipComEntrada([string] $Caminho, [string] $NomeEntrada, [byte[]] $Conteudo = $null) {
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $stream = [System.IO.File]::Open($Caminho, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    $zip = $null
+    try {
+        $zip = New-Object System.IO.Compression.ZipArchive($stream, [System.IO.Compression.ZipArchiveMode]::Create, $false)
+        $entrada = $zip.CreateEntry($NomeEntrada)
+        $destino = $entrada.Open()
+        try {
+            $bytes = if ($null -ne $Conteudo) { $Conteudo } else { [System.Text.Encoding]::UTF8.GetBytes('{}') }
+            $destino.Write($bytes, 0, $bytes.Length)
+        }
+        finally {
+            $destino.Dispose()
+        }
+    }
+    finally {
+        if ($null -ne $zip) {
+            $zip.Dispose()
+        }
+        $stream.Dispose()
+    }
+}
+
+function Alterar-ReleaseNoZip([string]$Origem,[string]$Destino,[string]$Padrao,[string]$Substituicao) {
+    Copy-Item -LiteralPath $Origem -Destination $Destino
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $stream = [System.IO.File]::Open($Destino,[System.IO.FileMode]::Open,[System.IO.FileAccess]::ReadWrite,[System.IO.FileShare]::None)
+    $zip = $null
+    try {
+        $zip = New-Object System.IO.Compression.ZipArchive($stream,[System.IO.Compression.ZipArchiveMode]::Update,$false)
+        $entry = @($zip.Entries | Where-Object { $_.FullName -eq 'release.json' })
+        if ($entry.Count -ne 1) { throw 'Fixture sem release.json unico.' }
+        $reader = New-Object System.IO.StreamReader($entry[0].Open(),[System.Text.Encoding]::UTF8)
+        try { $raw = $reader.ReadToEnd() } finally { $reader.Dispose() }
+        $regexAlteracao = [regex]$Padrao
+        $alterado = $regexAlteracao.Replace($raw,$Substituicao,1)
+        if ($alterado -eq $raw) { throw 'Padrao de adulteracao nao encontrado em release.json.' }
+        $entry[0].Delete()
+        $nova = $zip.CreateEntry('release.json',[System.IO.Compression.CompressionLevel]::Optimal)
+        $dest = $nova.Open()
+        try {
+            $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($alterado)
+            $dest.Write($bytes,0,$bytes.Length)
+        } finally { $dest.Dispose() }
+    } finally {
+        if ($null -ne $zip) { $zip.Dispose() }
+        $stream.Dispose()
+    }
+}
+
+$modelo = [System.IO.File]::ReadAllText($modeloPath, [System.Text.Encoding]::UTF8)
+$matchVersao = [regex]::Match($modelo, 'model\.APP_VERSION\s*=\s*[''"](?<version>[^''"]+)[''"]')
+if (-not $matchVersao.Success) {
+    throw 'Nao foi possivel obter APP_VERSION para os testes.'
+}
+$versaoFonte = $matchVersao.Groups['version'].Value
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $Version = $versaoFonte
+}
+Assert-Igual $versaoFonte $Version 'A versao de teste deve coincidir com APP_VERSION.'
+
+$tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+$tempDir = [System.IO.Path]::GetFullPath((Join-Path $tempBase ('pmo-tests-' + [Guid]::NewGuid().ToString('N'))))
+if (-not $tempDir.StartsWith($tempBase, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Pasta de testes calculada fora do TEMP.'
+}
+
+try {
+    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+    Write-Host '1/6 Sintaxe Windows PowerShell 5.1 e contratos JSON' -ForegroundColor Cyan
+    foreach ($script in @(
+        (Join-Path $raiz 'build.ps1'),
+        (Join-Path $raiz 'serve.ps1'),
+        (Join-Path $raiz 'pmo.ps1'),
+        (Join-Path $raiz 'atualizar.ps1'),
+        (Join-Path (Join-Path $raiz 'tools') 'portable-common.ps1'),
+        (Join-Path (Join-Path $raiz 'tools') 'update-runtime.ps1'),
+        (Join-Path (Join-Path $raiz 'tools') 'New-PortableInstall.ps1'),
+        (Join-Path (Join-Path $raiz 'tools') 'New-ReleasePackage.ps1'),
+        (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1'),
+        (Join-Path $testDir 'Invoke-ModelMigrationTests.ps1'),
+        $MyInvocation.MyCommand.Path
+    )) {
+        $tokens = $null
+        $erros = $null
+        [void][System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$erros)
+        if ($erros.Count -gt 0) {
+            throw "Erro de sintaxe em $script`: $($erros[0])"
+        }
+    }
+    foreach ($json in @(
+        (Join-Path $raiz 'config\install.example.json'),
+        (Join-Path $raiz 'state\active.example.json'),
+        (Join-Path $raiz 'state\update.example.json'),
+        (Join-Path $raiz 'docs\context\index.json')
+    )) {
+        $null = [System.IO.File]::ReadAllText($json, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    }
+    & (Join-Path $testDir 'Invoke-ModelMigrationTests.ps1') -NodePath $NodePath
+
+    $atomicDir = Join-Path $tempDir 'atomic-bytes'
+    New-Item -ItemType Directory -Path $atomicDir | Out-Null
+    $atomicPath = Join-Path $atomicDir 'anexo.bin'
+    $atomicBackup = $atomicPath + '.replace-backup'
+    $expectedBytes = [System.Text.Encoding]::UTF8.GetBytes('conteudo-valido')
+    [System.IO.File]::WriteAllBytes($atomicBackup,$expectedBytes)
+    $expectedHash = (Get-FileHash -LiteralPath $atomicBackup -Algorithm SHA256).Hash.ToLowerInvariant()
+    Assert-Igual $true (Repair-PmoAtomicBytes -Path $atomicPath -ExpectedSize $expectedBytes.Length -ExpectedSha256 $expectedHash) 'Backup atomico ausente deve ser restaurado.'
+    Assert-Igual 'conteudo-valido' ([System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($atomicPath))) 'Bytes restaurados do backup atomico.'
+    [System.IO.File]::WriteAllBytes($atomicPath,[System.Text.Encoding]::UTF8.GetBytes('corrompido'))
+    [System.IO.File]::WriteAllBytes($atomicBackup,$expectedBytes)
+    Assert-Igual $true (Repair-PmoAtomicBytes -Path $atomicPath -ExpectedSize $expectedBytes.Length -ExpectedSha256 $expectedHash) 'Backup atomico valido deve substituir alvo corrompido.'
+    Assert-Igual 'conteudo-valido' ([System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($atomicPath))) 'Recuperacao atomica deve preservar o blob valido.'
+
+    $durableSource = Join-Path $atomicDir 'durable-source.bin'
+    $durableDestination = Join-Path $atomicDir 'durable-destination.bin'
+    [System.IO.File]::WriteAllBytes($durableSource,$expectedBytes)
+    Copy-PmoFileDurable -Source $durableSource -Destination $durableDestination
+    Assert-Igual $expectedHash (Get-PmoSha256 $durableDestination) 'Copia duravel de arquivo deve preservar SHA-256.'
+    $durableTreeSource = Join-Path $atomicDir 'tree-source'
+    $durableTreeDestination = Join-Path $atomicDir 'tree-destination'
+    New-Item -ItemType Directory -Path (Join-Path $durableTreeSource 'nested') -Force | Out-Null
+    [System.IO.File]::WriteAllBytes((Join-Path $durableTreeSource 'nested\payload.bin'),$expectedBytes)
+    Copy-PmoDirectoryDurable -Source $durableTreeSource -Destination $durableTreeDestination
+    Assert-Igual $expectedHash (Get-PmoSha256 (Join-Path $durableTreeDestination 'nested\payload.bin')) 'Copia duravel de diretorio deve preservar SHA-256.'
+
+    $volumeRoot = [System.IO.Path]::GetPathRoot([System.IO.Path]::GetFullPath($tempDir))
+    Assert-Igual $volumeRoot (Get-PmoNormalizedFullPath $volumeRoot) 'Normalizacao deve preservar a raiz do volume.'
+    Assert-Igual $true (Test-PmoPathEqualOrSubPath $volumeRoot $tempDir) 'Raiz do volume deve conter o diretorio temporario.'
+    Assert-Igual $volumeRoot (Assert-PmoPathWithoutReparse $volumeRoot) 'Guard de reparse deve preservar a raiz absoluta.'
+
+    Write-Host '2/6 Build reproduzivel' -ForegroundColor Cyan
+    $buildA = Join-Path $tempDir 'build-a.html'
+    $buildB = Join-Path $tempDir 'build-b.html'
+    & (Join-Path $raiz 'build.ps1') -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp -OutputPath $buildA
+    & (Join-Path $raiz 'build.ps1') -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp -OutputPath $buildB
+    & $NodePath (Join-Path $testDir 'validate-built-html.mjs') $buildA
+    if ($LASTEXITCODE -ne 0) { throw 'O JavaScript do HTML compilado e invalido.' }
+    $hashBuildA = (Get-FileHash -LiteralPath $buildA -Algorithm SHA256).Hash
+    $hashBuildB = (Get-FileHash -LiteralPath $buildB -Algorithm SHA256).Hash
+    Assert-Igual $hashBuildA $hashBuildB 'Dois builds com as mesmas entradas devem ser identicos.'
+
+    Write-Host '3/6 Pacote deterministico e manifesto' -ForegroundColor Cyan
+    $releaseA = Join-Path $tempDir 'release-a'
+    $releaseB = Join-Path $tempDir 'release-b'
+    & (Join-Path (Join-Path $raiz 'tools') 'New-ReleasePackage.ps1') -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp -OutputDirectory $releaseA
+    & (Join-Path (Join-Path $raiz 'tools') 'New-ReleasePackage.ps1') -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp -OutputDirectory $releaseB
+    $zipNome = "pmo-tool-$Version-windows.zip"
+    $manifestoNome = "pmo-tool-$Version-manifest.json"
+    $zipA = Join-Path $releaseA $zipNome
+    $zipB = Join-Path $releaseB $zipNome
+    $manifestoA = Join-Path $releaseA $manifestoNome
+    $manifestoB = Join-Path $releaseB $manifestoNome
+    Assert-Igual (Get-FileHash -LiteralPath $zipA -Algorithm SHA256).Hash (Get-FileHash -LiteralPath $zipB -Algorithm SHA256).Hash 'ZIPs devem ser reproduziveis.'
+    Assert-Igual (Get-FileHash -LiteralPath $manifestoA -Algorithm SHA256).Hash (Get-FileHash -LiteralPath $manifestoB -Algorithm SHA256).Hash 'Manifestos devem ser reproduziveis.'
+    & (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1') -ZipPath $zipA -ManifestPath $manifestoA
+    $linhaSha = ([System.IO.File]::ReadAllText(($zipA + '.sha256'), [System.Text.Encoding]::UTF8)).Trim()
+    $hashZip = (Get-FileHash -LiteralPath $zipA -Algorithm SHA256).Hash.ToLowerInvariant()
+    Assert-Igual ($hashZip + '  ' + $zipNome) $linhaSha 'Arquivo .sha256 deve ancorar o ZIP.'
+
+    Write-Host '4/6 Rejeicoes de seguranca' -ForegroundColor Cyan
+    $zipData = Join-Path $tempDir 'forbidden-data.zip'
+    Criar-ZipComEntrada $zipData 'data/portfolio.json'
+    Assert-Throws { & (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1') -ZipPath $zipData } 'allowlist' 'ZIP contendo data/'
+
+    $zipTraversal = Join-Path $tempDir 'traversal.zip'
+    Criar-ZipComEntrada $zipTraversal '../portfolio.json'
+    Assert-Throws { & (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1') -ZipPath $zipTraversal } 'Traversal|inseguro' 'ZIP com path traversal'
+
+    $manifestoAdulterado = Join-Path $tempDir 'tampered-manifest.json'
+    $textoManifesto = [System.IO.File]::ReadAllText($manifestoA, [System.Text.Encoding]::UTF8)
+    $textoManifesto = [regex]::Replace($textoManifesto, '(?i)("sha256"\s*:\s*")[0-9a-f]{64}', ('${1}' + ('0' * 64)), 1)
+    [System.IO.File]::WriteAllText($manifestoAdulterado, $textoManifesto, (New-Object System.Text.UTF8Encoding($false)))
+    Assert-Throws { & (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1') -ZipPath $zipA -ManifestPath $manifestoAdulterado } 'diverge' 'Manifesto externo adulterado'
+
+    $zipContratoInvalido = Join-Path $tempDir 'invalid-runtime-contract.zip'
+    Alterar-ReleaseNoZip $zipA $zipContratoInvalido '("platform"\s*:\s*")windows(")' '${1}linux${2}'
+    Assert-Throws { & (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1') -ZipPath $zipContratoInvalido } 'Plataforma invalida' 'release.json com plataforma divergente'
+
+    $zipBomb = Join-Path $tempDir 'compression-ratio.zip'
+    $zeros = New-Object byte[] (2MB)
+    Criar-ZipComEntrada $zipBomb 'samples/bomb.bin' $zeros
+    Assert-Throws { & (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1') -ZipPath $zipBomb -MaxCompressionRatio 10 } 'Razao de compressao' 'ZIP com razao de compressao abusiva'
+
+    Write-Host '5/6 Atomicidade e limites do instalador portatil' -ForegroundColor Cyan
+    $insideSource = Join-Path $raiz ('.portable-install-forbidden-' + [Guid]::NewGuid().ToString('N'))
+    Assert-Throws {
+        & (Join-Path (Join-Path $raiz 'tools') 'New-PortableInstall.ps1') -Destination $insideSource -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp
+    } 'raiz fonte' 'Destino dentro da raiz fonte'
+    if (Test-Path -LiteralPath $insideSource) { throw 'O instalador criou conteudo dentro da raiz fonte antes de rejeitar o destino.' }
+
+    $nonEmpty = Join-Path $tempDir 'portable-non-empty'
+    New-Item -ItemType Directory -Path $nonEmpty | Out-Null
+    $sentinel = Join-Path $nonEmpty 'sentinel.txt'
+    [System.IO.File]::WriteAllText($sentinel, 'preservar', (New-Object System.Text.UTF8Encoding($false)))
+    Assert-Throws {
+        & (Join-Path (Join-Path $raiz 'tools') 'New-PortableInstall.ps1') -Destination $nonEmpty -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp
+    } 'nao esta vazio' 'Destino existente nao vazio'
+    Assert-Igual 'preservar' ([System.IO.File]::ReadAllText($sentinel, [System.Text.Encoding]::UTF8)) 'Destino recusado deve permanecer intacto.'
+    Assert-Igual 1 @(Get-ChildItem -LiteralPath $nonEmpty -Force).Count 'Instalador nao pode acrescentar arquivos ao destino recusado.'
+
+    $failedDestination = Join-Path $tempDir 'portable-failed-build'
+    Assert-Throws {
+        & (Join-Path (Join-Path $raiz 'tools') 'New-PortableInstall.ps1') -Destination $failedDestination -Version '0.0.0' -Commit $Commit -BuildTimestamp $BuildTimestamp
+    } 'diverge' 'Falha de build no staging'
+    if (Test-Path -LiteralPath $failedDestination) { throw 'Falha anterior ao commit deixou destino parcial visivel.' }
+    $leftoverStaging = @(Get-ChildItem -LiteralPath $tempDir -Directory -Filter '.pmo-install-staging-*' -ErrorAction SilentlyContinue)
+    Assert-Igual 0 $leftoverStaging.Count 'Falha de instalacao deve limpar o staging irmao.'
+
+    Write-Host '6/6 Instalacao portatil inicial sem dados' -ForegroundColor Cyan
+    $portable = Join-Path $tempDir 'portable-install'
+    New-Item -ItemType Directory -Path $portable | Out-Null
+    & (Join-Path (Join-Path $raiz 'tools') 'New-PortableInstall.ps1') -Destination $portable -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp
+    foreach ($required in @(
+        'pmo.ps1','atualizar.ps1','bootstrap.json','config\install.json','state\active.json',
+        ("versions\$Version\serve.ps1"),("versions\$Version\release.json"),
+        ("versions\$Version\tools\portable-common.ps1"),("versions\$Version\tools\update-runtime.ps1")
+    )) {
+        if (-not (Test-Path -LiteralPath (Join-Path $portable $required) -PathType Leaf)) { throw "Instalacao portatil sem $required" }
+    }
+    if (Test-Path -LiteralPath (Join-Path $portable '.bootstrap-artifacts')) { throw 'Artefatos intermediarios nao podem aparecer no destino final.' }
+    $leftoverStaging = @(Get-ChildItem -LiteralPath $tempDir -Directory -Filter '.pmo-install-staging-*' -ErrorAction SilentlyContinue)
+    Assert-Igual 0 $leftoverStaging.Count 'Commit concluido nao deve deixar staging irmao.'
+    if (Test-Path -LiteralPath (Join-Path $portable 'data\portfolio.json')) { throw 'Instalacao inicial nao pode copiar portfolio sem -IncludeCurrentData.' }
+    $activePortable = [System.IO.File]::ReadAllText((Join-Path $portable 'state\active.json'), [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    Assert-Igual $Version ([string]$activePortable.activeVersion) 'Versao ativa da instalacao portatil.'
+    $installManifest = Read-PmoJson (Join-Path $portable 'portable-install-manifest.json') $null
+    if (-not $installManifest -or -not $installManifest.files) { throw 'Instalacao portatil sem inventario final.' }
+    $installErrors = Test-PmoInventory $portable $installManifest.files -AllowedExtra @('portable-install-manifest.json')
+    if ($null -eq $installErrors) { $installErrors = @() }
+    if ($installErrors.Count -gt 0) { throw ('Inventario da instalacao final diverge: ' + ($installErrors -join '; ')) }
+    $runtimeZipCheck = Test-PmoArchive $zipA
+    if (-not $runtimeZipCheck.ok) { throw ('portable-common rejeitou o ZIP valido: ' + ($runtimeZipCheck.errors -join '; ')) }
+
+    $diagnosticResult = Invoke-PmoExternal $portable @('-Diagnostico')
+    if ($diagnosticResult.ExitCode -ne 0) { throw ('Diagnostico da instalacao portatil falhou: ' + $diagnosticResult.Output) }
+    $diagnostic = $diagnosticResult.Output | ConvertFrom-Json
+    if (-not $diagnostic.ok -or -not $diagnostic.runtimeIntegrity -or -not $diagnostic.dataWritable -or
+        $null -eq $diagnostic.attachments.aggregateSha256 -or $diagnostic.updateLog.path -notmatch 'update\.log$') {
+        throw 'Diagnostico portatil nao confirmou integridade, escrita real e inventario agregado.'
+    }
+
+    $installPath = Join-Path $portable 'config\install.json'
+    $installBytes = [System.IO.File]::ReadAllBytes($installPath)
+    try {
+        $installFixture = Read-PmoJson $installPath $null
+        $installFixture.dataDir = 'versions'
+        Write-PmoJsonAtomic $installPath $installFixture
+        Assert-PmoExternalFails $portable @('-Diagnostico') 'distintos|aninhados' 'dataDir igual a versions/'
+
+        $installFixture.dataDir = 'versions\..\versions\nested'
+        Write-PmoJsonAtomic $installPath $installFixture
+        Assert-PmoExternalFails $portable @('-Diagnostico') 'distintos|aninhados' 'dataDir com traversal para versions/'
+
+        $installFixture.dataDir = '.'
+        Write-PmoJsonAtomic $installPath $installFixture
+        Assert-PmoExternalFails $portable @('-Diagnostico') 'distintos|aninhados' 'dataDir ancestral de roots operacionais'
+
+        $installFixture.dataDir = $volumeRoot
+        Write-PmoJsonAtomic $installPath $installFixture
+        $previousLocation = Get-Location
+        try {
+            Set-Location -LiteralPath $raiz
+            Assert-PmoExternalFails $portable @('-Diagnostico') 'distintos|aninhados' 'dataDir igual a raiz do volume com cwd externo'
+        } finally { Set-Location -LiteralPath $previousLocation.Path }
+    } finally {
+        [System.IO.File]::WriteAllBytes($installPath,$installBytes)
+        $installBackup = $installPath + '.replace-backup'
+        if (Test-Path -LiteralPath $installBackup) { Remove-Item -LiteralPath $installBackup -Force }
+    }
+
+    $junctionTarget = Join-Path $tempDir 'junction-target'
+    $junctionPath = Join-Path $portable 'linked-data'
+    New-Item -ItemType Directory -Path $junctionTarget -Force | Out-Null
+    try {
+        $null = New-Item -ItemType Junction -Path $junctionPath -Target $junctionTarget
+        Assert-Throws { Assert-PmoPathWithoutReparse $junctionPath } 'reparse point' 'Helper de reparse no proprio path'
+        $installFixture = Read-PmoJson $installPath $null
+        $installFixture.dataDir = 'linked-data'
+        Write-PmoJsonAtomic $installPath $installFixture
+        Assert-PmoExternalFails $portable @('-Diagnostico') 'reparse point' 'dataDir junction'
+    } finally {
+        [System.IO.File]::WriteAllBytes($installPath,$installBytes)
+        $installBackup = $installPath + '.replace-backup'
+        if (Test-Path -LiteralPath $installBackup) { Remove-Item -LiteralPath $installBackup -Force }
+        if (Test-Path -LiteralPath $junctionPath) { Remove-Item -LiteralPath $junctionPath -Force }
+    }
+
+    $managedDeleteRoot = Join-Path $tempDir 'managed-delete-root'
+    $managedDeleteTree = Join-Path $managedDeleteRoot 'candidate'
+    $managedOutside = Join-Path $tempDir 'managed-delete-outside'
+    $managedNestedJunction = Join-Path $managedDeleteTree 'nested-link'
+    New-Item -ItemType Directory -Path $managedDeleteTree,$managedOutside -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $managedOutside 'sentinel.txt'),'preservar',(New-Object System.Text.UTF8Encoding($false)))
+    try {
+        $null = New-Item -ItemType Junction -Path $managedNestedJunction -Target $managedOutside
+        Assert-Throws { Remove-PmoManagedTree -Root $managedDeleteRoot -Path $managedDeleteTree } 'reparse point' 'Delete gerenciado com junction descendente'
+        if (-not (Test-Path -LiteralPath (Join-Path $managedOutside 'sentinel.txt') -PathType Leaf)) {
+            throw 'Delete recusado atravessou a junction e removeu o alvo externo.'
+        }
+    } finally {
+        if (Test-Path -LiteralPath $managedNestedJunction) { [System.IO.Directory]::Delete($managedNestedJunction,$false) }
+        if (Test-Path -LiteralPath $managedDeleteTree) { Remove-PmoManagedTree -Root $managedDeleteRoot -Path $managedDeleteTree }
+    }
+
+    $activePath = Join-Path $portable 'state\active.json'
+    $activeBytes = [System.IO.File]::ReadAllBytes($activePath)
+    try {
+        $activeFixture = Read-PmoJson $activePath $null
+        $activeFixture.activeVersion = '..\data'
+        Write-PmoJsonAtomic $activePath $activeFixture
+        Assert-PmoExternalFails $portable @('-SemAtualizacao') 'SemVer estavel' 'activeVersion com traversal'
+    } finally {
+        [System.IO.File]::WriteAllBytes($activePath,$activeBytes)
+        $activeBackup = $activePath + '.replace-backup'
+        if (Test-Path -LiteralPath $activeBackup) { Remove-Item -LiteralPath $activeBackup -Force }
+    }
+
+    $releasePath = Join-Path $portable ("versions\$Version\release.json")
+    $releaseBytes = [System.IO.File]::ReadAllBytes($releasePath)
+    try {
+        [System.IO.File]::AppendAllText($releasePath,"`n ",(New-Object System.Text.UTF8Encoding($false)))
+        Assert-PmoExternalFails $portable @('-SemAtualizacao') 'release.json diverge' 'release.json adulterado'
+    } finally { [System.IO.File]::WriteAllBytes($releasePath,$releaseBytes) }
+
+    $runtimeServePath = Join-Path $portable ("versions\$Version\serve.ps1")
+    $runtimeServeBytes = [System.IO.File]::ReadAllBytes($runtimeServePath)
+    try {
+        [System.IO.File]::AppendAllText($runtimeServePath,"`n# tamper-test`n",(New-Object System.Text.UTF8Encoding($false)))
+        Assert-PmoExternalFails $portable @('-SemAtualizacao') 'tamanho divergente|hash divergente' 'arquivo do runtime adulterado'
+    } finally { [System.IO.File]::WriteAllBytes($runtimeServePath,$runtimeServeBytes) }
+
+    Write-Host "Todos os testes de build, release e portabilidade passaram para v$Version." -ForegroundColor Green
+}
+finally {
+    if (Test-Path -LiteralPath $tempDir -PathType Container) {
+        $resolvido = [System.IO.Path]::GetFullPath($tempDir)
+        if (-not $resolvido.StartsWith($tempBase, [StringComparison]::OrdinalIgnoreCase) -or -not ([System.IO.Path]::GetFileName($resolvido)).StartsWith('pmo-tests-', [StringComparison]::Ordinal)) {
+            throw "Recusa ao remover pasta de teste inesperada: $resolvido"
+        }
+        Remove-Item -LiteralPath $resolvido -Recurse -Force
+    }
+}

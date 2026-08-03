@@ -1,0 +1,7 @@
+{
+  "formatVersion": 1,
+  "bootstrapVersion": "1.0.0",
+  "protocolVersion": 1,
+  "minPowerShellVersion": "5.1",
+  "platform": "windows"
+}
