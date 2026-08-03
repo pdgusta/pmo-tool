@@ -437,3 +437,9 @@ try {
         }
     }
 }
+
+# Alguns cenarios negativos executam processos que devem falhar. No runner do
+# GitHub Actions, esse codigo nativo pode permanecer em $LASTEXITCODE mesmo
+# depois de todos os asserts passarem. Somente o caminho de sucesso chega aqui;
+# excecoes reais continuam encerrando o gate com falha.
+$global:LASTEXITCODE = 0
