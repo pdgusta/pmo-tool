@@ -420,3 +420,10 @@ finally {
         Remove-Item -LiteralPath $resolvido -Recurse -Force
     }
 }
+
+# Casos negativos executam processos que devem retornar codigo diferente de
+# zero. Quando este script e invocado pelo passo do GitHub Actions, o wrapper
+# do runner pode propagar esse LASTEXITCODE mesmo depois de todos os gates
+# passarem. Somente o caminho de sucesso alcanca esta linha; throws reais
+# continuam bloqueantes.
+$global:LASTEXITCODE = 0
