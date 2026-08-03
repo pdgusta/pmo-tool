@@ -107,8 +107,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release view $env:GITHUB_REF_NAME --json id 2>$null | Out-Null
-          if ($LASTEXITCODE -eq 0) {
+          $previousErrorActionPreference = $ErrorActionPreference
+          try {
+            $ErrorActionPreference = 'Continue'
+            gh release view $env:GITHUB_REF_NAME --json id 2>$null | Out-Null
+            $releaseViewExitCode = $LASTEXITCODE
+          }
+          finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+          }
+          if ($releaseViewExitCode -eq 0) {
             throw "Release $env:GITHUB_REF_NAME already exists; assets will not be replaced."
           }
 
