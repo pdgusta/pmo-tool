@@ -289,6 +289,18 @@ a:hover { text-decoration: underline; }
 .barra-filtros__resumo { font-size: var(--ts-peq); color: var(--tinta-2); white-space: nowrap; }
 
 .view { min-height: 40vh; }
+/* Transição de entrada: dá continuidade à troca de tela, que antes era um
+   salto seco. Sob prefers-reduced-motion o token de movimento zera. */
+.view--entrando { animation: view-entrar var(--mov-base) var(--ease-saida); }
+@keyframes view-entrar { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* Tecla mostrada na paleta: o atalho g+letra existia e ninguém descobria. */
+.tecla {
+  flex: 0 0 auto; font-family: var(--fonte-mono); font-size: var(--ts-mic);
+  color: var(--tinta-3); background: var(--sup-2);
+  border: 1px solid var(--borda); border-bottom-width: 2px;
+  border-radius: var(--raio-1); padding: 1px 5px; white-space: nowrap;
+}
 
 /* ---------------------------------------------------- grades de painel */
 

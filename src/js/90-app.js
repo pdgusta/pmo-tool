@@ -18,6 +18,9 @@
 
   let ctxView = null;
   let viewCorrente = null;
+  /* Posição de rolagem por rota, só desta sessão: é conforto de leitura, não
+     dado de portfólio, então não vai para settings nem para o disco. */
+  const rolagemPorRota = {};
   let soltarFocoModal = null;
   let soltarFocoDrawer = null;
 
@@ -99,6 +102,15 @@
       U.toast('A tela "' + rota + '" não está disponível nesta compilação.', 'warn');
       return;
     }
+
+    /* Memória de rolagem por rota. Antes toda navegação zerava o topo — e como
+       mudar um filtro remonta a view, ajustar o filtro no fim de uma tabela
+       longa jogava o leitor de volta ao começo. A leitura tem de acontecer
+       aqui: assim que o host é esvaziado, a altura colapsa e scrollTop vira 0. */
+    const conteudo = q('conteudo');
+    const mesmaRota = app.rotaAtual === rota;
+    const rolagemAntes = conteudo ? conteudo.scrollTop : 0;
+    if (app.rotaAtual && !mesmaRota) { rolagemPorRota[app.rotaAtual] = rolagemAntes; }
     if (viewCorrente && typeof viewCorrente.desmontar === 'function') {
       try { viewCorrente.desmontar(); } catch (e) { /* ok */ }
     }
@@ -137,6 +149,11 @@
 
     const host = q('view-host');
     U.limpar(host);
+    // Reinicia a animação de entrada: sem o reflow a classe já está lá e o
+    // navegador não toca a animação de novo.
+    host.classList.remove('view--entrando');
+    void host.offsetWidth;
+    host.classList.add('view--entrando');
     try {
       v.montar(host, app.params, ctxView);
     } catch (e) {
@@ -150,7 +167,10 @@
     }
 
     montarNav();
-    q('conteudo').scrollTop = 0;
+    if (conteudo) {
+      const alvo = mesmaRota ? rolagemAntes : (rolagemPorRota[rota] || 0);
+      conteudo.scrollTo({ top: alvo, behavior: 'instant' });
+    }
     if (window.innerWidth <= 1000) { document.getElementById('app').dataset.nav = 'oculta'; }
   };
 
@@ -413,7 +433,41 @@
     app.abrirModal('Estado da persistência', corpo);
   }
 
-  /* ============================================================ busca global */
+  /* ====================================================== paleta de comandos
+
+     A paleta ja achava entidades. O que faltava era o outro metade do trabalho
+     de quem usa teclado: chegar numa tela e disparar uma acao sem procurar o
+     botao. Rotas e comandos entram no mesmo indice da busca. */
+
+  /** Teclas g+letra ja existentes, para a paleta poder ensina-las. */
+  const ATALHO_ROTA = { painel: 'g p', portfolio: 'g f', roadmap: 'g r', gates: 'g g',
+    decisoes: 'g d', riscos: 'g s', financeiro: 'g $', importar: 'g i', config: 'g c' };
+
+  function comandosDisponiveis() {
+    return [
+      { nome: 'Alternar tema', sub: 'claro, escuro ou automático',
+        ir: function () {
+          const t = temaAtual();
+          app.tema(t === 'auto' ? 'escuro' : (t === 'escuro' ? 'claro' : 'auto'));
+        } },
+      { nome: 'Densidade compacta', sub: 'mais linhas por tela',
+        ir: function () { app.densidade('compacta'); app.recarregarView(); } },
+      { nome: 'Densidade padrão', sub: 'equilíbrio entre respiro e informação',
+        ir: function () { app.densidade('padrao'); app.recarregarView(); } },
+      { nome: 'Densidade confortável', sub: 'alvos maiores e mais espaço',
+        ir: function () { app.densidade('confortavel'); app.recarregarView(); } },
+      { nome: 'Salvar agora', sub: 'força a réplica em disco  ·  Ctrl+S',
+        ir: function () {
+          S.salvarAgora().then(function (r) {
+            U.toast(r.disco ? 'Salvo em disco.' : 'Salvo no navegador (disco indisponível).',
+              r.disco ? 'ok' : 'warn');
+          });
+        } },
+      { nome: 'Desfazer', sub: 'última alteração  ·  Ctrl+Z', ir: function () { S.desfazer(); } },
+      { nome: 'Refazer', sub: 'Ctrl+Shift+Z', ir: function () { S.refazer(); } },
+      { nome: 'Atalhos de teclado', sub: 'abre a ajuda  ·  ?', ir: mostrarAjuda }
+    ];
+  }
 
   function montarBusca() {
     const inp = q('busca-global');
@@ -422,8 +476,58 @@
 
     function fechar() { paleta.hidden = true; U.limpar(paleta); }
 
+    function pintarGrupo(rotulo, itens, totalReal) {
+      if (!itens.length) { return; }
+      paleta.appendChild(U.el('div', { class: 'paleta__grupo',
+        text: rotulo + ' (' + (totalReal === undefined ? itens.length : totalReal) + ')' }));
+      itens.forEach(function (it) {
+        paleta.appendChild(U.el('button', {
+          class: 'paleta__item', type: 'button', attrs: { role: 'option' },
+          on: { click: function () { fechar(); inp.value = ''; it.ir(); } }
+        }, [
+          U.el('span', { class: 'paleta__item-txt' }, [
+            U.el('span', { class: 'paleta__item-nome', text: it.nome }),
+            it.sub ? U.el('span', { class: 'paleta__item-sub', text: it.sub }) : null
+          ]),
+          it.tecla ? U.el('kbd', { class: 'tecla', text: it.tecla }) : null
+        ]));
+      });
+    }
+
+    /** Rotas e comandos que casam com o termo. Termo vazio devolve tudo. */
+    function navegaveis(termo) {
+      const rotas = Object.keys(PMO.views)
+        .filter(function (k) {
+          const v = PMO.views[k];
+          if (!v || typeof v.montar !== 'function') { return false; }
+          if (typeof v.ocultarNaNav === 'function') {
+            try { if (v.ocultarNaNav()) { return false; } } catch (e) { /* mostra */ }
+          }
+          return !termo || U.contemTexto(v.titulo + ' ' + (v.grupo || ''), termo);
+        })
+        .map(function (k) {
+          const v = PMO.views[k];
+          return { nome: v.titulo, sub: v.grupo || '', tecla: ATALHO_ROTA[k] || null,
+            ir: function () { app.navegar(k); } };
+        });
+      const cmds = comandosDisponiveis().filter(function (cm) {
+        return !termo || U.contemTexto(cm.nome + ' ' + (cm.sub || ''), termo);
+      });
+      return { rotas: rotas, cmds: cmds };
+    }
+
+    /** Campo vazio: a paleta vira menu de navegação, não fica em branco. */
+    function sugerir() {
+      U.limpar(paleta);
+      const n = navegaveis('');
+      pintarGrupo('Ir para', n.rotas.slice(0, 8), n.rotas.length);
+      pintarGrupo('Ações', n.cmds.slice(0, 5), n.cmds.length);
+      paleta.hidden = false;
+    }
+
     function buscar() {
       const termo = inp.value.trim();
+      if (!termo) { sugerir(); return; }
       if (termo.length < 2) { fechar(); return; }
       U.limpar(paleta);
       const b = S.state;
@@ -462,22 +566,17 @@
       });
 
       let total = 0;
+      // Rotas e ações primeiro: são resposta imediata, entidade exige leitura.
+      const nav = navegaveis(termo);
+      total += nav.rotas.length + nav.cmds.length;
+      pintarGrupo('Ir para', nav.rotas.slice(0, 5), nav.rotas.length);
+      pintarGrupo('Ações', nav.cmds.slice(0, 4), nav.cmds.length);
+
       Object.keys(res).forEach(function (g) {
         const itens = res[g].slice(0, 6);
         if (!itens.length) { return; }
         total += itens.length;
-        paleta.appendChild(U.el('div', { class: 'paleta__grupo', text: g + ' (' + res[g].length + ')' }));
-        itens.forEach(function (it) {
-          paleta.appendChild(U.el('button', {
-            class: 'paleta__item', type: 'button', attrs: { role: 'option' },
-            on: { click: function () { fechar(); inp.value = ''; it.ir(); } }
-          }, [
-            U.el('span', { class: 'paleta__item-txt' }, [
-              U.el('span', { class: 'paleta__item-nome', text: it.nome }),
-              U.el('span', { class: 'paleta__item-sub', text: it.sub })
-            ])
-          ]));
-        });
+        pintarGrupo(g, itens, res[g].length);
       });
       if (!total) {
         paleta.appendChild(U.el('div', { class: 'paleta__vazio', text: 'Nada encontrado para "' + termo + '".' }));
@@ -486,11 +585,33 @@
     }
 
     inp.addEventListener('input', U.debounce(buscar, 180));
+    inp.addEventListener('focus', function () { if (!inp.value.trim()) { sugerir(); } });
     inp.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { fechar(); inp.blur(); }
       if (e.key === 'Enter') {
         const primeiro = paleta.querySelector('.paleta__item');
         if (primeiro) { primeiro.click(); }
+      }
+      // Setas percorrem os resultados sem tirar a mão do teclado.
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const itens = Array.from(paleta.querySelectorAll('.paleta__item'));
+        if (!itens.length) { return; }
+        e.preventDefault();
+        const i = itens.indexOf(document.activeElement);
+        const prox = e.key === 'ArrowDown'
+          ? (i < 0 ? 0 : Math.min(i + 1, itens.length - 1))
+          : (i <= 0 ? -1 : i - 1);
+        if (prox < 0) { inp.focus(); } else { itens[prox].focus(); }
+      }
+    });
+    paleta.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { fechar(); inp.focus(); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const itens = Array.from(paleta.querySelectorAll('.paleta__item'));
+        const i = itens.indexOf(document.activeElement);
+        e.preventDefault();
+        if (e.key === 'ArrowDown' && i < itens.length - 1) { itens[i + 1].focus(); }
+        else if (e.key === 'ArrowUp') { if (i > 0) { itens[i - 1].focus(); } else { inp.focus(); } }
       }
     });
     document.addEventListener('click', function (e) {
@@ -618,7 +739,8 @@
   /* ============================================================== atalhos */
 
   const ATALHOS = [
-    ['/', 'Focar a busca global'],
+    ['/  ou  Ctrl+K', 'Abrir a paleta: telas, ações e busca'],
+    ['↑ ↓ e Enter', 'Percorrer e abrir o resultado da paleta'],
     ['g depois p', 'Ir para o Painel executivo'],
     ['g depois f', 'Ir para o Portfólio'],
     ['g depois r', 'Ir para o Roadmap'],
@@ -653,6 +775,15 @@
         S.salvarAgora().then(function (r) {
           U.toast(r.disco ? 'Salvo em disco.' : 'Salvo no navegador (disco indisponível).', r.disco ? 'ok' : 'warn');
         });
+        return;
+      }
+      // Ctrl+K é o gesto que todo mundo já traz de outra ferramenta; ele
+      // precisa valer inclusive com o cursor dentro de um campo.
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        const busca = q('busca-global');
+        busca.focus();
+        busca.select();
         return;
       }
       if (digitando) { return; }
