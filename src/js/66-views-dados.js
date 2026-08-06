@@ -887,12 +887,17 @@
       const c = vw.contexto(null);
       const b = c.bundle;
 
+      /* Sete cartões empilhados sem hierarquia faziam desta a tela mais longa
+         do app. Os mesmos cartões, agrupados por assunto e com um índice de
+         âncoras, deixam de exigir rolagem exploratória. */
+      const secoes = { ambiente: [], governanca: [], cadastros: [], risco: [] };
+
       // ------------------------------------------------------ organização
       const inpOrg = U.el('input', { class: 'campo', type: 'text', value: (b.meta || {}).orgName || '' });
       const inpData = U.el('input', { class: 'campo', type: 'date', value: (b.meta || {}).dataStatus || U.hoje() });
       const chkDisco = U.el('input', { type: 'checkbox', checked: (b.settings || {}).salvarEmDisco !== false });
 
-      host.appendChild(vw.cartao({
+      secoes.ambiente.push(vw.cartao({
         titulo: 'Organização e data de status', icone: 'config', classe: 'mb-4',
         corpo: [
           U.el('div', { class: 'form-grade' }, [
@@ -952,7 +957,7 @@
         ]);
       }
 
-      host.appendChild(vw.cartao({
+      secoes.ambiente.push(vw.cartao({
         titulo: 'Aparência', icone: 'config', classe: 'mb-4',
         sub: 'Vale para esta instalação e viaja junto com o portfólio.',
         corpo: [
@@ -1009,7 +1014,7 @@
       });
 
       const sig = M.LIMIARES_PADRAO.evmSignificancia;
-      host.appendChild(vw.cartao({
+      secoes.governanca.push(vw.cartao({
         titulo: 'Limiares de governança', icone: 'alvo', classe: 'mb-4',
         sub: 'Definem quando o farol de um projeto vira âmbar ou vermelho. O farol nunca é digitado: ele é calculado.',
         corpo: [
@@ -1043,7 +1048,7 @@
 
       // -------------------------------------------------- qualidade de dados
       const val = M.validar(b);
-      host.appendChild(vw.cartao({
+      secoes.governanca.push(vw.cartao({
         titulo: 'Qualidade dos dados', icone: 'ok', classe: 'mb-4',
         sub: val.erros.length + ' erro(s) e ' + val.avisos.length + ' aviso(s) no portfólio',
         corpo: [
@@ -1056,7 +1061,7 @@
       }));
 
       // ----------------------------------------------------------- cadastros
-      host.appendChild(vw.cartao({
+      secoes.cadastros.push(vw.cartao({
         titulo: 'Pessoas', icone: 'pessoas', classe: 'mb-4',
         sub: (b.pessoas || []).length + ' cadastrada(s)',
         corpo: [(b.pessoas || []).length ? vw.tabela({
@@ -1077,7 +1082,7 @@
         }) : U.el('p', { class: 'txt-peq txt-3', text: 'Nenhuma pessoa cadastrada.' })]
       }));
 
-      host.appendChild(vw.cartao({
+      secoes.cadastros.push(vw.cartao({
         titulo: 'Programas', icone: 'kanban', classe: 'mb-4',
         sub: (b.programas || []).length + ' cadastrado(s)',
         corpo: [(b.programas || []).length ? vw.tabela({
@@ -1101,7 +1106,7 @@
       }));
 
       // ------------------------------------------------------- zona de risco
-      host.appendChild(vw.cartao({
+      secoes.risco.push(vw.cartao({
         titulo: 'Ações destrutivas', icone: 'alerta',
         sub: 'Todas podem ser desfeitas com Ctrl+Z enquanto a aba estiver aberta.',
         corpo: [U.el('div', { class: 'linha' }, [
@@ -1119,6 +1124,32 @@
           } })
         ])]
       }));
+
+      // ------------------------------------------------ montagem em seções
+      const DEF_SECOES = [
+        ['ambiente', 'Ambiente', 'Identidade da organização, data de status e aparência.'],
+        ['governanca', 'Governança', 'Como o farol é calculado e o que o portfólio tem de inconsistente.'],
+        ['cadastros', 'Cadastros', 'Pessoas e programas usados em todo o portfólio.'],
+        ['risco', 'Zona de risco', 'Operações que mexem no portfólio inteiro.']
+      ].filter(function (d) { return secoes[d[0]].length; });
+
+      const indice = U.el('nav', { class: 'indice', attrs: { 'aria-label': 'Seções desta tela' } },
+        DEF_SECOES.map(function (d) {
+          return U.el('button', {
+            class: 'indice__item', type: 'button', text: d[1],
+            on: { click: function () {
+              const alvo = document.getElementById('sec-' + d[0]);
+              if (alvo) { alvo.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+            } }
+          });
+        }));
+      host.appendChild(indice);
+
+      DEF_SECOES.forEach(function (d) {
+        const s = vw.secao({ titulo: d[1], sub: d[2], corpo: secoes[d[0]] });
+        s.id = 'sec-' + d[0];
+        host.appendChild(s);
+      });
     }
   };
 
