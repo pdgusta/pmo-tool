@@ -279,6 +279,47 @@
     return temaValido(t);
   }
 
+  /* ============================================================ densidade
+     Mesmo contrato do tema: settings é a fonte canônica, localStorage é só
+     cache para pintar antes do IndexedDB carregar. */
+
+  const DENSIDADES_VALIDAS = ['compacta', 'padrao', 'confortavel'];
+  let densidadeAplicada = null;
+
+  function densidadeValida(nome) {
+    return DENSIDADES_VALIDAS.indexOf(nome) >= 0 ? nome : 'padrao';
+  }
+
+  app.densidade = function (nome, opts) {
+    const o = opts || {};
+    const d = densidadeValida(nome);
+    const raiz = document.documentElement;
+    // 'padrao' é a ausência de atributo: os tokens base de 00-theme.css valem.
+    if (d === 'padrao') { raiz.removeAttribute('data-densidade'); }
+    else { raiz.setAttribute('data-densidade', d); }
+    try { localStorage.setItem('pmo-densidade', d); } catch (e) { /* cache opcional */ }
+    densidadeAplicada = d;
+    if (o.persistir !== false && S.pronto && !S.somenteLeitura &&
+        densidadeValida((S.state.settings || {}).densidade) !== d) {
+      return S.mutate('Alterar densidade da interface', function (draft) {
+        draft.settings.densidade = d;
+      }, { entidade: 'settings', resumo: 'densidade → ' + d });
+    }
+    return Promise.resolve({ ok: true });
+  };
+
+  function densidadeAtual() {
+    if (S.pronto && S.state && S.state.settings) {
+      return densidadeValida(S.state.settings.densidade);
+    }
+    let d = null;
+    try { d = localStorage.getItem('pmo-densidade'); } catch (e) { /* ok */ }
+    return densidadeValida(d);
+  }
+  app.densidadeAtual = densidadeAtual;
+
+  app.temaEmUso = temaAtual;
+
   function atualizarBotaoTema(tema) {
     const b = q('btn-tema');
     if (!b) { return; }
@@ -829,6 +870,7 @@
   async function boot() {
     try {
       app.tema(temaAtual());
+      app.densidade(densidadeAtual());
       montarTopo();
       montarBusca();
       montarDropzonaGlobal();
@@ -838,6 +880,7 @@
       // O bundle prevalece sobre o cache local assim que a persistência está
       // pronta, inclusive depois de importar/substituir um portfólio.
       await app.tema(temaAtual(), { persistir: false });
+      await app.densidade(densidadeAtual(), { persistir: false });
 
       // Portfólio vazio: em vez de despejar dados fictícios sem aviso, abre a
       // tela de boas-vindas, onde o usuário escolhe entre importar o portfólio
@@ -846,6 +889,7 @@
 
       S.on('change', function () {
         app.tema(temaAtual(), { persistir: false });
+        app.densidade(densidadeAtual(), { persistir: false });
         sincronizarTopo();
         montarNav();
       });

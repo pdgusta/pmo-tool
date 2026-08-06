@@ -921,6 +921,55 @@
         ]
       }));
 
+      // --------------------------------------------------------- aparência
+      const DENSIDADES = [
+        ['compacta', 'Compacta', 'Mais linhas por tela. Bom para monitor grande e revisão em lote.'],
+        ['padrao', 'Padrão', 'Equilíbrio entre respiro e quantidade de informação.'],
+        ['confortavel', 'Confortável', 'Alvos maiores e mais espaço. Bom para uso prolongado e telas sensíveis.']
+      ];
+      const TEMAS = [
+        ['auto', 'Automático', 'Segue a preferência do sistema operacional.'],
+        ['claro', 'Claro', 'Sempre claro, independente do sistema.'],
+        ['escuro', 'Escuro', 'Sempre escuro, independente do sistema.']
+      ];
+
+      function grupoOpcoes(rotulo, ajuda, opcoes, atual, onEscolher) {
+        const grupo = U.el('div', { class: 'grupo-botoes', attrs: { role: 'group', 'aria-label': rotulo } },
+          opcoes.map(function (o) {
+            return vw.botao(o[1], {
+              titulo: o[2],
+              onClick: function () { onEscolher(o[0]); }
+            });
+          }));
+        Array.prototype.forEach.call(grupo.children, function (btn, i) {
+          btn.setAttribute('aria-pressed', String(opcoes[i][0] === atual));
+        });
+        const desc = (opcoes.find(function (o) { return o[0] === atual; }) || opcoes[0])[2];
+        return U.el('div', { class: 'campo-grupo' }, [
+          U.el('span', { class: 'campo-grupo__rot', text: rotulo }),
+          grupo,
+          U.el('span', { class: 'campo-grupo__ajuda', text: ajuda + ' ' + desc })
+        ]);
+      }
+
+      host.appendChild(vw.cartao({
+        titulo: 'Aparência', icone: 'config', classe: 'mb-4',
+        sub: 'Vale para esta instalação e viaja junto com o portfólio.',
+        corpo: [
+          U.el('div', { class: 'form-grade' }, [
+            grupoOpcoes('Tema', 'Em uso:', TEMAS, PMO.app.temaEmUso ? PMO.app.temaEmUso() : 'auto',
+              function (v) { PMO.app.tema(v); }),
+            grupoOpcoes('Densidade', 'Em uso:', DENSIDADES, PMO.app.densidadeAtual(),
+              function (v) {
+                PMO.app.densidade(v).then(function () {
+                  U.toast('Densidade: ' + v + '.', 'ok');
+                  PMO.app.recarregarView();
+                });
+              })
+          ])
+        ]
+      }));
+
       // ---------------------------------------------------------- limiares
       const L = U.clonar((b.settings || {}).limiares || M.LIMIARES_PADRAO);
       const camposLim = [

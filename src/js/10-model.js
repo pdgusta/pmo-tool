@@ -712,6 +712,7 @@
         // sobreposições por coleção; vazio = usa o padrão de fábrica
         taxonomias: {},
         tema: 'auto',
+        densidade: 'padrao',
         salvarEmDisco: true
       },
       pessoas: [],
@@ -1268,6 +1269,9 @@
       : U.clonar(model.GATES);
     out.settings.taxonomias = (b.settings || {}).taxonomias || {};
     if (['auto', 'claro', 'escuro'].indexOf(out.settings.tema) < 0) { out.settings.tema = 'auto'; }
+    if (['compacta', 'padrao', 'confortavel'].indexOf(out.settings.densidade) < 0) {
+      out.settings.densidade = 'padrao';
+    }
 
     out.pessoas = (b.pessoas || []).map(function (x) { return model.pessoaVazia(x); });
     out.programas = (b.programas || []).map(function (x) { return model.programaVazio(x); });
