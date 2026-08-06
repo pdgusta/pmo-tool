@@ -96,12 +96,18 @@
       U.el('div', { class: 'kpi__valor' + (c.valorPeq ? ' kpi__valor--peq' : ''), text: c.valor === undefined ? '—' : String(c.valor) })
     ];
     if (c.delta) {
-      filhos.push(U.el('div', { class: 'kpi__delta', data: { tom: c.delta.tom || 'neutro' } }, [
+      const tom = c.delta.tom || 'neutro';
+      filhos.push(U.el('div', { class: 'kpi__delta', data: { tom: tom } }, [
+        // Direção também por forma, não só por cor: o delta é um sinal.
+        tom === 'neutro' ? null
+          : vw.icone(tom === 'bom' ? 'seta' : 'setaBaixo', { tam: 11, peso: 2.4, class: 'ic' }),
         U.el('span', { text: c.delta.texto || '' })
       ]));
     }
     if (c.nota) { filhos.push(U.el('div', { class: 'kpi__nota', text: c.nota })); }
-    const n = U.el('div', { class: 'kpi' + (c.tom ? ' kpi--' + c.tom : '') }, filhos);
+    const n = U.el('div', {
+      class: 'kpi' + (c.tom ? ' kpi--' + c.tom : '') + (c.hero ? ' kpi--hero' : '')
+    }, filhos);
     if (c.spark && c.spark.length > 1) {
       const host = U.el('div', { class: 'kpi__spark' });
       n.appendChild(host);
@@ -139,6 +145,41 @@
       U.el('div', { class: 'cartao__corpo' }, c.corpo),
       c.pe ? U.el('div', { class: 'cartao__pe' }, c.pe) : null
     ]);
+  };
+
+  /**
+   * Cabeçalho de seção — fora do cartão, ao contrário de vw.cartao.
+   * Existe para quebrar a monotonia de "tudo é caixa": numa tela com seis
+   * cartões idênticos o olho não distingue resumo de detalhe.
+   */
+  vw.secao = function (cfg) {
+    const c = cfg || {};
+    return U.el('section', { class: 'secao' + (c.classe ? ' ' + c.classe : '') }, [
+      U.el('div', { class: 'secao__topo' }, [
+        U.el('div', { class: 'secao__txt' }, [
+          U.el('h2', { class: 'secao__titulo', text: c.titulo || '' }),
+          c.sub ? U.el('p', { class: 'secao__sub', text: c.sub }) : null
+        ]),
+        c.acoes ? U.el('div', { class: 'secao__acoes' }, c.acoes) : null
+      ]),
+      U.el('div', { class: 'secao__corpo' }, c.corpo)
+    ]);
+  };
+
+  /** Placeholder de carregamento com a forma do que vai chegar. */
+  vw.esqueleto = function (cfg) {
+    const c = cfg || {};
+    const n = U.clamp(U.num(c.linhas, 3), 1, 20);
+    const filhos = [];
+    for (let i = 0; i < n; i++) {
+      filhos.push(U.el('div', {
+        class: 'esqueleto__linha',
+        style: { height: (c.altura || 14) + 'px', width: (100 - (i % 3) * 12) + '%' }
+      }));
+    }
+    return U.el('div', {
+      class: 'esqueleto', attrs: { 'aria-hidden': 'true' }
+    }, filhos);
   };
 
   vw.vazio = function (cfg) {
@@ -306,18 +347,21 @@
     });
     tab.appendChild(U.el('thead', {}, [trh]));
 
+    /* Paginação por revelação: a tabela nasce com um lote e cresce sob demanda.
+       O corte automático é alto de propósito. Quem resolveu o problema de
+       altura foi o scrollport próprio (.tabela-host--rolagem): abaixo de ~120
+       linhas a paginação só acrescentaria um controle sem devolver espaço.
+       Ela existe para portfólio grande, onde o custo é de renderização.
+       `paginacao: false` desliga; um número define o tamanho do lote. */
+    const todasLinhas = c.linhas || [];
+    const lote = c.paginacao === false ? 0
+      : (U.ehNum(c.paginacao) ? c.paginacao : (todasLinhas.length > 120 ? 50 : 0));
+    const linhas = lote ? todasLinhas.slice(0, lote) : todasLinhas;
+
     const tb = U.el('tbody');
     let grupoAtual = null;
-    (c.linhas || []).forEach(function (l) {
-      if (c.agrupar) {
-        const g = c.agrupar(l);
-        if (g !== grupoAtual) {
-          grupoAtual = g;
-          tb.appendChild(U.el('tr', { class: 'tabela__grupo' }, [
-            U.el('td', { attrs: { colspan: String(cols.length) }, text: g })
-          ]));
-        }
-      }
+
+    function montarLinha(l) {
       const tr = U.el('tr', { data: c.chave ? { id: c.chave(l) } : null });
       cols.forEach(function (col) {
         const td = U.el('td', {
@@ -333,13 +377,37 @@
       });
       if (c.onLinha) {
         tr.style.cursor = 'pointer';
+        // Linha clicável precisa ser alcançável por teclado, não só por mouse.
+        tr.setAttribute('tabindex', '0');
+        tr.setAttribute('role', 'button');
         tr.addEventListener('click', function (e) {
           if (e.target.closest('button, a, input, select, textarea')) { return; }
           c.onLinha(l);
         });
+        tr.addEventListener('keydown', function (e) {
+          if (e.target !== tr) { return; }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); c.onLinha(l); }
+        });
       }
-      tb.appendChild(tr);
-    });
+      return tr;
+    }
+
+    /* Guarda o agrupador entre lotes: revelar o próximo pedaço não pode
+       repetir um cabeçalho de grupo que já está na tela. */
+    function anexarLinha(l) {
+      if (c.agrupar) {
+        const g = c.agrupar(l);
+        if (g !== grupoAtual) {
+          grupoAtual = g;
+          tb.appendChild(U.el('tr', { class: 'tabela__grupo' }, [
+            U.el('td', { attrs: { colspan: String(cols.length) }, text: g })
+          ]));
+        }
+      }
+      tb.appendChild(montarLinha(l));
+    }
+
+    linhas.forEach(anexarLinha);
     tab.appendChild(tb);
 
     if (c.rodape && c.rodape.length) {
@@ -361,10 +429,45 @@
        rodape de um cartao de milhares de pixels. */
     const host = U.el('div', { class: 'tabela-host' }, [tab]);
     const limite = c.alturaLimite === undefined ? 14 : c.alturaLimite;
-    if (limite && (c.linhas || []).length > limite) {
+    if (limite && linhas.length > limite) {
       host.classList.add('tabela-host--rolagem');
     }
-    return host;
+    if (!lote || todasLinhas.length <= lote) { return host; }
+
+    /* Revelar o próximo lote redesenha só o corpo da tabela: manter a mesma
+       instância preserva rolagem, ordenação e a posição do foco. */
+    const envelope = U.el('div');
+    envelope.appendChild(host);
+    let visiveis = lote;
+    const rodape = U.el('div', { class: 'tabela-mais' });
+    const status = U.el('span', {
+      class: 'tabela-mais__status', attrs: { role: 'status', 'aria-live': 'polite' }
+    });
+    const btn = vw.botao('Mostrar mais ' + Math.min(lote, todasLinhas.length - visiveis), {
+      peq: true, icone: 'setaBaixo',
+      onClick: function () {
+        const ate = Math.min(visiveis + lote, todasLinhas.length);
+        todasLinhas.slice(visiveis, ate).forEach(anexarLinha);
+        visiveis = ate;
+        atualizarRodape();
+        if (!host.classList.contains('tabela-host--rolagem') && limite && visiveis > limite) {
+          host.classList.add('tabela-host--rolagem');
+        }
+      }
+    });
+    function atualizarRodape() {
+      status.textContent = 'Mostrando ' + visiveis + ' de ' + todasLinhas.length;
+      const restam = todasLinhas.length - visiveis;
+      if (restam <= 0) { btn.hidden = true; return; }
+      U.limpar(btn);
+      btn.appendChild(vw.icone('setaBaixo', { tam: 13 }));
+      btn.appendChild(U.el('span', { text: 'Mostrar mais ' + Math.min(lote, restam) }));
+    }
+    atualizarRodape();
+    rodape.appendChild(status);
+    rodape.appendChild(btn);
+    envelope.appendChild(rodape);
+    return envelope;
   };
 
   /* ================================================= seletor de variante */
@@ -440,9 +543,32 @@
     btn.addEventListener('click', function () {
       if (pop) { fechar(); return; }
       pop = U.el('div', { class: 'paleta', style: { position: 'fixed', minWidth: '230px', maxHeight: '54vh' } });
+
+      /* Lista longa sem busca vira rolagem cega. O corte de 8 é onde a lista
+         deixa de caber de uma olhada — abaixo disso a busca só atrapalha. */
+      const listaHost = U.el('div');
+      if (opcoes.length > 8) {
+        const busca = U.el('input', {
+          type: 'search', class: 'campo', placeholder: 'Filtrar ' + rotulo.toLowerCase() + '…',
+          attrs: { 'aria-label': 'Filtrar opções de ' + rotulo },
+          on: { input: function (e) {
+            const t = String(e.target.value || '').trim().toLowerCase();
+            Array.prototype.forEach.call(listaHost.children, function (el) {
+              el.hidden = !!t && String(el.dataset.busca || '').indexOf(t) < 0;
+            });
+          } }
+        });
+        pop.appendChild(U.el('div', { class: 'paleta__busca' }, [busca]));
+        setTimeout(function () { busca.focus(); }, 0);
+      }
+      pop.appendChild(listaHost);
+
       opcoes.forEach(function (op) {
         const marcado = sel.indexOf(op.id) >= 0;
-        const linha = U.el('label', { class: 'paleta__item' }, [
+        const linha = U.el('label', {
+          class: 'paleta__item',
+          data: { busca: (op.rotulo + ' ' + (op.sub || '')).toLowerCase() }
+        }, [
           U.el('input', { type: 'checkbox', checked: marcado, style: { accentColor: 'var(--acento)' },
             on: { change: function (e) {
               const i = sel.indexOf(op.id);
@@ -456,7 +582,7 @@
             op.sub ? U.el('span', { class: 'paleta__item-sub', text: op.sub }) : null
           ])
         ]);
-        pop.appendChild(linha);
+        listaHost.appendChild(linha);
       });
       if (sel.length) {
         pop.appendChild(U.el('button', {

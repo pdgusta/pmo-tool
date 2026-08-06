@@ -116,6 +116,36 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 }
 .cartao--plano { box-shadow: var(--sombra-0); }
 .cartao--compacto { padding: var(--e-3); }
+/* Cartão que carrega a conclusão da tela. */
+.cartao--destaque { box-shadow: var(--sombra-1), inset 3px 0 0 var(--acento); }
+/* Cartão de apoio: some para o fundo em vez de disputar atenção. */
+.cartao--silencioso { background: transparent; box-shadow: none; padding-inline: 0; }
+
+/* =============================================================== seção
+   Cabeçalho fora da caixa: dá hierarquia sem transformar tudo em cartão. */
+.secao { display: block; margin-bottom: var(--e-5); min-width: 0; }
+.secao__topo {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--e-3); margin-bottom: var(--e-3);
+  padding-bottom: var(--e-2); border-bottom: 1px solid var(--borda);
+}
+.secao__titulo { font-size: var(--ts-h2); font-weight: 650; letter-spacing: -0.01em; }
+.secao__sub { font-size: var(--ts-peq); color: var(--tinta-2); margin-top: 2px; max-width: var(--larg-leitura); }
+.secao__acoes { display: flex; align-items: center; gap: var(--e-2); flex: 0 0 auto; flex-wrap: wrap; }
+.secao__corpo { min-width: 0; }
+
+/* ============================================================ esqueleto */
+.esqueleto { display: flex; flex-direction: column; gap: var(--e-2); padding: var(--e-2) 0; }
+.esqueleto__linha {
+  border-radius: var(--raio-1);
+  background: linear-gradient(90deg, var(--sup-2) 25%, var(--sup-3) 37%, var(--sup-2) 63%);
+  background-size: 400% 100%;
+  animation: esqueleto-brilho 1.4s ease-in-out infinite;
+}
+@keyframes esqueleto-brilho { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce) {
+  .esqueleto__linha { animation: none; background: var(--sup-2); }
+}
 .cartao--clicavel { cursor: pointer; transition: box-shadow var(--transicao), transform var(--transicao); }
 .cartao--clicavel:hover { box-shadow: var(--sombra-2); }
 
@@ -159,8 +189,14 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 .kpi__delta[data-tom="bom"] { color: var(--delta-bom); }
 .kpi__delta[data-tom="ruim"] { color: var(--delta-ruim); }
 .kpi__delta[data-tom="neutro"] { color: var(--tinta-3); }
-.kpi__nota { font-size: var(--ts-mic); color: var(--tinta-3); }
+.kpi__nota { font-size: var(--ts-mic); color: var(--tinta-2); }
 .kpi__spark { margin-top: var(--e-1); }
+/* KPI de destaque hierárquico: ocupa duas colunas da grade e usa a figura
+   grande. Serve para o indicador que responde à pergunta principal da tela. */
+.kpi--hero { grid-column: span 2; }
+.kpi--hero .kpi__valor { font-size: var(--ts-hero); }
+@media (max-width: 560px) { .kpi--hero { grid-column: span 1; } }
+
 .kpi--destaque { box-shadow: var(--sombra-1), inset 3px 0 0 var(--acento); }
 .kpi--critico { box-shadow: var(--sombra-1), inset 3px 0 0 var(--st-critico); }
 .kpi--aviso { box-shadow: var(--sombra-1), inset 3px 0 0 var(--st-aviso); }
@@ -290,7 +326,19 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 .tabela thead th[aria-sort] .ord__seta { opacity: 1; }
 
 .tabela tbody tr { height: var(--alt-linha); }
-.tabela tbody tr:hover { background: var(--sup-2); }
+.tabela tbody tr:hover { background: var(--sup-3); }
+/* Linha acionável por teclado: o anel precisa aparecer dentro da célula,
+   porque `tr` não aceita outline confiável em tabela com border-collapse. */
+.tabela tbody tr[tabindex]:focus-visible { outline: none; background: var(--acento-bg); }
+.tabela tbody tr[tabindex]:focus-visible td:first-child { box-shadow: inset 3px 0 0 var(--acento); }
+
+/* Revelação por lote: rodapé fora do host de rolagem, para continuar
+   alcançável quando a tabela tem scrollport próprio. */
+.tabela-mais {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--e-3); padding: var(--e-2) var(--e-1) 0;
+}
+.tabela-mais__status { font-size: var(--ts-mic); color: var(--tinta-3); font-variant-numeric: tabular-nums; }
 .tabela tbody tr[data-sel="1"] { background: var(--acento-bg); }
 .tabela tbody tr:last-child td { border-bottom: 0; }
 
@@ -340,8 +388,10 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 }
 
 .tabela--compacta th, .tabela--compacta td { padding: 4px var(--e-2); }
-.tabela--faixas tbody tr:nth-child(even) { background: var(--sup-2); }
-.tabela--faixas tbody tr:nth-child(even):hover { background: var(--sup-3); }
+/* Zebra saiu: com a linha guia de 1px e um hover mais forte, a faixa
+   alternada só acrescentava ruído e brigava com o estado de seleção.
+   A classe continua aceita para não quebrar chamadas existentes. */
+.tabela--faixas tbody tr:nth-child(even) { background: transparent; }
 
 .tabela__grupo td {
   background: var(--sup-3); font-weight: 650; font-size: var(--ts-mic);
@@ -573,6 +623,15 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
   pointer-events: auto; animation: toast-entrar 160ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 @keyframes toast-entrar { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* Barra de tempo do fechamento automático. */
+.toast--temporizado { position: relative; overflow: hidden; }
+.toast--temporizado::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: currentColor; opacity: 0.35; transform-origin: left center;
+  animation: toast-tempo var(--toast-dur, 4200ms) linear forwards;
+}
+@keyframes toast-tempo { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .toast--temporizado::after { display: none; } }
 .toast--saindo { opacity: 0; transform: translateY(6px); transition: all 170ms ease-in; }
 .toast__ic { flex: 0 0 auto; margin-top: 1px; }
 .toast__txt { flex: 1 1 auto; min-width: 0; }
