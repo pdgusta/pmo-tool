@@ -856,6 +856,19 @@
     t.appendChild(btn);
     host.appendChild(t);
 
+    /* Uma importacao em lote consegue empilhar dezenas de avisos e cobrir a
+       tela inteira. Acima de tres, os mais antigos saem: o aviso mais recente
+       e o que importa, e a pilha nunca vira uma parede. */
+    const MAX = 3;
+    const vivos = host.querySelectorAll('.toast:not(.toast--saindo)');
+    for (let i = 0; i < vivos.length - MAX; i++) {
+      const velho = vivos[i];
+      velho.classList.add('toast--saindo');
+      (function (el) {
+        setTimeout(function () { if (el.parentNode) { el.parentNode.removeChild(el); } }, 180);
+      })(velho);
+    }
+
     let fim = null;
     function fechar() {
       if (fim) { return; }
@@ -864,7 +877,12 @@
       setTimeout(function () { if (t.parentNode) { t.parentNode.removeChild(t); } }, 180);
     }
     const dur = o.duracao === undefined ? (k === 'erro' ? 9000 : 4200) : o.duracao;
-    if (dur > 0) { setTimeout(fechar, dur); }
+    if (dur > 0) {
+      // Barra de tempo: o aviso deixa de sumir sem explicacao.
+      t.style.setProperty('--toast-dur', dur + 'ms');
+      t.classList.add('toast--temporizado');
+      setTimeout(fechar, dur);
+    }
     return { fechar: fechar };
   };
 
