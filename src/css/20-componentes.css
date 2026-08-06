@@ -259,6 +259,13 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 /* ============================================================ tabelas */
 
 .tabela-host { overflow: auto; max-width: 100%; border-radius: var(--raio-2); }
+/* Tabela longa: o host vira o scrollport, o cabecalho gruda de verdade e a
+   barra horizontal fica sempre ao alcance, no rodape da area visivel. */
+.tabela-host--rolagem {
+  max-height: calc(100dvh - var(--alt-topo) - 190px);
+  min-height: 220px;
+  overscroll-behavior: contain;
+}
 .tabela {
   width: 100%; border-collapse: separate; border-spacing: 0;
   font-size: var(--ts-peq); background: var(--sup-1);
@@ -295,6 +302,43 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 }
 .tabela thead th.fix { z-index: 4; background: var(--sup-2); }
 .tabela tbody tr:hover td.fix { background: var(--sup-2); }
+/* ------------------------------------------------- tabela em tela estreita
+   Abaixo de 720px uma tabela de 14 colunas exigia 1507px de rolagem lateral
+   num host de 343px. Cada linha vira um cartão rótulo -> valor. O rótulo sai
+   do data-rot que vw.tabela grava em cada célula, então toda tabela do app
+   herda o comportamento sem mudar uma linha de chamada. */
+@media (max-width: 720px) {
+  .tabela-host--rolagem { max-height: none; }
+  .tabela, .tabela tbody, .tabela tr, .tabela td { display: block; width: auto; }
+  .tabela thead, .tabela tfoot { display: none; }
+  .tabela tbody tr {
+    height: auto;
+    background: var(--sup-1);
+    border: 1px solid var(--borda);
+    border-radius: var(--raio-2);
+    margin-bottom: var(--e-2);
+    padding: var(--e-1) var(--e-2);
+  }
+  .tabela tbody tr:last-child td { border-bottom: 0; }
+  .tabela td {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: var(--e-3); text-align: right;
+    padding: 5px 0; border-bottom: 1px solid var(--borda);
+  }
+  .tabela td:last-child { border-bottom: 0; }
+  .tabela td::before {
+    content: attr(data-rot);
+    flex: 0 0 auto; text-align: left;
+    font-size: var(--ts-mic); color: var(--tinta-3);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  /* Célula sem rótulo (ações, agrupador) ocupa a linha inteira. */
+  .tabela td[data-rot=""] { justify-content: flex-end; }
+  .tabela td[data-rot=""]::before { content: none; }
+  .tabela td.fix { position: static; box-shadow: none; }
+  .tabela__grupo td { background: var(--sup-2); justify-content: flex-start; }
+}
+
 .tabela--compacta th, .tabela--compacta td { padding: 4px var(--e-2); }
 .tabela--faixas tbody tr:nth-child(even) { background: var(--sup-2); }
 .tabela--faixas tbody tr:nth-child(even):hover { background: var(--sup-3); }

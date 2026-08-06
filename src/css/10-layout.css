@@ -86,6 +86,26 @@ a:hover { text-decoration: underline; }
 .app[data-nav="oculta"] { grid-template-columns: 0 minmax(0, 1fr); }
 .app[data-nav="oculta"] .nav { transform: translateX(-100%); border-right-color: transparent; }
 
+/* ------------------------------------------------- trilho de navegação
+   Estado intermediário entre completa e oculta: só ícones. Devolve 172px de
+   largura ao conteúdo sem custar a orientação — o item ativo continua
+   marcado e o nome vive no title e no aria-label. */
+.app[data-nav="trilho"] { grid-template-columns: var(--larg-nav-rail) minmax(0, 1fr); }
+.app[data-nav="trilho"] .nav__rolagem { padding: var(--e-3) var(--e-1); }
+.app[data-nav="trilho"] .nav__grupo { margin-bottom: var(--e-3); }
+.app[data-nav="trilho"] .nav__grupo-rot { display: none; }
+.app[data-nav="trilho"] .nav__item { justify-content: center; padding: 7px 0; gap: 0; position: relative; }
+.app[data-nav="trilho"] .nav__item-txt { display: none; }
+/* A contagem vira marca: o número não cabe, mas a existência do alerta sim. */
+.app[data-nav="trilho"] .nav__item-badge {
+  position: absolute; top: 3px; right: 7px;
+  min-width: 8px; width: 8px; height: 8px; padding: 0;
+  font-size: 0; line-height: 0; overflow: hidden;
+}
+.app[data-nav="trilho"] .nav__item-badge[data-tom="critico"] { background: var(--st-critico); }
+.app[data-nav="trilho"] .nav__item-badge[data-tom="aviso"] { background: var(--st-aviso); }
+.app[data-nav="trilho"] .nav__pe { display: none; }
+
 /* ============================================================== topo */
 
 .topo {
@@ -218,6 +238,18 @@ a:hover { text-decoration: underline; }
 }
 .conteudo:focus { outline: none; }
 
+/* Teto de largura. Sem ele, em 2560px o conteudo ocupava 2318px e a curva S
+   ficava com proporcao 4,92:1 — achatada a ponto de esconder a inflexao.
+   Aplicado nos filhos, e nao em .conteudo, para nao mexer no scrollport:
+   a barra de filtros depende dele para grudar. */
+.cabecalho-view, .barra-filtros, .view {
+  max-width: var(--larg-conteudo);
+  margin-inline: auto;
+  width: 100%;
+}
+/* Texto corrido tem medida propria: linha longa demais custa leitura. */
+.cabecalho-view__sub { max-width: var(--larg-leitura); }
+
 .cabecalho-view {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: var(--e-4); flex-wrap: wrap; margin-bottom: var(--e-4);
@@ -226,7 +258,7 @@ a:hover { text-decoration: underline; }
   font-size: var(--ts-h1); font-weight: 650; letter-spacing: -0.015em; line-height: 1.2;
 }
 .cabecalho-view__sub {
-  font-size: var(--ts-peq); color: var(--tinta-2); margin-top: 3px; max-width: 78ch;
+  font-size: var(--ts-peq); color: var(--tinta-2); margin-top: 3px;
 }
 .cabecalho-view__dir { display: flex; align-items: center; gap: var(--e-2); flex-wrap: wrap; }
 
@@ -238,6 +270,14 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--sombra-1);
   position: sticky; top: calc(var(--e-5) * -1); z-index: 12;
 }
+/* Grudada: o conteúdo desliza por baixo, então ela precisa ganhar elevação e
+   perder o arredondamento do topo. Sem isso a barra "derretia" no plano. */
+.barra-filtros[data-grudada="1"] {
+  box-shadow: var(--sombra-pegajosa);
+  border-radius: 0 0 var(--raio-2) var(--raio-2);
+}
+.sentinela-grude { height: 1px; margin-bottom: -1px; pointer-events: none; }
+
 .barra-filtros__sep { width: 1px; align-self: stretch; background: var(--borda-2); margin: 0 var(--e-1); }
 .barra-filtros__dir { margin-left: auto; display: flex; align-items: center; gap: var(--e-2); }
 .barra-filtros__resumo { font-size: var(--ts-peq); color: var(--tinta-2); white-space: nowrap; }
@@ -247,7 +287,33 @@ a:hover { text-decoration: underline; }
 /* ---------------------------------------------------- grades de painel */
 
 .grade { display: grid; gap: var(--e-4); }
-.grade--kpi { grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); }
+
+/* ------------------------------------------------------------ grade de KPI
+   O numero de colunas vem da CONTAGEM de itens, nao de auto-fit. auto-fit
+   resolvia a largura mas deixava buraco na ultima linha: 8 KPIs numa grade
+   de 6 colunas rendiam 4 celulas orfas, e em 2560px viravam 11 colunas com
+   3 orfas. `:has(> :nth-child(N):last-child)` casa "tem exatamente N filhos".
+   Sem suporte a :has(), cai no padrao de 4 colunas — que ja e util. */
+.grade--kpi { grid-template-columns: repeat(var(--kpi-cols, 2), minmax(0, 1fr)); }
+
+/* As regras de contagem vivem dentro da media query de tela larga. Escopo por
+   media query, e nao por especificidade: `:has(> :nth-child(8):last-child)`
+   pesa (0,3,0) e venceria qualquer override mais simples em tela estreita. */
+@media (min-width: 901px) {
+  .grade--kpi { --kpi-cols: 4; }
+  .grade--kpi:has(> :nth-child(1):last-child)  { --kpi-cols: 1; }
+  .grade--kpi:has(> :nth-child(2):last-child)  { --kpi-cols: 2; }
+  .grade--kpi:has(> :nth-child(3):last-child)  { --kpi-cols: 3; }
+  .grade--kpi:has(> :nth-child(4):last-child)  { --kpi-cols: 4; }
+  .grade--kpi:has(> :nth-child(5):last-child)  { --kpi-cols: 5; }
+  .grade--kpi:has(> :nth-child(6):last-child)  { --kpi-cols: 3; }
+  .grade--kpi:has(> :nth-child(7):last-child)  { --kpi-cols: 4; }
+  .grade--kpi:has(> :nth-child(8):last-child)  { --kpi-cols: 4; }
+  .grade--kpi:has(> :nth-child(9):last-child)  { --kpi-cols: 3; }
+  .grade--kpi:has(> :nth-child(10):last-child) { --kpi-cols: 5; }
+  .grade--kpi:has(> :nth-child(12):last-child) { --kpi-cols: 4; }
+}
+@media (max-width: 560px) { .grade--kpi { --kpi-cols: 1; } }
 .grade--2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 .grade--3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .grade--12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
@@ -403,8 +469,21 @@ a:hover { text-decoration: underline; }
   .topo__busca { max-width: none; }
   .topo__titulo { display: none; }
   .data-status { display: none; }
-  .grade--kpi { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+  /* Drawer vira folha de baixo para cima: em 375px ele cobria 94% da largura
+     numa animação lateral que não combina com o gesto da tela. */
+  .drawer {
+    top: auto; left: 0; right: 0; bottom: 0;
+    width: 100%; height: 92dvh;
+    border-radius: var(--raio-3) var(--raio-3) 0 0;
+    animation: entrar-baixo 200ms var(--ease-saida);
+  }
 }
+@keyframes entrar-baixo { from { transform: translateY(24px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+
+/* Os controles de filtro empilhados dentro do modal ocupam a largura toda. */
+.filtros-modal > * { width: 100%; }
+.filtros-modal .barra-filtros__sep { display: none; }
+.filtros-modal .barra-filtros__dir { margin-left: 0; flex-wrap: wrap; }
 
 /* =========================================================== impressao */
 

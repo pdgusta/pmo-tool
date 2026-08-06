@@ -320,7 +320,12 @@
       }
       const tr = U.el('tr', { data: c.chave ? { id: c.chave(l) } : null });
       cols.forEach(function (col) {
-        const td = U.el('td', { class: (col.num ? 'num' : '') + (col.cent ? ' cent' : '') + (col.fix ? ' fix' : '') });
+        const td = U.el('td', {
+          class: (col.num ? 'num' : '') + (col.cent ? ' cent' : '') + (col.fix ? ' fix' : ''),
+          // Em tela estreita a linha vira cartão e cada célula precisa dizer
+          // de que coluna veio: o cabeçalho não acompanha a reempilhagem.
+          data: { rot: col.rot || '' }
+        });
         const conteudo = col.render ? col.render(l) : (col.valor ? col.valor(l) : l[col.id]);
         if (conteudo instanceof Node) { td.appendChild(conteudo); }
         else { td.textContent = conteudo === null || conteudo === undefined || conteudo === '' ? '—' : String(conteudo); }
@@ -348,7 +353,18 @@
       tab.appendChild(U.el('tfoot', {}, [trf]));
     }
 
-    return U.el('div', { class: 'tabela-host' }, [tab]);
+    /* O `thead` e sticky, mas o scrollport dele e o proprio .tabela-host
+       (overflow:auto). Sem altura maxima o host nunca rola na vertical, e o
+       sticky jamais engata: o cabecalho some junto com a pagina. Acima de um
+       punhado de linhas o host vira o scrollport de verdade — o que tambem
+       traz a barra horizontal para dentro do viewport, em vez de deixa-la no
+       rodape de um cartao de milhares de pixels. */
+    const host = U.el('div', { class: 'tabela-host' }, [tab]);
+    const limite = c.alturaLimite === undefined ? 14 : c.alturaLimite;
+    if (limite && (c.linhas || []).length > limite) {
+      host.classList.add('tabela-host--rolagem');
+    }
+    return host;
   };
 
   /* ================================================= seletor de variante */
@@ -573,6 +589,43 @@
     }
     if (c.acoes) { c.acoes.forEach(function (a) { dir.appendChild(a); }); }
     host.appendChild(dir);
+
+    /* Tela estreita: a barra inteira ocupava 157px, 19% da altura visível.
+       Os mesmos controles vão para um modal e sobra um gatilho com a
+       contagem. Nada é removido — só deixa de ficar permanentemente aberto. */
+    if (window.innerWidth <= 720) {
+      const filhos = Array.prototype.slice.call(host.childNodes);
+      U.limpar(host);
+      const caixa = U.el('div', { class: 'pilha pilha--3 filtros-modal' }, filhos);
+      const n = vw.contarFiltros(filtro);
+      host.appendChild(U.el('button', {
+        class: 'chip-botao', type: 'button', data: { ativo: n ? '1' : '0' },
+        attrs: { 'aria-label': n ? n + ' filtro(s) ativo(s). Abrir filtros.' : 'Abrir filtros' },
+        on: { click: function () {
+          PMO.app.abrirModal('Filtros', caixa, {
+            acoes: [vw.botao('Concluído', { variante: 'primario', onClick: PMO.app.fecharModal })]
+          });
+        } }
+      }, [
+        vw.icone('filtro', { tam: 13 }),
+        U.el('span', { text: n ? 'Filtros (' + n + ')' : 'Filtros' })
+      ]));
+      if (c.resumo) {
+        host.appendChild(U.el('span', { class: 'barra-filtros__resumo', text: c.resumo }));
+      }
+    }
+  };
+
+  /** Quantos critérios o filtro tem ativos. Alimenta o gatilho compacto. */
+  vw.contarFiltros = function (f) {
+    if (!f) { return 0; }
+    let n = 0;
+    if (f.busca) { n += 1; }
+    if (f.somenteAtivos) { n += 1; }
+    if (f.somenteRisco) { n += 1; }
+    ['programaId', 'estagio', 'categoria', 'tipo', 'rag', 'gateAtual', 'pmId', 'sponsorId', 'buId', 'tags']
+      .forEach(function (k) { n += (f[k] || []).length; });
+    return n;
   };
 
   vw.filtroAtivo = function (f) {

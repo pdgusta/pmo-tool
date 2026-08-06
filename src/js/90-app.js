@@ -68,7 +68,13 @@
         const bd = badges[rota];
         bloco.appendChild(U.el('button', {
           class: 'nav__item', type: 'button',
-          attrs: { 'aria-current': app.rotaAtual === rota ? 'page' : null, title: v.sub || v.titulo },
+          attrs: {
+            'aria-current': app.rotaAtual === rota ? 'page' : null,
+            title: v.sub || v.titulo,
+            // No modo trilho o rótulo some da tela; o nome acessível não pode
+            // depender de um texto que o CSS escondeu.
+            'aria-label': v.titulo + (bd ? ' (' + bd.n + ')' : '')
+          },
           on: { click: function () { app.navegar(rota); } }
         }, [
           U.el('span', { class: 'nav__item-ic' }, [vw.icone(v.icone || 'painel', { tam: 17 })]),
@@ -700,18 +706,74 @@
 
   /* ============================================================= topo */
 
+  /**
+   * Marca a barra de filtros quando ela encosta no topo. Uma sentinela de 1px
+   * logo antes dela é o único jeito barato de saber que um `position: sticky`
+   * engatou — não existe seletor de estado grudado em CSS.
+   */
+  function montarSentinelaGrude() {
+    const conteudo = q('conteudo');
+    const barra = q('barra-filtros');
+    if (!conteudo || !barra || typeof IntersectionObserver !== 'function') { return; }
+    const sent = U.el('div', { class: 'sentinela-grude', attrs: { 'aria-hidden': 'true' } });
+    conteudo.insertBefore(sent, barra);
+    new IntersectionObserver(function (entradas) {
+      barra.dataset.grudada = entradas[0].isIntersecting ? '0' : '1';
+    }, { root: conteudo, threshold: 0 }).observe(sent);
+  }
+
+  const NAVS_VALIDAS = ['visivel', 'trilho', 'oculta'];
+
+  function navValida(nome) {
+    return NAVS_VALIDAS.indexOf(nome) >= 0 ? nome : 'visivel';
+  }
+
+  /** Reflete o estado no botão e guarda a escolha. Não depende do Store. */
+  function refletirBotaoNav() {
+    const raiz = q('app');
+    const estado = navValida(raiz.dataset.nav);
+    raiz.dataset.nav = estado;
+    const btn = q('btn-menu');
+    if (btn) {
+      btn.setAttribute('aria-expanded', String(estado !== 'oculta'));
+      btn.setAttribute('title', estado === 'visivel'
+        ? 'Navegação completa — clique para recolher em ícones'
+        : (estado === 'trilho' ? 'Navegação em ícones — clique para ocultar'
+          : 'Navegação oculta — clique para mostrar'));
+    }
+    // Preferência de interface: cache local basta, não é dado de portfólio.
+    try { localStorage.setItem('pmo-nav', estado); } catch (e) { /* opcional */ }
+  }
+
+  /** Reflete e redesenha. Só pode ser chamada depois que o Store está pronto. */
+  function aplicarEstadoNav() {
+    refletirBotaoNav();
+    montarNav();
+  }
+
   function montarTopo() {
     const raiz = q('app');
 
+    // Restaura a escolha da sessão anterior. Em tela estreita a nav é gaveta:
+    // começa fechada, senão cobre o conteúdo ao abrir o app.
+    let salvo = null;
+    try { salvo = localStorage.getItem('pmo-nav'); } catch (e) { /* ok */ }
+    raiz.dataset.nav = window.innerWidth <= 1000 ? 'oculta' : navValida(salvo);
+
     q('btn-menu').appendChild(vw.icone('menu', { tam: 18 }));
+    refletirBotaoNav();
     q('btn-menu').addEventListener('click', function () {
-      const atual = raiz.dataset.nav;
+      /* Em tela larga o botão cicla três estados: completa -> trilho de
+         ícones -> oculta. Em tela estreita a navegação é uma gaveta, então
+         só faz sentido abrir e fechar. */
+      const atual = raiz.dataset.nav || 'visivel';
       if (window.innerWidth <= 1000) {
         raiz.dataset.nav = atual === 'visivel' ? 'oculta' : 'visivel';
       } else {
-        raiz.dataset.nav = atual === 'oculta' ? 'visivel' : 'oculta';
+        const ciclo = { visivel: 'trilho', trilho: 'oculta', oculta: 'visivel' };
+        raiz.dataset.nav = ciclo[atual] || 'visivel';
       }
-      q('btn-menu').setAttribute('aria-expanded', String(raiz.dataset.nav !== 'oculta'));
+      aplicarEstadoNav();
     });
 
     q('topo__busca-ic') || (function () {
@@ -872,6 +934,7 @@
       app.tema(temaAtual());
       app.densidade(densidadeAtual());
       montarTopo();
+      montarSentinelaGrude();
       montarBusca();
       montarDropzonaGlobal();
       montarAtalhos();
