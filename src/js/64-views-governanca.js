@@ -428,14 +428,19 @@
           dica: 'Da solicitação até a decisão registrada em ata.' })
       ]));
 
-      // impacto acumulado das mudanças aprovadas, em cascata
+      /* A cascata de erosão da baseline é análise, não decisão — e ficava
+         entre os KPIs e a lista de decisões pendentes, empurrando a única
+         coisa acionável da tela para baixo da dobra. Ela é montada aqui, para
+         o gráfico ser construído no mesmo ponto, mas só entra no documento
+         depois das duas listas. */
+      let cartaoErosao = null;
       if (chgAprov.length) {
         const hostWf = U.el('div');
-        host.appendChild(vw.cartao({
-          titulo: 'Erosão da baseline por mudanças aprovadas', icone: 'dinheiro', classe: 'mb-4',
+        cartaoErosao = vw.cartao({
+          titulo: 'Erosão da baseline por mudanças aprovadas', icone: 'dinheiro',
           sub: 'Do orçamento original até o orçamento vigente, mudança por tipo',
           corpo: [hostWf]
-        }));
+        });
         const porTipo = U.groupBy(chgAprov, function (x) { return x.it.tipo; });
         const bacOriginal = k.bac - U.sum(chgAprov, function (x) { return x.it.impactoCusto; });
         const itens = [{ rotulo: 'Baseline original', valor: bacOriginal, tipo: 'inicio' }];
@@ -494,7 +499,7 @@
       }));
 
       host.appendChild(vw.cartao({
-        titulo: 'Controle de mudanças', icone: 'ligacao', classe: 'mt-4',
+        titulo: 'Controle de mudanças', icone: 'ligacao', classe: 'mt-4 mb-4',
         sub: chgPend.length + ' aguardando decisão de ' + mudancas.length + ' registrada(s)',
         corpo: [mudancas.length ? vw.tabela({
           legenda: 'Solicitações de mudança do portfólio', faixas: true,
@@ -533,6 +538,15 @@
             '+' + U.fmtNum(k.mudancasAprovadasDias, 0) + ' d', '', '', '', '']
         }) : vw.vazio({ icone: 'ligacao', titulo: 'Nenhuma solicitação de mudança' })]
       }));
+
+      if (cartaoErosao) {
+        host.appendChild(vw.secao({
+          titulo: 'Efeito acumulado no orçamento',
+          sub: 'O que as mudanças já aprovadas fizeram com a linha de base.',
+          classe: 'mt-4',
+          corpo: [cartaoErosao]
+        }));
+      }
     }
   };
 

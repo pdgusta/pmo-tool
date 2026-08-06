@@ -134,6 +134,12 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 .secao__acoes { display: flex; align-items: center; gap: var(--e-2); flex: 0 0 auto; flex-wrap: wrap; }
 .secao__corpo { min-width: 0; }
 
+/* 22 caixas de seleção numa coluna só viram rolagem; em grade cabem de vista. */
+.colunas-grade {
+  display: grid; gap: var(--e-2) var(--e-4);
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
 /* Índice de âncoras de uma tela longa: atalho, não navegação principal. */
 .indice {
   display: flex; flex-wrap: wrap; gap: var(--e-1);

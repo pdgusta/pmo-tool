@@ -260,6 +260,28 @@
     'prioridade', 'inicio', 'fim', 'desvio', 'progresso', 'bac', 'ac', 'eac', 'vac',
     'spi', 'cpi', 'riscos', 'issues'
   ];
+  /* Rótulos legíveis: a lista de colunas mostrava `id.toUpperCase()`, o que
+     serve para BAC e SPI e produz "ESTAGIO" e "PROGRESSO" no resto. */
+  const ROTULOS_COLUNA = {
+    codigo: 'Código', nome: 'Projeto', rag: 'Farol', estagio: 'Estágio', gate: 'Gate',
+    programa: 'Programa', pm: 'Gerente', sponsor: 'Sponsor', categoria: 'Categoria',
+    prioridade: 'Prioridade', inicio: 'Início', fim: 'Término', desvio: 'Desvio',
+    progresso: 'Avanço', bac: 'BAC', ac: 'AC', eac: 'EAC', vac: 'VAC',
+    spi: 'SPI', cpi: 'CPI', riscos: 'Riscos', issues: 'Issues'
+  };
+
+  /* Conjuntos prontos. Catorze colunas de uma vez servem para exportar, não
+     para ler: cada preset responde a uma pergunta diferente do PMO. */
+  const PRESETS_COLUNA = [
+    { id: 'essencial', rotulo: 'Essencial',
+      cols: ['codigo', 'nome', 'rag', 'estagio', 'fim', 'desvio', 'progresso'] },
+    { id: 'evm', rotulo: 'EVM',
+      cols: ['codigo', 'nome', 'rag', 'progresso', 'bac', 'ac', 'eac', 'vac', 'spi', 'cpi'] },
+    { id: 'governanca', rotulo: 'Governança',
+      cols: ['codigo', 'nome', 'rag', 'estagio', 'gate', 'pm', 'sponsor', 'riscos', 'issues'] },
+    { id: 'tudo', rotulo: 'Tudo', cols: COLUNAS_DISPONIVEIS.slice() }
+  ];
+
   let colunasVisiveis = ['codigo', 'nome', 'rag', 'estagio', 'gate', 'pm', 'fim', 'desvio',
     'progresso', 'bac', 'eac', 'spi', 'cpi', 'riscos'];
   let modoPortfolio = 'tabela';
@@ -402,25 +424,70 @@
   function seletorColunas() {
     const btn = vw.botao('Colunas', { peq: true, icone: 'tabela' });
     btn.addEventListener('click', function () {
-      const corpo = U.el('div', { class: 'pilha pilha--2' });
-      COLUNAS_DISPONIVEIS.forEach(function (id) {
-        const marcado = colunasVisiveis.indexOf(id) >= 0;
-        corpo.appendChild(U.el('label', { class: 'marcador' }, [
-          U.el('input', { type: 'checkbox', checked: marcado,
-            on: { change: function (e) {
-              const i = colunasVisiveis.indexOf(id);
-              if (e.target.checked && i < 0) {
-                // preserva a ordem canonica
-                colunasVisiveis = COLUNAS_DISPONIVEIS.filter(function (x) {
-                  return x === id || colunasVisiveis.indexOf(x) >= 0;
-                });
-              } else if (!e.target.checked && i >= 0) { colunasVisiveis.splice(i, 1); }
-            } } }),
-          U.el('span', { text: id === 'codigo' ? 'Código' : id === 'nome' ? 'Projeto' : id.toUpperCase() })
-        ]));
-      });
-      PMO.app.abrirModal('Colunas visíveis', corpo, {
-        estreito: true,
+      const lista = U.el('div', { class: 'colunas-grade' });
+
+      function idDoPresetAtual() {
+        const atual = colunasVisiveis.slice().sort().join(',');
+        const p = PRESETS_COLUNA.find(function (x) {
+          return x.cols.slice().sort().join(',') === atual;
+        });
+        return p ? p.id : null;
+      }
+
+      const barra = U.el('div', {
+        class: 'grupo-botoes', attrs: { role: 'group', 'aria-label': 'Conjuntos de colunas' }
+      }, PRESETS_COLUNA.map(function (p) {
+        return vw.botao(p.rotulo, {
+          peq: true,
+          onClick: function () { colunasVisiveis = p.cols.slice(); pintar(); }
+        });
+      }));
+
+      function marcarPreset() {
+        const ativo = idDoPresetAtual();
+        Array.prototype.forEach.call(barra.children, function (b, i) {
+          b.setAttribute('aria-pressed', String(PRESETS_COLUNA[i].id === ativo));
+        });
+      }
+
+      function pintar() {
+        marcarPreset();
+        U.limpar(lista);
+        COLUNAS_DISPONIVEIS.forEach(function (id) {
+          lista.appendChild(U.el('label', { class: 'marcador' }, [
+            U.el('input', {
+              type: 'checkbox', checked: colunasVisiveis.indexOf(id) >= 0,
+              on: { change: function (e) {
+                const i = colunasVisiveis.indexOf(id);
+                if (e.target.checked && i < 0) {
+                  // preserva a ordem canônica
+                  colunasVisiveis = COLUNAS_DISPONIVEIS.filter(function (x) {
+                    return x === id || colunasVisiveis.indexOf(x) >= 0;
+                  });
+                } else if (!e.target.checked && i >= 0) {
+                  colunasVisiveis.splice(i, 1);
+                }
+                // Uma tabela sem coluna nenhuma não é um estado útil.
+                if (!colunasVisiveis.length) {
+                  colunasVisiveis = ['codigo'];
+                  e.target.checked = id === 'codigo';
+                }
+                marcarPreset();
+              } }
+            }),
+            U.el('span', { text: ROTULOS_COLUNA[id] || id })
+          ]));
+        });
+      }
+      pintar();
+
+      PMO.app.abrirModal('Colunas da tabela', U.el('div', { class: 'pilha pilha--3' }, [
+        U.el('p', { class: 'txt-mic txt-2',
+          text: 'Escolha um conjunto pronto ou marque coluna a coluna. ' +
+            'Catorze colunas de uma vez servem para exportar, não para ler.' }),
+        barra,
+        lista
+      ]), {
         acoes: [vw.botao('Aplicar', { variante: 'primario', onClick: function () {
           PMO.app.fecharModal(); PMO.app.recarregarView();
         } })]
