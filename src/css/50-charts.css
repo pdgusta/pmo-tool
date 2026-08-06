@@ -78,7 +78,11 @@
   min-width: 0;
 }
 .pmo-cht-rodape:empty { display: none; }
-.pmo-cht[data-lado="lado"] .pmo-cht-rodape { flex: 0 1 auto; max-width: 52%; }
+/* Base fixa, nao `auto`: com largura dependente do conteudo, abrir o gemeo
+   tabular alargava o rodape, encolhia o plot, disparava o observer e a
+   repintura destruia a tabela recem-aberta. O plot nao pode depender do que o
+   rodape resolve mostrar. */
+.pmo-cht[data-lado="lado"] .pmo-cht-rodape { flex: 0 0 48%; max-width: 48%; min-width: 0; }
 
 /* ------------------------------------------------------------------ legenda */
 .pmo-cht-leg {

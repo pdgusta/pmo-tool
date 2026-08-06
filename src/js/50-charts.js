@@ -449,6 +449,11 @@
     const det = el('details', { class: 'pmo-cht-det' }, [
       el('summary', { text: 'Ver dados em tabela' })
     ]);
+    /* pintar() esvazia o rodape, entao toda repintura recriava este <details>
+       fechado. Quem abrisse a tabela via ela piscar e sumir. O estado de
+       abertura pertence ao grafico, nao ao no que acabou de ser descartado. */
+    det.open = !!ctx.detalheAberto;
+    det.addEventListener('toggle', function () { ctx.detalheAberto = det.open; });
     cht.tabelaTwin(det, { colunas: colunas, linhas: linhas, legenda: legenda });
     ctx.rodape.appendChild(det);
   }
