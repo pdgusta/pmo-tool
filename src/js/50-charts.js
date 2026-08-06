@@ -253,6 +253,19 @@
     function medir() {
       const w = plot.clientWidth || raiz.clientWidth || container.clientWidth || 0;
       ctx.largura = w > 0 ? w : 640;
+      /* Largura da RAIZ. Ela nao muda quando o grafico troca o proprio layout
+         interno, e por isso e a unica medida segura para DECIDIR layout.
+         Decidir a partir de ctx.largura (a largura do plot) realimenta: o
+         donut passava de 420px, virava lado a lado, o plot encolhia para 44%,
+         caia abaixo de 420, voltava para coluna e recomecava — a cada frame. */
+      const wr = raiz.clientWidth || container.clientWidth || 0;
+      ctx.larguraRaiz = wr > 0 ? wr : ctx.largura;
+      /* As views montam a arvore inteira e so a anexam ao documento depois,
+         entao na construcao o container costuma estar solto e nao ha o que
+         medir. Desenhar com a largura de reserva e aceitavel; DECIDIR layout
+         com ela nao e — era assim que o donut nascia em modo largo e so entao
+         se corrigia, dando o primeiro empurrao na oscilacao. */
+      ctx.larguraMedida = w > 0;
       return ctx.largura;
     }
 
@@ -461,9 +474,14 @@
       if (total <= 0) { return false; }
 
       const alt = o.altura || 220;
-      const lado = ctx.largura >= 420 && segs.length > 2;
+      /* Tanto a decisao de layout quanto a geometria saem da largura da RAIZ.
+         Se qualquer uma delas usar a largura do plot, o desenho vira funcao do
+         proprio resultado e o grafico oscila sem parar. */
+      const lado = ctx.larguraMedida && ctx.larguraRaiz >= 420 && segs.length > 2;
       ctx.raiz.setAttribute('data-lado', lado ? 'lado' : 'coluna');
-      const w = lado ? Math.min(alt, Math.max(150, ctx.largura * 0.44)) : Math.min(alt, ctx.largura);
+      const w = lado
+        ? Math.min(alt, Math.max(150, ctx.larguraRaiz * 0.44))
+        : Math.min(alt, ctx.larguraRaiz);
       const h = w;
       const sv = svgRaiz(ctx, w, h, o.titulo || 'Distribuição', 'Gráfico de rosca com ' + segs.length + ' segmentos.');
 
