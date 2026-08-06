@@ -16,17 +16,27 @@
 :root {
   color-scheme: light;
 
-  /* ---------------------------------------------------------- superficies */
-  --plano:      #f9f9f7;   /* plano da pagina */
-  --sup-1:      #fcfcfb;   /* card / superficie de grafico (validada) */
-  --sup-2:      #f2f1ed;   /* elevacao sutil: cabecalho de tabela, chip */
-  --sup-3:      #e9e8e3;   /* hover / faixa alternada */
+  /* ---------------------------------------------------------- superficies
+     A escada e ordenada por luminancia: o plano da pagina fica ABAIXO de
+     --sup-2 para que o cartao leia como objeto sobre a pagina. Antes o plano
+     (94,6% de luminancia) era mais claro que --sup-2 (87,9%) e a escada de
+     elevacao ficava invertida: o cartao nao se separava do fundo (1,03:1).
+     --sup-1 nao muda de valor: e a superficie contra a qual a paleta de dados
+     foi validada, e todo grafico renderiza sobre ela. */
+  --plano:      #eeede8;   /* plano da pagina (lum 84,6%) */
+  --sup-1:      #fcfcfb;   /* card / superficie de grafico (validada, lum 97,3%) */
+  --sup-2:      #f2f1ed;   /* elevacao sutil: cabecalho de tabela, chip (87,9%) */
+  --sup-3:      #e9e8e3;   /* hover / faixa alternada (80,6%) */
   --sup-inv:    #0b0b0b;   /* tooltip, inversao */
 
   /* ----------------------------------------------------------------- tinta */
   --tinta-1:    #0b0b0b;   /* primaria */
   --tinta-2:    #52514e;   /* secundaria */
-  --tinta-3:    #898781;   /* muda: eixo, rotulo, placeholder */
+  /* --tinta-3 carrega texto de 12px (nota de KPI, sub de cartao, meta de
+     registro, legenda de tabela). O valor anterior (#898781) dava 3,50:1 sobre
+     --sup-1 e 3,18:1 sobre --sup-2 — reprovava AA nos dois. Quem define o piso
+     e o pareamento com --sup-3: linha zebrada sob o cursor. */
+  --tinta-3:    #6a6862;   /* 5,43 / 4,93 / 4,55 sobre sup-1 / sup-2 / sup-3 */
   --tinta-inv:  #fcfcfb;   /* sobre --sup-inv */
 
   /* -------------------------------------------------------- cromo grafico */
@@ -64,11 +74,26 @@
   --st-aviso:   #fab219;
   --st-serio:   #ec835a;
   --st-critico: #d03b3b;
-  --st-neutro:  #898781;
+  --st-neutro:  #6a6862;
+
+  /* Os tokens acima sao de PREENCHIMENTO (ponto de RAG, barra, faixa). Como
+     tinta eles reprovam: --st-aviso da 1,79:1 sobre --sup-1, abaixo ate do
+     piso de 3:1 de nao-texto. Estes dois carregam a versao legivel, para
+     icone e texto. O ambar e o mesmo tom que os relatorios impressos usam. */
+  --st-aviso-txt:   #8a6100;   /* 5,40 sobre --sup-1 · 5,02 sobre ambar-bg */
+  --st-critico-txt: #c62f2f;   /* 5,31 sobre --sup-1 · 4,60 sobre vermelho-bg */
+
+  /* Status sobre --sup-inv (toast, tooltip). Essa superficie INVERTE com o
+     tema: no claro ela e quase preta, no escuro quase branca. Por isso estes
+     tokens sao o espelho dos de cima, exatamente como --tinta-inv. */
+  --st-bom-inv:     #4ec44e;
+  --st-aviso-inv:   #fab219;
+  --st-critico-inv: #e87b7b;
+  --st-info-inv:    #6da7ec;
 
   /* delta em texto */
   --delta-bom:  #006300;
-  --delta-ruim: #d03b3b;
+  --delta-ruim: var(--st-critico-txt);
 
   /* ------------------------------------------------------ RAG do portfolio
      verde/ambar/vermelho reusam os tokens de status (o significado E status).
@@ -94,18 +119,27 @@
   --acento-bg:    #e4eefb;
   --foco:         #2a78d6;
 
-  /* ------------------------------------------------------------ tipografia */
-  --fonte: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* ------------------------------------------------------------ tipografia
+     Nenhuma webfont: a stack e de sistema por guardrail (G1/G2). O ganho vem
+     da escala, nao do arquivo de fonte. */
+  --fonte: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI",
+           Roboto, "Helvetica Neue", Arial, sans-serif;
   --fonte-mono: ui-monospace, "Cascadia Mono", "Consolas", "SF Mono", monospace;
 
   --ts-hero:  clamp(1.75rem, 1.2rem + 1.6vw, 2.5rem);
   --ts-kpi:   clamp(1.35rem, 1rem + 1vw, 1.9rem);
-  --ts-h1:    1.375rem;
-  --ts-h2:    1.0625rem;
-  --ts-h3:    0.9375rem;
-  --ts-corpo: 0.875rem;
-  --ts-peq:   0.8125rem;
-  --ts-mic:   0.75rem;
+  --ts-h1:    clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);  /* 20 -> 24 */
+  --ts-h2:    1.0625rem;   /* 17 */
+  --ts-h3:    0.9375rem;   /* 15 */
+  --ts-leitura: 0.9375rem; /* 15 — texto corrido: drawer, ajuda, descricoes */
+  --ts-corpo: 0.875rem;    /* 14 — densidade de interface */
+  --ts-peq:   0.8125rem;   /* 13 */
+  --ts-mic:   0.75rem;     /* 12 — piso; abaixo disto nada carrega informacao */
+
+  /* Entrelinha por finalidade. Antes cada componente cravava o seu numero. */
+  --lh-densa:   1.3;
+  --lh-base:    1.5;
+  --lh-leitura: 1.6;
 
   /* -------------------------------------------------------------- espaco */
   --e-1: 4px;   --e-2: 8px;   --e-3: 12px;  --e-4: 16px;
@@ -113,13 +147,60 @@
 
   --raio-1: 4px;  --raio-2: 8px;  --raio-3: 12px;  --raio-pill: 999px;
 
-  --sombra-1: 0 1px 2px rgba(11, 11, 11, 0.05), 0 0 0 1px var(--borda);
+  /* ------------------------------------------------------------ densidade
+     Altura de controle, altura de linha de tabela e respiro de cartao saem
+     daqui, nunca de padding literal no componente. O usuario escolhe o modo
+     em Configuracoes e a escolha vive em settings.densidade. */
+  --alt-controle:     32px;
+  --alt-controle-peq: 28px;
+  --alt-linha:        36px;
+  --alt-nav:          36px;
+  --pad-cartao:       var(--e-4);
+  /* altura minima e piso, nao alvo: quem realmente comanda a altura de um
+     controle e de uma celula e o padding vertical. Os dois precisam variar
+     junto, ou o modo compacto nao comprime nada. */
+  --pad-controle-y:   7px;
+  --pad-celula-y:     7px;
+
+  /* ------------------------------------------------------------- elevacao */
+  --sombra-0: 0 0 0 1px var(--borda);
+  --sombra-1: 0 1px 2px rgba(11, 11, 11, 0.06), 0 0 0 1px var(--borda);
   --sombra-2: 0 4px 12px rgba(11, 11, 11, 0.08), 0 0 0 1px var(--borda);
   --sombra-3: 0 12px 32px rgba(11, 11, 11, 0.14), 0 0 0 1px var(--borda);
+  /* elemento que gruda no topo: sombra so para baixo, sem halo em volta */
+  --sombra-pegajosa: 0 6px 16px -6px rgba(11, 11, 11, 0.20), 0 1px 0 var(--borda-2);
+  --anel-foco: 0 0 0 3px var(--acento-bg);
 
+  /* ------------------------------------------------------------ dimensoes */
   --larg-nav: 232px;
+  --larg-nav-rail: 60px;
+  --larg-conteudo: 1560px;
+  --larg-leitura: 72ch;
   --alt-topo: 56px;
-  --transicao: 140ms cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* ------------------------------------------------------------ movimento */
+  --mov-rapido: 90ms;
+  --mov-base:   140ms;
+  --mov-lento:  220ms;
+  --ease-saida:   cubic-bezier(0.2, 0, 0.2, 1);
+  --ease-entrada: cubic-bezier(0.3, 0, 0.8, 0.15);
+  /* alias historico: continua sendo "duracao easing" para as regras existentes */
+  --transicao: var(--mov-base) var(--ease-saida);
+}
+
+/* ============================== densidade ==============================
+   Sem atributo, vale o modo padrao declarado acima. */
+:root[data-densidade="compacta"] {
+  --alt-controle: 28px;  --alt-controle-peq: 26px;
+  --alt-linha: 30px;     --alt-nav: 32px;
+  --pad-cartao: var(--e-3);
+  --pad-controle-y: 4px; --pad-celula-y: 3px;
+}
+:root[data-densidade="confortavel"] {
+  --alt-controle: 36px;  --alt-controle-peq: 30px;
+  --alt-linha: 42px;     --alt-nav: 40px;
+  --pad-cartao: var(--e-5);
+  --pad-controle-y: 9px; --pad-celula-y: 10px;
 }
 
 /* =============================== modo escuro ===============================
@@ -132,7 +213,7 @@
   :root:where(:not([data-tema="claro"])) {
     color-scheme: dark;
 
-    --plano:   #0d0d0d;
+    --plano:   #0a0a0a;
     --sup-1:   #1a1a19;
     --sup-2:   #232322;
     --sup-3:   #2c2c2a;
@@ -140,13 +221,26 @@
 
     --tinta-1:   #ffffff;
     --tinta-2:   #c3c2b7;
-    --tinta-3:   #898781;
+    /* passa a 6,02 / 5,44 / 4,84 sobre sup-1 / sup-2 / sup-3 */
+    --tinta-3:   #9a988f;
     --tinta-inv: #0b0b0b;
 
     --grade: #2c2c2a;
     --eixo:  #383835;
-    --borda:   rgba(255, 255, 255, 0.10);
-    --borda-2: rgba(255, 255, 255, 0.20);
+    /* No escuro a separacao do cartao vem do anel, nao do preenchimento:
+       a diferenca de luminancia entre plano e --sup-1 e pequena por natureza. */
+    --borda:   rgba(255, 255, 255, 0.13);
+    --borda-2: rgba(255, 255, 255, 0.22);
+
+    --st-neutro: #9a988f;
+    --st-aviso-txt:   #eda100;   /* 8,04 sobre --sup-1 */
+    --st-critico-txt: #e87b7b;   /* 6,26 sobre --sup-1 · 6,04 sobre vermelho-bg */
+
+    /* --sup-inv aqui e claro: os tokens invertidos viram os tons escuros */
+    --st-bom-inv:     #006300;
+    --st-aviso-inv:   #8a6100;
+    --st-critico-inv: #c62f2f;
+    --st-info-inv:    #1c5cab;
 
     --serie-1: #3987e5;  --serie-2: #d95926;  --serie-3: #199e70;
     --serie-4: #c98500;  --serie-5: #d55181;  --serie-6: #008300;
@@ -172,16 +266,23 @@
     --acento-bg:    #12233a;
     --foco:         #86b6ef;
 
+    --sombra-0: 0 0 0 1px var(--borda);
     --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--borda);
     --sombra-2: 0 4px 12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--borda);
     --sombra-3: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--borda);
+    --sombra-pegajosa: 0 6px 16px -6px rgba(0, 0, 0, 0.7), 0 1px 0 var(--borda-2);
+    --anel-foco: 0 0 0 3px rgba(134, 182, 239, 0.32);
   }
 }
 
+/* PAR OBRIGATORIO do bloco @media acima. Os dois precisam declarar exatamente
+   os mesmos tokens com os mesmos valores; um cobre a preferencia do SO, o
+   outro o carimbo do botao de tema. Alterou um, altere o outro no mesmo
+   commit — a unica diferenca legitima entre eles e a indentacao. */
 :root[data-tema="escuro"] {
   color-scheme: dark;
 
-  --plano:   #0d0d0d;
+  --plano:   #0a0a0a;
   --sup-1:   #1a1a19;
   --sup-2:   #232322;
   --sup-3:   #2c2c2a;
@@ -189,13 +290,26 @@
 
   --tinta-1:   #ffffff;
   --tinta-2:   #c3c2b7;
-  --tinta-3:   #898781;
+  /* passa a 6,02 / 5,44 / 4,84 sobre sup-1 / sup-2 / sup-3 */
+  --tinta-3:   #9a988f;
   --tinta-inv: #0b0b0b;
 
   --grade: #2c2c2a;
   --eixo:  #383835;
-  --borda:   rgba(255, 255, 255, 0.10);
-  --borda-2: rgba(255, 255, 255, 0.20);
+  /* No escuro a separacao do cartao vem do anel, nao do preenchimento:
+     a diferenca de luminancia entre plano e --sup-1 e pequena por natureza. */
+  --borda:   rgba(255, 255, 255, 0.13);
+  --borda-2: rgba(255, 255, 255, 0.22);
+
+  --st-neutro: #9a988f;
+  --st-aviso-txt:   #eda100;   /* 8,04 sobre --sup-1 */
+  --st-critico-txt: #e87b7b;   /* 6,26 sobre --sup-1 · 6,04 sobre vermelho-bg */
+
+  /* --sup-inv aqui e claro: os tokens invertidos viram os tons escuros */
+  --st-bom-inv:     #006300;
+  --st-aviso-inv:   #8a6100;
+  --st-critico-inv: #c62f2f;
+  --st-info-inv:    #1c5cab;
 
   --serie-1: #3987e5;  --serie-2: #d95926;  --serie-3: #199e70;
   --serie-4: #c98500;  --serie-5: #d55181;  --serie-6: #008300;
@@ -220,15 +334,21 @@
   --acento-bg:    #12233a;
   --foco:         #86b6ef;
 
+  --sombra-0: 0 0 0 1px var(--borda);
   --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--borda);
   --sombra-2: 0 4px 12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--borda);
   --sombra-3: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--borda);
+  --sombra-pegajosa: 0 6px 16px -6px rgba(0, 0, 0, 0.7), 0 1px 0 var(--borda-2);
+  --anel-foco: 0 0 0 3px rgba(134, 182, 239, 0.32);
 }
 
 /* ============================== preferencias ============================== */
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --transicao: 0ms; }
+  :root {
+    --mov-rapido: 0ms; --mov-base: 0ms; --mov-lento: 0ms;
+    --transicao: 0ms;
+  }
   *, *::before, *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;

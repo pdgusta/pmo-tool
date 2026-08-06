@@ -8,7 +8,7 @@
 
 .botao {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--e-2);
-  padding: 7px var(--e-3); min-height: 32px;
+  padding: var(--pad-controle-y) var(--e-3); min-height: var(--alt-controle);
   border: 1px solid var(--borda-2); border-radius: var(--raio-2);
   background: var(--sup-1); color: var(--tinta-1);
   font-size: var(--ts-peq); font-weight: 550; line-height: 1;
@@ -30,12 +30,12 @@
 .botao--fantasma { border-color: transparent; background: transparent; }
 .botao--fantasma:hover:not(:disabled) { background: var(--sup-3); }
 
-.botao--peq { padding: 4px var(--e-2); min-height: 26px; font-size: var(--ts-mic); }
+.botao--peq { padding: 4px var(--e-2); min-height: var(--alt-controle-peq); font-size: var(--ts-mic); }
 .botao--bloco { width: 100%; }
 
 .botao-icone {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; flex: 0 0 auto;
+  width: var(--alt-controle); height: var(--alt-controle); flex: 0 0 auto;
   border: 0; border-radius: var(--raio-2);
   background: transparent; color: var(--tinta-2);
   cursor: pointer; transition: background var(--transicao), color var(--transicao);
@@ -59,7 +59,7 @@
 /* ========================================================= formularios */
 
 .campo {
-  width: 100%; padding: 6px var(--e-3); min-height: 32px;
+  width: 100%; padding: 6px var(--e-3); min-height: var(--alt-controle);
   border: 1px solid var(--borda-2); border-radius: var(--raio-2);
   background: var(--sup-1); color: var(--tinta-1);
   font-size: var(--ts-peq);
@@ -67,7 +67,7 @@
 }
 .campo::placeholder { color: var(--tinta-3); }
 .campo:hover:not(:disabled) { border-color: var(--tinta-3); }
-.campo:focus { border-color: var(--acento); box-shadow: 0 0 0 3px var(--acento-bg); outline: none; }
+.campo:focus { border-color: var(--acento); box-shadow: var(--anel-foco); outline: none; }
 .campo:disabled { background: var(--sup-2); color: var(--tinta-3); cursor: not-allowed; }
 .campo[aria-invalid="true"] { border-color: var(--st-critico); }
 textarea.campo { min-height: 76px; resize: vertical; line-height: 1.5; }
@@ -111,10 +111,10 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 
 .cartao {
   background: var(--sup-1); border-radius: var(--raio-2);
-  box-shadow: var(--sombra-1); padding: var(--e-4);
+  box-shadow: var(--sombra-1); padding: var(--pad-cartao);
   min-width: 0;
 }
-.cartao--plano { box-shadow: none; border: 1px solid var(--borda); }
+.cartao--plano { box-shadow: var(--sombra-0); }
 .cartao--compacto { padding: var(--e-3); }
 .cartao--clicavel { cursor: pointer; transition: box-shadow var(--transicao), transform var(--transicao); }
 .cartao--clicavel:hover { box-shadow: var(--sombra-2); }
@@ -228,7 +228,7 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 
 .chip-botao {
   display: inline-flex; align-items: center; gap: var(--e-1);
-  padding: 4px var(--e-2); min-height: 28px;
+  padding: 4px var(--e-2); min-height: var(--alt-controle-peq);
   border: 1px solid var(--borda-2); border-radius: var(--raio-2);
   background: var(--sup-1); color: var(--tinta-2);
   font-size: var(--ts-mic); font-weight: 550; cursor: pointer; white-space: nowrap;
@@ -267,7 +267,7 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 .tabela caption.sr-only { padding: 0; }
 
 .tabela th, .tabela td {
-  padding: 7px var(--e-3); text-align: left; vertical-align: middle;
+  padding: var(--pad-celula-y) var(--e-3); text-align: left; vertical-align: middle;
   border-bottom: 1px solid var(--borda);
 }
 .tabela thead th {
@@ -282,6 +282,7 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 .tabela thead th[aria-sort] { color: var(--acento-forte); }
 .tabela thead th[aria-sort] .ord__seta { opacity: 1; }
 
+.tabela tbody tr { height: var(--alt-linha); }
 .tabela tbody tr:hover { background: var(--sup-2); }
 .tabela tbody tr[data-sel="1"] { background: var(--acento-bg); }
 .tabela tbody tr:last-child td { border-bottom: 0; }
@@ -315,7 +316,7 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
   font-weight: 550;
 }
 .celula-link {
-  background: none; border: 0; padding: 0; color: var(--acento); cursor: pointer;
+  background: none; border: 0; padding: 0; color: var(--acento-forte); cursor: pointer;
   font: inherit; text-align: left; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
 }
@@ -537,10 +538,11 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 }
 .toast__x { border: 0; background: none; color: inherit; opacity: 0.6; cursor: pointer; padding: 0; flex: 0 0 auto; }
 .toast__x:hover { opacity: 1; }
-.toast--ok .toast__ic { color: var(--st-bom); }
-.toast--erro .toast__ic { color: var(--st-critico); }
-.toast--warn .toast__ic { color: var(--st-aviso); }
-.toast--info .toast__ic { color: var(--serie-1); }
+/* O toast vive sobre --sup-inv, que inverte com o tema: usa os tokens -inv. */
+.toast--ok .toast__ic { color: var(--st-bom-inv); }
+.toast--erro .toast__ic { color: var(--st-critico-inv); }
+.toast--warn .toast__ic { color: var(--st-aviso-inv); }
+.toast--info .toast__ic { color: var(--st-info-inv); }
 
 /* ========================================================== matrizes */
 
