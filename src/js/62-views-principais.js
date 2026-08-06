@@ -86,12 +86,17 @@
       }));
       host.appendChild(grade);
 
-      /* ------------------------------------------------------ blocos visuais */
-      const g12 = U.el('div', { class: 'grade grade--12' });
+      /* ------------------------------------------------------ blocos visuais
+         Duas dobras. A primeira responde "como está e o que exige ação"; a
+         caixa de entrada do PMO vivia abaixo da linha d'água, que é o pior
+         lugar possível para a única lista acionável da tela. A segunda dobra
+         é composição — importante, mas consulta, não decisão. */
+      const gTopo = U.el('div', { class: 'grade grade--12 mb-4' });
+      const gComp = U.el('div', { class: 'grade grade--12' });
 
       // farol do portfólio
       const hostDonut = U.el('div');
-      g12.appendChild(U.el('div', { class: 'col-4' }, [vw.cartao({
+      gComp.appendChild(U.el('div', { class: 'col-4' }, [vw.cartao({
         titulo: 'Farol do portfólio', icone: 'alvo',
         sub: 'Distribuição dos ' + lista.length + ' projetos filtrados',
         corpo: [hostDonut]
@@ -113,7 +118,7 @@
 
       // investimento por categoria
       const hostCat = U.el('div');
-      g12.appendChild(U.el('div', { class: 'col-4' }, [vw.cartao({
+      gComp.appendChild(U.el('div', { class: 'col-4' }, [vw.cartao({
         titulo: 'Investimento por categoria', icone: 'balanca',
         sub: 'Equilíbrio manter / crescer / transformar',
         corpo: [hostCat]
@@ -133,7 +138,7 @@
       // índices SPI/CPI (dois medidores, nunca eixo duplo)
       const hostSpi = U.el('div');
       const hostCpi = U.el('div');
-      g12.appendChild(U.el('div', { class: 'col-4' }, [vw.cartao({
+      gComp.appendChild(U.el('div', { class: 'col-4' }, [vw.cartao({
         titulo: 'Desempenho agregado', icone: 'alvo',
         sub: 'Índices consolidados do portfólio',
         corpo: [U.el('div', { class: 'grade grade--2' }, [hostSpi, hostCpi])]
@@ -147,7 +152,7 @@
 
       // curva S agregada
       const hostS = U.el('div');
-      g12.appendChild(U.el('div', { class: 'col-8' }, [vw.cartao({
+      gTopo.appendChild(U.el('div', { class: 'col-8' }, [vw.cartao({
         titulo: 'Curva S do portfólio', icone: 'dinheiro',
         sub: 'Valor planejado, valor agregado e custo real acumulados (todos em R$ — um único eixo)',
         corpo: [hostS]
@@ -160,7 +165,9 @@
         ev: curva.map(function (x) { return x.ev; }),
         ac: curva.map(function (x) { return x.ac; }),
         idxDataDate: idxDd
-      }, { altura: 300 });
+      // Em monitor largo a curva ficava com proporção 3,4:1 e a inflexão
+      // sumia. Altura maior devolve o ângulo que faz a curva ser lida.
+      }, { altura: 360 });
 
       // caixa de entrada de governança
       const alertas = M.alertas(c.bundle).slice(0, 12);
@@ -184,15 +191,16 @@
           ]));
         });
       }
-      g12.appendChild(U.el('div', { class: 'col-4' }, [vw.cartao({
+      gTopo.appendChild(U.el('div', { class: 'col-4' }, [vw.cartao({
         titulo: 'Exige ação do PMO', icone: 'alerta',
+        classe: 'cartao--destaque',
         sub: M.alertas(c.bundle).length + ' item(ns) na caixa de entrada',
         corpo: [hostAl]
       })]));
 
       // matriz de risco do portfólio
       const hostMx = U.el('div');
-      g12.appendChild(U.el('div', { class: 'col-6' }, [vw.cartao({
+      gComp.appendChild(U.el('div', { class: 'col-6' }, [vw.cartao({
         titulo: 'Matriz de risco do portfólio', icone: 'risco',
         sub: 'Riscos abertos por probabilidade e impacto',
         acoes: [vw.botao('Registro completo', { peq: true, variante: 'fantasma', onClick: function () { PMO.app.navegar('riscos'); } })],
@@ -222,7 +230,7 @@
 
       // funil de estágios
       const hostFun = U.el('div');
-      g12.appendChild(U.el('div', { class: 'col-6' }, [vw.cartao({
+      gComp.appendChild(U.el('div', { class: 'col-6' }, [vw.cartao({
         titulo: 'Funil de estágios', icone: 'gate',
         sub: 'Quantidade de projetos por estágio do stage-gate',
         corpo: [hostFun]
@@ -234,7 +242,12 @@
         }).filter(function (x) { return x.valor > 0; })
       }, { altura: 250, formatar: function (v) { return U.fmtNum(v, 0); } });
 
-      host.appendChild(g12);
+      host.appendChild(gTopo);
+      host.appendChild(vw.secao({
+        titulo: 'Composição do portfólio',
+        sub: 'Distribuição, desempenho agregado e concentração de risco.',
+        corpo: [gComp]
+      }));
     }
   };
 
@@ -832,8 +845,33 @@
     const e = c.evm(p);
 
     const corpo = U.el('div');
-    const abas = U.el('div', { class: 'abas', attrs: { role: 'tablist' } });
+    const abas = U.el('div', { class: 'abas abas--grudada', attrs: { role: 'tablist' } });
     const conteudo = U.el('div');
+
+    /* Faixa de contexto que NÃO troca com a aba. Antes, sair do Resumo levava
+       junto farol, avanço e desvio — os quatro números que dão sentido a tudo
+       que as outras abas mostram. */
+    const faixa = U.el('div', { class: 'drawer-contexto' }, [
+      U.el('div', { class: 'drawer-contexto__farol' }, [
+        vw.farol(s.rag),
+        s.manual ? U.el('span', { class: 'farol-manual', text: 'manual' }) : null
+      ]),
+      U.el('dl', { class: 'drawer-contexto__pares' }, [
+        U.el('div', {}, [U.el('dt', { text: 'Estágio' }),
+          U.el('dd', { text: M.rotulo('estagios', p.estagio) })]),
+        U.el('div', {}, [U.el('dt', { text: 'Avanço' }),
+          U.el('dd', { text: U.fmtPct(e.pctFisico, 0) + ' de ' + U.fmtPct(e.pctPlanejado, 0) })]),
+        U.el('div', {}, [U.el('dt', { text: 'Término' }),
+          U.el('dd', { text: U.fmtDate(p.dates.previstoFim) })]),
+        U.el('div', {}, [U.el('dt', { text: 'Desvio' }),
+          U.el('dd', {
+            class: U.ehNum(e.desvioDias) && e.desvioDias > 0 ? 'txt-ruim' : '',
+            text: vw.fmtDesvioDias(e.desvioDias)
+          })]),
+        U.el('div', {}, [U.el('dt', { text: 'EAC' }),
+          U.el('dd', { class: e.VAC < 0 ? 'txt-ruim' : '', text: U.fmtMoney(e.EAC, { compact: true }) })])
+      ])
+    ]);
 
     const paginas = [
       ['resumo', 'Resumo', function () { return paginaResumo(p, c, s, e); }],
@@ -869,6 +907,7 @@
       conteudo.appendChild(atual[2]());
     }
     pintar();
+    corpo.appendChild(faixa);
     corpo.appendChild(abas);
     corpo.appendChild(conteudo);
 
