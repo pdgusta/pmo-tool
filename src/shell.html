@@ -91,7 +91,12 @@
     <!-- Uma única linha de filtros acima de tudo que ela escopa. -->
     <div class="barra-filtros" id="barra-filtros" hidden></div>
 
-    <div class="view" id="view-host" aria-live="polite"></div>
+    <!-- Região de status: anuncia a troca de tela em uma frase. O #view-host
+         NÃO pode ser live region — ele é substituído por inteiro a cada
+         navegação, e o leitor de tela releria a view toda. -->
+    <p class="sr-only" id="anuncio-view" role="status" aria-live="polite"></p>
+
+    <div class="view" id="view-host"></div>
   </main>
 
   <!-- ================================ painéis ================================ -->

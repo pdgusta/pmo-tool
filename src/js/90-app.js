@@ -134,13 +134,15 @@
     }
 
     const barra = q('barra-filtros');
+    let resumoEscopo = null;
     if (v.filtros && v.filtros.length) {
       const c = vw.contexto(app.filtro);
+      resumoEscopo = c.projetos.length === c.todos.length
+        ? c.todos.length + ' projetos'
+        : c.projetos.length + ' de ' + c.todos.length + ' projetos';
       vw.barraFiltros(barra, S.state, app.filtro, function () { app.recarregarView(); }, {
         campos: v.filtros,
-        resumo: c.projetos.length === c.todos.length
-          ? c.todos.length + ' projetos'
-          : c.projetos.length + ' de ' + c.todos.length + ' projetos'
+        resumo: resumoEscopo
       });
     } else {
       barra.hidden = true;
@@ -167,6 +169,16 @@
     }
 
     montarNav();
+
+    /* Anúncio da troca de tela em uma frase. Trocar a mesma string não gera
+       novo anúncio em alguns leitores, então só escreve quando muda de fato —
+       um recarregarView por mudança de filtro deve anunciar a nova contagem. */
+    const anuncio = q('anuncio-view');
+    if (anuncio) {
+      const texto = v.titulo + (resumoEscopo ? ', ' + resumoEscopo : '');
+      if (anuncio.textContent !== texto) { anuncio.textContent = texto; }
+    }
+
     if (conteudo) {
       const alvo = mesmaRota ? rolagemAntes : (rolagemPorRota[rota] || 0);
       conteudo.scrollTo({ top: alvo, behavior: 'instant' });
