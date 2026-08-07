@@ -245,15 +245,36 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 .farol--ponto { padding: 2px; }
 .farol--ponto .farol__txt { display: none; }
 
+/* O nome acessível já vem de role="img" + aria-label em vw.pontoRag. O que
+   faltava era o canal VISUAL: cinco discos de cor idêntica em escala de cinza,
+   em impressão P&B ou em forced-colors, onde o sistema descarta a cor. Cada
+   RAG ganha uma forma própria — geometria sobrevive a tudo isso. */
 .ponto-rag {
-  width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+  width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto;
   box-shadow: 0 0 0 2px var(--sup-1);
 }
 .ponto-rag[data-rag="verde"]    { background: var(--rag-verde); }
-.ponto-rag[data-rag="ambar"]    { background: var(--rag-ambar); }
-.ponto-rag[data-rag="vermelho"] { background: var(--rag-vermelho); }
-.ponto-rag[data-rag="azul"]     { background: var(--rag-azul); }
-.ponto-rag[data-rag="cinza"]    { background: var(--rag-cinza); }
+.ponto-rag[data-rag="ambar"] {
+  background: var(--rag-ambar);
+  border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  box-shadow: none;
+}
+.ponto-rag[data-rag="vermelho"] { background: var(--rag-vermelho); border-radius: 2px; }
+.ponto-rag[data-rag="azul"] {
+  background: var(--rag-azul);
+  border-radius: 1px; transform: rotate(45deg);
+}
+.ponto-rag[data-rag="cinza"] {
+  background: transparent;
+  border: 2.5px solid var(--rag-cinza);
+}
+
+/* forced-colors descarta cor de fundo: aqui a forma é o único canal que resta,
+   e a borda precisa acompanhar o texto do sistema para continuar visível. */
+@media (forced-colors: active) {
+  .ponto-rag { forced-color-adjust: none; border: 1.5px solid CanvasText; background: CanvasText; }
+  .ponto-rag[data-rag="cinza"] { background: Canvas; }
+}
 
 .farol-manual {
   display: inline-flex; align-items: center; gap: 3px;
@@ -462,6 +483,32 @@ select.campo { cursor: pointer; padding-right: var(--e-5); }
 .barra-prog__fill[data-tom="bom"] { background: var(--st-bom); }
 .barra-prog__fill[data-tom="aviso"] { background: var(--st-aviso); }
 .barra-prog__fill[data-tom="critico"] { background: var(--st-critico); }
+
+/* ------------------------------------------------- canal de textura
+   Onde o significado está num PREENCHIMENTO e não cabe forma nem rótulo —
+   barra de progresso, barra de Gantt, célula de matriz — a cor é o único
+   canal. `--textura-ativa` liga um segundo: hachura sobreposta. O token já
+   existia em 00-theme.css e não era consumido em lugar nenhum; ele vale 1 em
+   impressão, em forced-colors e no opt-in [data-textura="on"], e é indefinido
+   no resto, quando o fallback 0 deixa a hachura invisível. */
+.barra-prog__fill, .gantt__barra, .matriz-cel { position: relative; }
+.barra-prog__fill::after, .gantt__barra::after, .matriz-cel::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  border-radius: inherit;
+  opacity: var(--textura-ativa, 0);
+}
+.barra-prog__fill[data-tom="aviso"]::after, .gantt__barra[data-rag="ambar"]::after {
+  background-image: repeating-linear-gradient(45deg,
+    transparent 0 2px, rgba(0, 0, 0, 0.55) 2px 4px);
+}
+.barra-prog__fill[data-tom="critico"]::after, .gantt__barra[data-rag="vermelho"]::after {
+  background-image: repeating-linear-gradient(-45deg,
+    transparent 0 1.5px, rgba(0, 0, 0, 0.6) 1.5px 3.5px);
+}
+.gantt__barra[data-rag="cinza"]::after {
+  background-image: repeating-linear-gradient(90deg,
+    transparent 0 2px, rgba(0, 0, 0, 0.45) 2px 3px);
+}
 /* marca do planejado: referencia visual, com rotulo no title */
 .barra-prog__alvo {
   position: absolute; top: -2px; bottom: -2px; width: 2px;

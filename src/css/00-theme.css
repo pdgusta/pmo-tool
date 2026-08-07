@@ -253,7 +253,8 @@
     /* piso ordinal no modo escuro: nao usar mais escuro que --seq-600 */
     --seq-ordinal-min: var(--seq-600);
 
-    --delta-bom: #0ca30c;
+    /* 5,03 sobre --rag-verde-bg (chip e farol verdes); #0ca30c dava 4,49 */
+    --delta-bom: #12ad12;
 
     --rag-verde-bg:    #122c12;
     --rag-ambar-bg:    #33280a;
@@ -321,7 +322,8 @@
 
   --seq-ordinal-min: var(--seq-600);
 
-  --delta-bom: #0ca30c;
+  /* 5,03 sobre --rag-verde-bg (chip e farol verdes); #0ca30c dava 4,49 */
+    --delta-bom: #12ad12;
 
   --rag-verde-bg:    #122c12;
   --rag-ambar-bg:    #33280a;
