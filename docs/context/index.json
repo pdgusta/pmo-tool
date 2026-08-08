@@ -110,6 +110,7 @@
         "bootstrap.json",
         "serve.ps1",
         "tools/portable-common.ps1",
+        "tools/install-common.ps1",
         "tools/New-PortableInstall.ps1",
         "config/install.example.json",
         "state/active.example.json",

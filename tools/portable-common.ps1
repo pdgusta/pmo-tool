@@ -372,12 +372,27 @@ function Test-PmoArchive {
         [Int64]$MaxExpandedBytes = 536870912,
         [Int64]$MaxCompressedEntryBytes = 67108864,
         [Int64]$MaxCompressedBytes = 268435456,
-        [double]$MaxCompressionRatio = 200
+        [double]$MaxCompressionRatio = 200,
+        # Allowlists parametrizaveis para que outros pacotes (bootstrap, por
+        # exemplo) usem o mesmo validador. Os defaults sao o contrato historico
+        # do pacote de runtime: nenhum chamador existente muda de comportamento.
+        [string[]]$ArquivosPermitidos = @('serve.ps1','release.json','NOTICE','LICENSE','dist/pmo-tool.html','tools/portable-common.ps1','tools/update-runtime.ps1'),
+        [string[]]$PrefixosPermitidos = @('templates/factory/','samples/'),
+        [string[]]$DiretoriosPermitidos = @('dist','tools','templates','templates/factory','samples')
     )
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $allowedFiles = @('serve.ps1','release.json','NOTICE','LICENSE','dist/pmo-tool.html','tools/portable-common.ps1','tools/update-runtime.ps1')
-    $allowedPrefixes = @('templates/factory/','samples/')
-    $allowedDirectories = @('dist','tools','templates','templates/factory','samples')
+    $allowedFiles = @($ArquivosPermitidos)
+    $allowedDirectories = @($DiretoriosPermitidos)
+    # Prefixo sem barra final casaria com irmaos ('templates/factoryX/').
+    $allowedPrefixes = @()
+    foreach ($prefixoBruto in @($PrefixosPermitidos)) {
+        $prefixoNormalizado = ([string]$prefixoBruto).Replace('\','/')
+        if ([string]::IsNullOrWhiteSpace($prefixoNormalizado)) { continue }
+        if (-not $prefixoNormalizado.EndsWith('/')) { $prefixoNormalizado = $prefixoNormalizado + '/' }
+        $allowedPrefixes += $prefixoNormalizado
+    }
+    # Nao parametrizavel: e a fronteira do G11 e vale para qualquer pacote,
+    # presente ou futuro. Bloqueio vence allowlist em todos os casos abaixo.
     $blockedPrefixes = @('data/','config/','state/','logs/','staging/','versions/')
     $seen = @{}
     $errors = @()
@@ -447,8 +462,20 @@ function Test-PmoArchive {
 }
 
 function Expand-PmoArchiveSafe {
-    param([Parameter(Mandatory=$true)][string]$ZipPath,[Parameter(Mandatory=$true)][string]$Destination)
-    $check = Test-PmoArchive $ZipPath
+    param(
+        [Parameter(Mandatory=$true)][string]$ZipPath,
+        [Parameter(Mandatory=$true)][string]$Destination,
+        [string[]]$ArquivosPermitidos,
+        [string[]]$PrefixosPermitidos,
+        [string[]]$DiretoriosPermitidos
+    )
+    # Revalida com a allowlist do chamador. Sem os parametros, cai no default de
+    # runtime e o comportamento historico permanece intacto.
+    $regrasArquivo = @{}
+    foreach ($nomeRegra in @('ArquivosPermitidos','PrefixosPermitidos','DiretoriosPermitidos')) {
+        if ($PSBoundParameters.ContainsKey($nomeRegra)) { $regrasArquivo[$nomeRegra] = $PSBoundParameters[$nomeRegra] }
+    }
+    $check = Test-PmoArchive $ZipPath @regrasArquivo
     if (-not $check.ok) { throw ('ZIP rejeitado: ' + ($check.errors -join '; ')) }
     $destinationFull = [System.IO.Path]::GetFullPath($Destination)
     if (Test-Path -LiteralPath $destinationFull) {

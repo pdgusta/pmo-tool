@@ -99,6 +99,27 @@ de `versions/`, recusa reparse points, valida versão/canal/plataforma e contrat
 `activeReleaseManifestSha256` e o inventário completo de tamanho/hash sem arquivos extras. O modo
 `development` usa validação estrutural separada e não representa uma instalação distribuída.
 
+## Materialização de uma instalação
+
+Existe uma única implementação de como uma instalação é montada:
+`Install-PmoPortableFromPackages`, em `tools/install-common.ps1`. Ela recebe o pacote de runtime
+e o de bootstrap, monta um staging irmão do destino, valida cada pacote com a allowlist
+correspondente, gera `install.json`, `active.json` e `update.json` com o pin
+`activeReleaseManifestSha256` calculado do runtime real, confere o inventário completo e comita
+por rename. Falha em qualquer ponto remove o staging e não toca no destino.
+
+`tools/New-PortableInstall.ps1` constrói os dois pacotes a partir do checkout e chama essa
+função; qualquer origem que traga os mesmos pacotes prontos chama exatamente a mesma função. É o
+que garante que instalações de origens diferentes tenham o mesmo layout, o mesmo inventário e o
+mesmo pin.
+
+O bootstrap carrega `pmo.ps1`, `atualizar.ps1`, `bootstrap.json`, `LICENSE`, `NOTICE` e
+`tools/portable-common.ps1`. Esses arquivos ficam fora do pacote de runtime por construção: é
+isso que impede um update regular de substituir script de raiz. `Test-PmoArchive` aceita a
+allowlist como parâmetro justamente porque os dois pacotes têm conteúdos legítimos diferentes;
+a lista de prefixos bloqueados (`data/`, `config/`, `state/`, `logs/`, `staging/`, `versions/`)
+não é parametrizável e vence qualquer allowlist informada pelo chamador.
+
 ## Origem e instância
 
 A origem é sempre `http://localhost:8090`. Se a porta estiver ocupada, o launcher falha com

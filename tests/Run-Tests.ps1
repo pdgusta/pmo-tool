@@ -17,6 +17,7 @@ $testDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $raiz = Split-Path -Parent $testDir
 $modeloPath = Join-Path (Join-Path (Join-Path $raiz 'src') 'js') '10-model.js'
 . (Join-Path (Join-Path $raiz 'tools') 'portable-common.ps1')
+. (Join-Path (Join-Path $raiz 'tools') 'install-common.ps1')
 
 if ([string]::IsNullOrWhiteSpace($NodePath)) {
     $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
@@ -154,6 +155,7 @@ try {
         (Join-Path $raiz 'atualizar.ps1'),
         (Join-Path (Join-Path $raiz 'tools') 'portable-common.ps1'),
         (Join-Path (Join-Path $raiz 'tools') 'update-runtime.ps1'),
+        (Join-Path (Join-Path $raiz 'tools') 'install-common.ps1'),
         (Join-Path (Join-Path $raiz 'tools') 'New-PortableInstall.ps1'),
         (Join-Path (Join-Path $raiz 'tools') 'New-ReleasePackage.ps1'),
         (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1'),
@@ -261,6 +263,23 @@ try {
     Criar-ZipComEntrada $zipBomb 'samples/bomb.bin' $zeros
     Assert-Throws { & (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1') -ZipPath $zipBomb -MaxCompressionRatio 10 } 'Razao de compressao' 'ZIP com razao de compressao abusiva'
 
+    # A allowlist virou parametro; o bloqueio de diretorios persistentes nao.
+    # Nenhum chamador pode liberar data/, config/, state/, logs/, staging/ ou
+    # versions/ passando a propria lista (G11).
+    $zipDataLiberado = Join-Path $tempDir 'allowlist-data-liberado.zip'
+    Criar-ZipComEntrada $zipDataLiberado 'data/portfolio.json'
+    $checkDataLiberado = Test-PmoArchive $zipDataLiberado -ArquivosPermitidos @('data/portfolio.json')
+    if ($checkDataLiberado.ok) { throw 'Prefixo bloqueado nao pode ser liberado pela allowlist do chamador.' }
+
+    # Prefixo informado sem barra final nao pode liberar um diretorio irmao de
+    # mesmo comeco; a normalizacao acrescenta a barra.
+    $zipIrmao = Join-Path $tempDir 'allowlist-prefixo-irmao.zip'
+    Criar-ZipComEntrada $zipIrmao 'samplesX/a.json'
+    $checkIrmao = Test-PmoArchive $zipIrmao -PrefixosPermitidos @('samples')
+    if ($checkIrmao.ok) { throw 'Prefixo sem barra nao pode liberar diretorio irmao.' }
+    $checkPrefixoProprio = Test-PmoArchive $zipIrmao -PrefixosPermitidos @('samplesX')
+    if (-not $checkPrefixoProprio.ok) { throw ('Prefixo informado deveria aceitar o proprio diretorio: ' + ($checkPrefixoProprio.errors -join '; ')) }
+
     Write-Host '5/6 Atomicidade e limites do instalador portatil' -ForegroundColor Cyan
     $insideSource = Join-Path $raiz ('.portable-install-forbidden-' + [Guid]::NewGuid().ToString('N'))
     Assert-Throws {
@@ -285,6 +304,8 @@ try {
     if (Test-Path -LiteralPath $failedDestination) { throw 'Falha anterior ao commit deixou destino parcial visivel.' }
     $leftoverStaging = @(Get-ChildItem -LiteralPath $tempDir -Directory -Filter '.pmo-install-staging-*' -ErrorAction SilentlyContinue)
     Assert-Igual 0 $leftoverStaging.Count 'Falha de instalacao deve limpar o staging irmao.'
+    $leftoverBuild = @(Get-ChildItem -LiteralPath $tempDir -Directory -Filter '.pmo-install-build-*' -ErrorAction SilentlyContinue)
+    Assert-Igual 0 $leftoverBuild.Count 'Falha de instalacao deve limpar a area de build irma.'
 
     Write-Host '6/6 Instalacao portatil inicial sem dados' -ForegroundColor Cyan
     $portable = Join-Path $tempDir 'portable-install'
@@ -300,6 +321,8 @@ try {
     if (Test-Path -LiteralPath (Join-Path $portable '.bootstrap-artifacts')) { throw 'Artefatos intermediarios nao podem aparecer no destino final.' }
     $leftoverStaging = @(Get-ChildItem -LiteralPath $tempDir -Directory -Filter '.pmo-install-staging-*' -ErrorAction SilentlyContinue)
     Assert-Igual 0 $leftoverStaging.Count 'Commit concluido nao deve deixar staging irmao.'
+    $leftoverBuild = @(Get-ChildItem -LiteralPath $tempDir -Directory -Filter '.pmo-install-build-*' -ErrorAction SilentlyContinue)
+    Assert-Igual 0 $leftoverBuild.Count 'Commit concluido nao deve deixar area de build irma.'
     if (Test-Path -LiteralPath (Join-Path $portable 'data\portfolio.json')) { throw 'Instalacao inicial nao pode copiar portfolio sem -IncludeCurrentData.' }
     $activePortable = [System.IO.File]::ReadAllText((Join-Path $portable 'state\active.json'), [System.Text.Encoding]::UTF8) | ConvertFrom-Json
     Assert-Igual $Version ([string]$activePortable.activeVersion) 'Versao ativa da instalacao portatil.'
@@ -310,6 +333,73 @@ try {
     if ($installErrors.Count -gt 0) { throw ('Inventario da instalacao final diverge: ' + ($installErrors -join '; ')) }
     $runtimeZipCheck = Test-PmoArchive $zipA
     if (-not $runtimeZipCheck.ok) { throw ('portable-common rejeitou o ZIP valido: ' + ($runtimeZipCheck.errors -join '; ')) }
+
+    # Materializacao compartilhada: montar a mesma instalacao a partir de um
+    # pacote de bootstrap, que e o caminho usado por quem baixa de uma release.
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $bootstrapSrc = Join-Path $tempDir 'bootstrap-src'
+    New-Item -ItemType Directory -Path (Join-Path $bootstrapSrc 'tools') -Force | Out-Null
+    foreach ($nome in @('pmo.ps1','atualizar.ps1','bootstrap.json','LICENSE','NOTICE')) {
+        Copy-Item -LiteralPath (Join-Path $raiz $nome) -Destination (Join-Path $bootstrapSrc $nome)
+    }
+    Copy-Item -LiteralPath (Join-Path (Join-Path $raiz 'tools') 'portable-common.ps1') `
+              -Destination (Join-Path (Join-Path $bootstrapSrc 'tools') 'portable-common.ps1')
+    $bootstrapZip = Join-Path $tempDir 'bootstrap.zip'
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($bootstrapSrc, $bootstrapZip)
+
+    # As duas allowlists precisam se recusar mutuamente: e exatamente por isso
+    # que o validador teve de aceitar parametro em vez de ganhar entradas.
+    $bootstrapSobRuntime = Test-PmoArchive $bootstrapZip
+    if ($bootstrapSobRuntime.ok) { throw 'Allowlist de runtime nao pode aceitar o pacote de bootstrap.' }
+    $regrasBootstrap = Get-PmoBootstrapArchiveRules
+    $bootstrapCheck = Test-PmoArchive $bootstrapZip @regrasBootstrap
+    if (-not $bootstrapCheck.ok) { throw ('Allowlist de bootstrap rejeitou o proprio pacote: ' + ($bootstrapCheck.errors -join '; ')) }
+    $runtimeSobBootstrap = Test-PmoArchive $zipA @regrasBootstrap
+    if ($runtimeSobBootstrap.ok) { throw 'Allowlist de bootstrap nao pode aceitar o pacote de runtime.' }
+
+    $portableZip = Join-Path $tempDir 'portable-install-zip'
+    $resultadoZip = Install-PmoPortableFromPackages -RuntimeZip $zipA -BootstrapZip $bootstrapZip `
+        -Destination $portableZip -Versao $Version -Repositorio ''
+    Assert-Igual (Get-PmoNormalizedFullPath $portableZip) ([string]$resultadoZip.Destination) 'Materializacao deve devolver o destino canonico.'
+    if (Test-Path -LiteralPath (Join-Path $portableZip '.pmo-bootstrap-extract')) { throw 'Extracao do bootstrap nao pode sobreviver ao commit.' }
+
+    $layoutLocal = @(Get-PmoDirectoryInventory $portable | ForEach-Object { [string]$_.path }) | Sort-Object
+    $layoutZip = @(Get-PmoDirectoryInventory $portableZip | ForEach-Object { [string]$_.path }) | Sort-Object
+    Assert-Igual ($layoutLocal -join '|') ($layoutZip -join '|') 'Instalacao por pacote de bootstrap deve ter o mesmo layout da local.'
+
+    $manifestZip = Read-PmoJson (Join-Path $portableZip 'portable-install-manifest.json') $null
+    if (-not $manifestZip -or -not $manifestZip.files) { throw 'Instalacao por pacote sem inventario final.' }
+    $errosZip = Test-PmoInventory $portableZip $manifestZip.files -AllowedExtra @('portable-install-manifest.json')
+    if ($null -eq $errosZip) { $errosZip = @() }
+    if ($errosZip.Count -gt 0) { throw ('Inventario da instalacao por pacote diverge: ' + ($errosZip -join '; ')) }
+    $activeZip = [System.IO.File]::ReadAllText((Join-Path $portableZip 'state\active.json'), [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    Assert-Igual ([string]$activePortable.activeReleaseManifestSha256) ([string]$activeZip.activeReleaseManifestSha256) 'Pin do runtime deve ser identico nas duas instalacoes.'
+    Assert-Igual ([string]$activePortable.activeSchemaVersion) ([string]$activeZip.activeSchemaVersion) 'Schema ativo deve ser identico nas duas instalacoes.'
+
+    $bootstrapExtra = Join-Path $tempDir 'bootstrap-extra'
+    Copy-PmoDirectoryDurable -Source $bootstrapSrc -Destination $bootstrapExtra
+    [System.IO.File]::WriteAllText((Join-Path $bootstrapExtra 'extra.txt'), 'x', (New-Object System.Text.UTF8Encoding($false)))
+    $bootstrapExtraZip = Join-Path $tempDir 'bootstrap-extra.zip'
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($bootstrapExtra, $bootstrapExtraZip)
+    $destinoExtra = Join-Path $tempDir 'portable-extra'
+    Assert-Throws {
+        Install-PmoPortableFromPackages -RuntimeZip $zipA -BootstrapZip $bootstrapExtraZip -Destination $destinoExtra -Versao $Version
+    } 'Bootstrap rejeitado' 'Bootstrap com arquivo fora do layout'
+    if (Test-Path -LiteralPath $destinoExtra) { throw 'Bootstrap recusado nao pode deixar destino parcial.' }
+
+    $bootstrapFalta = Join-Path $tempDir 'bootstrap-falta'
+    Copy-PmoDirectoryDurable -Source $bootstrapSrc -Destination $bootstrapFalta
+    Remove-Item -LiteralPath (Join-Path $bootstrapFalta 'atualizar.ps1') -Force
+    $bootstrapFaltaZip = Join-Path $tempDir 'bootstrap-falta.zip'
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($bootstrapFalta, $bootstrapFaltaZip)
+    $destinoFalta = Join-Path $tempDir 'portable-falta'
+    Assert-Throws {
+        Install-PmoPortableFromPackages -RuntimeZip $zipA -BootstrapZip $bootstrapFaltaZip -Destination $destinoFalta -Versao $Version
+    } 'arquivo obrigatorio' 'Bootstrap sem script de raiz obrigatorio'
+    if (Test-Path -LiteralPath $destinoFalta) { throw 'Bootstrap incompleto nao pode deixar destino parcial.' }
+
+    $leftoverStaging = @(Get-ChildItem -LiteralPath $tempDir -Directory -Filter '.pmo-install-staging-*' -ErrorAction SilentlyContinue)
+    Assert-Igual 0 $leftoverStaging.Count 'Materializacao recusada deve limpar o staging irmao.'
 
     $diagnosticResult = Invoke-PmoExternal $portable @('-Diagnostico')
     if ($diagnosticResult.ExitCode -ne 0) { throw ('Diagnostico da instalacao portatil falhou: ' + $diagnosticResult.Output) }
