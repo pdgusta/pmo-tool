@@ -100,6 +100,54 @@ function Criar-ZipComEntrada([string] $Caminho, [string] $NomeEntrada, [byte[]] 
     }
 }
 
+<#
+    Extrai do proprio update-runtime.ps1 as condicoes que interpretam o
+    manifesto externo. Testar o predicado real, e nao uma transcricao dele,
+    e o que torna a prova de retrocompatibilidade honesta: se o updater mudar,
+    o teste passa a exercitar a versao nova.
+#>
+function Obter-CondicoesManifestoUpdater([string] $Caminho) {
+    $tokens = $null
+    $erros = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Caminho, [ref]$tokens, [ref]$erros)
+    if ($erros.Count -gt 0) { throw "update-runtime.ps1 nao pode ser analisado: $($erros[0])" }
+    $condicoes = @()
+    foreach ($no in @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] }, $true))) {
+        foreach ($clausula in $no.Clauses) {
+            $texto = $clausula.Item1.Extent.Text
+            # \b evita casar $externalManifestPath, que e o arquivo baixado e
+            # nao o manifesto ja interpretado.
+            if ($texto -match '\$externalManifest\b') { $condicoes += $texto }
+        }
+    }
+    return $condicoes
+}
+
+# Empacota somente arquivos: entradas explicitas de diretorio sao recusadas
+# pelos validadores, e o objetivo aqui e testar allowlist, nao esse detalhe.
+function Criar-ZipDeDiretorio([string] $Origem, [string] $Destino) {
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    if (Test-Path -LiteralPath $Destino) { Remove-Item -LiteralPath $Destino -Force }
+    $raizOrigem = [System.IO.Path]::GetFullPath($Origem).TrimEnd('\') + '\'
+    $stream = [System.IO.File]::Open($Destino, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    $zip = $null
+    try {
+        $zip = New-Object System.IO.Compression.ZipArchive($stream, [System.IO.Compression.ZipArchiveMode]::Create, $false)
+        foreach ($arquivo in @(Get-ChildItem -LiteralPath $Origem -File -Recurse | Sort-Object FullName)) {
+            $relativo = $arquivo.FullName.Substring($raizOrigem.Length).Replace('\','/')
+            $entrada = $zip.CreateEntry($relativo, [System.IO.Compression.CompressionLevel]::Optimal)
+            $origemStream = [System.IO.File]::OpenRead($arquivo.FullName)
+            $destinoStream = $entrada.Open()
+            try { $origemStream.CopyTo($destinoStream) } finally { $destinoStream.Dispose(); $origemStream.Dispose() }
+        }
+    }
+    finally {
+        if ($null -ne $zip) { $zip.Dispose() }
+        $stream.Dispose()
+    }
+}
+
 function Alterar-ReleaseNoZip([string]$Origem,[string]$Destino,[string]$Padrao,[string]$Substituicao) {
     Copy-Item -LiteralPath $Origem -Destination $Destino
     Add-Type -AssemblyName System.IO.Compression
@@ -159,6 +207,7 @@ try {
         (Join-Path (Join-Path $raiz 'tools') 'New-PortableInstall.ps1'),
         (Join-Path (Join-Path $raiz 'tools') 'New-ReleasePackage.ps1'),
         (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1'),
+        (Join-Path (Join-Path $raiz 'tools') 'Test-BootstrapPackage.ps1'),
         (Join-Path $testDir 'Invoke-ModelMigrationTests.ps1'),
         $MyInvocation.MyCommand.Path
     )) {
@@ -239,6 +288,64 @@ try {
     $hashZip = (Get-FileHash -LiteralPath $zipA -Algorithm SHA256).Hash.ToLowerInvariant()
     Assert-Igual ($hashZip + '  ' + $zipNome) $linhaSha 'Arquivo .sha256 deve ancorar o ZIP.'
 
+    # Artefatos novos: bootstrap e helper. Os tres antigos ficam inalterados em
+    # nome e contrato; estes sao acrescimo.
+    $bootstrapNome = "pmo-tool-$Version-bootstrap.zip"
+    $helperNome = 'portable-common.ps1'
+    $bootstrapA = Join-Path $releaseA $bootstrapNome
+    $bootstrapB = Join-Path $releaseB $bootstrapNome
+    $helperA = Join-Path $releaseA $helperNome
+    Assert-Igual (Get-FileHash -LiteralPath $bootstrapA -Algorithm SHA256).Hash (Get-FileHash -LiteralPath $bootstrapB -Algorithm SHA256).Hash 'Pacote de bootstrap deve ser reproduzivel.'
+    Assert-Igual (Get-FileHash -LiteralPath (Join-Path (Join-Path $raiz 'tools') 'portable-common.ps1') -Algorithm SHA256).Hash `
+                 (Get-FileHash -LiteralPath $helperA -Algorithm SHA256).Hash 'Helper publicado deve ser o proprio portable-common.ps1.'
+    Assert-Igual 5 @(Get-ChildItem -LiteralPath $releaseA -File).Count 'A release deve produzir exatamente cinco artefatos.'
+    & (Join-Path (Join-Path $raiz 'tools') 'Test-BootstrapPackage.ps1') -ZipPath $bootstrapA -ManifestPath $manifestoA
+
+    # Contrato do manifesto estendido, do ponto de vista do instalador.
+    $manifestoNovo = [System.IO.File]::ReadAllText($manifestoA, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    $contrato = Assert-PmoReleaseManifest $manifestoNovo $Version
+    Assert-Igual $zipNome ([string]$contrato.Runtime.Name) 'Contrato deve resolver o artefato de runtime.'
+    Assert-Igual $bootstrapNome ([string]$contrato.Bootstrap.Name) 'Contrato deve resolver o artefato de bootstrap.'
+    Assert-Igual $helperNome ([string]$contrato.Helper.Name) 'Contrato deve resolver o helper.'
+    Assert-Igual ((Get-Item -LiteralPath $bootstrapA).Length) ([Int64]$contrato.Bootstrap.Size) 'Tamanho do bootstrap no manifesto.'
+
+    # Um manifesto no formato antigo tem de ser recusado pelo caminho novo.
+    $fixturePublicado = Join-Path (Join-Path $testDir 'fixtures') 'manifests\v1.4.1-publicado.json'
+    $manifestoAntigo = [System.IO.File]::ReadAllText($fixturePublicado, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    Assert-Throws { Assert-PmoReleaseManifest $manifestoAntigo } 'bootstrapArtifact' 'Manifesto sem os campos novos'
+
+    # ... e o manifesto novo tem de conter tudo o que o publicado tinha, com a
+    # mesma forma. Retrocompatibilidade e acrescimo, nunca renomeacao.
+    foreach ($prop in $manifestoAntigo.PSObject.Properties) {
+        if (-not ($manifestoNovo.PSObject.Properties.Name -contains $prop.Name)) {
+            throw "Manifesto novo perdeu a propriedade publicada '$($prop.Name)'."
+        }
+        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+            foreach ($sub in $prop.Value.PSObject.Properties) {
+                if (-not ($manifestoNovo.$($prop.Name).PSObject.Properties.Name -contains $sub.Name)) {
+                    throw "Manifesto novo perdeu '$($prop.Name).$($sub.Name)'."
+                }
+            }
+        }
+    }
+
+    # Retrocompatibilidade com o updater da v1.4.1: as condicoes reais que ele
+    # aplica ao manifesto externo, extraidas do proprio script, avaliadas
+    # contra o manifesto novo. Nenhuma pode disparar.
+    $extractCompat = Join-Path $tempDir 'compat-runtime'
+    Expand-PmoArchiveSafe $zipA $extractCompat
+    $condicoesUpdater = @(Obter-CondicoesManifestoUpdater (Join-Path (Join-Path $raiz 'tools') 'update-runtime.ps1'))
+    if ($condicoesUpdater.Count -lt 3) { throw "Esperava ao menos tres condicoes de manifesto no updater; achei $($condicoesUpdater.Count)." }
+    $externalManifest = $manifestoNovo
+    $extract = $extractCompat
+    $versionText = $Version
+    $expectedSha = $hashZip
+    $asset = [pscustomobject]@{ name = $zipNome; size = [Int64](Get-Item -LiteralPath $zipA).Length }
+    foreach ($condicao in $condicoesUpdater) {
+        $resultado = & ([scriptblock]::Create($condicao))
+        if ($resultado) { throw "O updater da v1.4.1 recusaria o manifesto estendido: $condicao" }
+    }
+
     Write-Host '4/6 Rejeicoes de seguranca' -ForegroundColor Cyan
     $zipData = Join-Path $tempDir 'forbidden-data.zip'
     Criar-ZipComEntrada $zipData 'data/portfolio.json'
@@ -250,7 +357,10 @@ try {
 
     $manifestoAdulterado = Join-Path $tempDir 'tampered-manifest.json'
     $textoManifesto = [System.IO.File]::ReadAllText($manifestoA, [System.Text.Encoding]::UTF8)
-    $textoManifesto = [regex]::Replace($textoManifesto, '(?i)("sha256"\s*:\s*")[0-9a-f]{64}', ('${1}' + ('0' * 64)), 1)
+    # O 4o argumento de [regex]::Replace estatico e RegexOptions, nao contagem:
+    # usar a instancia para adulterar somente o sha256 de 'artifact'.
+    $regexSha = New-Object System.Text.RegularExpressions.Regex('("sha256"\s*:\s*")[0-9a-f]{64}', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $textoManifesto = $regexSha.Replace($textoManifesto, ('${1}' + ('0' * 64)), 1)
     [System.IO.File]::WriteAllText($manifestoAdulterado, $textoManifesto, (New-Object System.Text.UTF8Encoding($false)))
     Assert-Throws { & (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1') -ZipPath $zipA -ManifestPath $manifestoAdulterado } 'diverge' 'Manifesto externo adulterado'
 
@@ -279,6 +389,54 @@ try {
     if ($checkIrmao.ok) { throw 'Prefixo sem barra nao pode liberar diretorio irmao.' }
     $checkPrefixoProprio = Test-PmoArchive $zipIrmao -PrefixosPermitidos @('samplesX')
     if (-not $checkPrefixoProprio.ok) { throw ('Prefixo informado deveria aceitar o proprio diretorio: ' + ($checkPrefixoProprio.errors -join '; ')) }
+
+    # Os dois validadores sao independentes: cada um recusa o pacote do outro.
+    $ferramentas = Join-Path $raiz 'tools'
+    Assert-Throws { & (Join-Path $ferramentas 'Test-BootstrapPackage.ps1') -ZipPath $zipA } 'allowlist de bootstrap' 'Runtime submetido ao validador de bootstrap'
+    Assert-Throws { & (Join-Path $ferramentas 'Test-ReleasePackage.ps1') -ZipPath $bootstrapA } 'allowlist de runtime' 'Bootstrap submetido ao validador de runtime'
+
+    $regrasBootstrap = Get-PmoBootstrapArchiveRules
+    $bootstrapSujoDir = Join-Path $tempDir 'bootstrap-sujo'
+    Expand-PmoArchiveSafe $bootstrapA $bootstrapSujoDir @regrasBootstrap
+    [System.IO.File]::WriteAllText((Join-Path $bootstrapSujoDir 'extra.txt'), 'x', (New-Object System.Text.UTF8Encoding($false)))
+    $bootstrapSujoZip = Join-Path $tempDir 'bootstrap-sujo.zip'
+    Criar-ZipDeDiretorio $bootstrapSujoDir $bootstrapSujoZip
+    Assert-Throws { & (Join-Path $ferramentas 'Test-BootstrapPackage.ps1') -ZipPath $bootstrapSujoZip } 'allowlist de bootstrap' 'Bootstrap com arquivo extra'
+
+    Remove-Item -LiteralPath (Join-Path $bootstrapSujoDir 'extra.txt') -Force
+    Remove-Item -LiteralPath (Join-Path $bootstrapSujoDir 'tools\install-common.ps1') -Force
+    $bootstrapFaltaZip = Join-Path $tempDir 'bootstrap-sem-install-common.zip'
+    Criar-ZipDeDiretorio $bootstrapSujoDir $bootstrapFaltaZip
+    Assert-Throws { & (Join-Path $ferramentas 'Test-BootstrapPackage.ps1') -ZipPath $bootstrapFaltaZip } 'obrigatorio ausente' 'Bootstrap sem install-common.ps1'
+
+    # Adulterar o hash de um artefato nao pode contaminar a validacao do outro:
+    # bootstrap integro com runtime corrompido no manifesto continua valido, e
+    # vice-versa.
+    $textoManifestoNovo = [System.IO.File]::ReadAllText($manifestoA, [System.Text.Encoding]::UTF8)
+    $manifestoBootstrapRuim = Join-Path $tempDir 'manifesto-bootstrap-adulterado.json'
+    [System.IO.File]::WriteAllText($manifestoBootstrapRuim,
+        [regex]::Replace($textoManifestoNovo, '(?s)("bootstrapArtifact".*?"sha256"\s*:\s*")[0-9a-f]{64}', ('${1}' + ('0' * 64))),
+        (New-Object System.Text.UTF8Encoding($false)))
+    Assert-Throws { & (Join-Path $ferramentas 'Test-BootstrapPackage.ps1') -ZipPath $bootstrapA -ManifestPath $manifestoBootstrapRuim } 'diverge' 'Manifesto com bootstrap adulterado'
+    & (Join-Path $ferramentas 'Test-ReleasePackage.ps1') -ZipPath $zipA -ManifestPath $manifestoBootstrapRuim | Out-Null
+    & (Join-Path $ferramentas 'Test-BootstrapPackage.ps1') -ZipPath $bootstrapA -ManifestPath $manifestoAdulterado | Out-Null
+
+    # Nenhum artefato pode conter diretorio persistente nem dado de instalacao.
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    foreach ($pacote in @($zipA, $bootstrapA)) {
+        $inspecao = [System.IO.Compression.ZipFile]::OpenRead($pacote)
+        try {
+            foreach ($entrada in $inspecao.Entries) {
+                $nomeEntrada = ([string]$entrada.FullName).Replace('\','/').ToLowerInvariant()
+                foreach ($proibido in @('data/','config/','state/','logs/','staging/','versions/')) {
+                    if ($nomeEntrada.StartsWith($proibido)) { throw "Artefato $([System.IO.Path]::GetFileName($pacote)) contem caminho persistente: $nomeEntrada" }
+                }
+                foreach ($proibido in @('install.json','active.json','update.json','portfolio.json','portable-install-manifest.json')) {
+                    if ($nomeEntrada.EndsWith($proibido)) { throw "Artefato $([System.IO.Path]::GetFileName($pacote)) contem dado de instalacao: $nomeEntrada" }
+                }
+            }
+        } finally { $inspecao.Dispose() }
+    }
 
     Write-Host '5/6 Atomicidade e limites do instalador portatil' -ForegroundColor Cyan
     $insideSource = Join-Path $raiz ('.portable-install-forbidden-' + [Guid]::NewGuid().ToString('N'))
@@ -334,24 +492,17 @@ try {
     $runtimeZipCheck = Test-PmoArchive $zipA
     if (-not $runtimeZipCheck.ok) { throw ('portable-common rejeitou o ZIP valido: ' + ($runtimeZipCheck.errors -join '; ')) }
 
-    # Materializacao compartilhada: montar a mesma instalacao a partir de um
-    # pacote de bootstrap, que e o caminho usado por quem baixa de uma release.
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $bootstrapSrc = Join-Path $tempDir 'bootstrap-src'
-    New-Item -ItemType Directory -Path (Join-Path $bootstrapSrc 'tools') -Force | Out-Null
-    foreach ($nome in @('pmo.ps1','atualizar.ps1','bootstrap.json','LICENSE','NOTICE')) {
-        Copy-Item -LiteralPath (Join-Path $raiz $nome) -Destination (Join-Path $bootstrapSrc $nome)
-    }
-    Copy-Item -LiteralPath (Join-Path (Join-Path $raiz 'tools') 'portable-common.ps1') `
-              -Destination (Join-Path (Join-Path $bootstrapSrc 'tools') 'portable-common.ps1')
-    $bootstrapZip = Join-Path $tempDir 'bootstrap.zip'
-    [System.IO.Compression.ZipFile]::CreateFromDirectory($bootstrapSrc, $bootstrapZip)
+    # Materializacao compartilhada a partir do pacote de bootstrap real da
+    # release - o mesmo artefato que uma maquina nova baixaria do GitHub.
+    $bootstrapZip = $bootstrapA
+    $bootstrapSrc = Join-Path $tempDir 'bootstrap-real'
+    $regrasBootstrap = Get-PmoBootstrapArchiveRules
+    Expand-PmoArchiveSafe $bootstrapZip $bootstrapSrc @regrasBootstrap
 
     # As duas allowlists precisam se recusar mutuamente: e exatamente por isso
     # que o validador teve de aceitar parametro em vez de ganhar entradas.
     $bootstrapSobRuntime = Test-PmoArchive $bootstrapZip
     if ($bootstrapSobRuntime.ok) { throw 'Allowlist de runtime nao pode aceitar o pacote de bootstrap.' }
-    $regrasBootstrap = Get-PmoBootstrapArchiveRules
     $bootstrapCheck = Test-PmoArchive $bootstrapZip @regrasBootstrap
     if (-not $bootstrapCheck.ok) { throw ('Allowlist de bootstrap rejeitou o proprio pacote: ' + ($bootstrapCheck.errors -join '; ')) }
     $runtimeSobBootstrap = Test-PmoArchive $zipA @regrasBootstrap
@@ -380,7 +531,7 @@ try {
     Copy-PmoDirectoryDurable -Source $bootstrapSrc -Destination $bootstrapExtra
     [System.IO.File]::WriteAllText((Join-Path $bootstrapExtra 'extra.txt'), 'x', (New-Object System.Text.UTF8Encoding($false)))
     $bootstrapExtraZip = Join-Path $tempDir 'bootstrap-extra.zip'
-    [System.IO.Compression.ZipFile]::CreateFromDirectory($bootstrapExtra, $bootstrapExtraZip)
+    Criar-ZipDeDiretorio $bootstrapExtra $bootstrapExtraZip
     $destinoExtra = Join-Path $tempDir 'portable-extra'
     Assert-Throws {
         Install-PmoPortableFromPackages -RuntimeZip $zipA -BootstrapZip $bootstrapExtraZip -Destination $destinoExtra -Versao $Version
@@ -391,7 +542,7 @@ try {
     Copy-PmoDirectoryDurable -Source $bootstrapSrc -Destination $bootstrapFalta
     Remove-Item -LiteralPath (Join-Path $bootstrapFalta 'atualizar.ps1') -Force
     $bootstrapFaltaZip = Join-Path $tempDir 'bootstrap-falta.zip'
-    [System.IO.Compression.ZipFile]::CreateFromDirectory($bootstrapFalta, $bootstrapFaltaZip)
+    Criar-ZipDeDiretorio $bootstrapFalta $bootstrapFaltaZip
     $destinoFalta = Join-Path $tempDir 'portable-falta'
     Assert-Throws {
         Install-PmoPortableFromPackages -RuntimeZip $zipA -BootstrapZip $bootstrapFaltaZip -Destination $destinoFalta -Versao $Version

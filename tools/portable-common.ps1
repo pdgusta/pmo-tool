@@ -364,6 +364,76 @@ function Test-PmoInventory {
     return $errors
 }
 
+<#
+    Contrato do manifesto externo de uma release.
+
+    Vive aqui, e nao em install-common.ps1, por causa da ordem de confianca do
+    instalador: ele baixa o manifesto e este helper, confere o helper pelo
+    digest do proprio GitHub, carrega-o e so entao interpreta o manifesto. O
+    pacote de bootstrap - que traz install-common.ps1 - ainda nem foi baixado
+    nesse ponto.
+
+    Fail-closed: um manifesto sem os artefatos novos e recusado, e nenhum nome
+    de artefato pode conter separador de caminho, porque ele vira nome de
+    arquivo em disco.
+#>
+function Assert-PmoReleaseManifest {
+    param(
+        [Parameter(Mandatory=$true)]$Manifesto,
+        [string]$VersaoEsperada
+    )
+    function Obter-Campo($Objeto, [string]$Nome, [string]$Contexto) {
+        if ($null -eq $Objeto -or -not ($Objeto.PSObject.Properties.Name -contains $Nome)) {
+            throw "$Contexto sem propriedade obrigatoria '$Nome'."
+        }
+        return $Objeto.$Nome
+    }
+    function Obter-Artefato($Raiz, [string]$Campo) {
+        $art = Obter-Campo $Raiz $Campo 'manifesto externo'
+        $nome = [string](Obter-Campo $art 'name' "manifesto externo.$Campo")
+        $tam = [Int64](Obter-Campo $art 'size' "manifesto externo.$Campo")
+        $sha = ([string](Obter-Campo $art 'sha256' "manifesto externo.$Campo")).ToLowerInvariant()
+        if ([string]::IsNullOrWhiteSpace($nome) -or $nome.Contains('/') -or $nome.Contains('\') -or
+            $nome.Contains(':') -or $nome -eq '.' -or $nome -eq '..' -or $nome.Length -gt 128) {
+            throw "Nome de artefato invalido em $Campo`: $nome"
+        }
+        if ($tam -le 0) { throw "Tamanho invalido em $Campo`: $tam" }
+        if ($sha -notmatch '^[0-9a-f]{64}$') { throw "SHA-256 invalido em $Campo." }
+        return [pscustomobject]@{ Name = $nome; Size = $tam; Sha256 = $sha }
+    }
+
+    if ([int](Obter-Campo $Manifesto 'formatVersion' 'manifesto externo') -ne 1) { throw 'formatVersion do manifesto nao suportado.' }
+    if ([string](Obter-Campo $Manifesto 'product' 'manifesto externo') -ne 'PMO Tool') { throw 'Produto invalido no manifesto.' }
+    if ([string](Obter-Campo $Manifesto 'channel' 'manifesto externo') -ne 'stable') { throw 'Somente o canal stable e aceito.' }
+    $versao = [string](Obter-Campo $Manifesto 'version' 'manifesto externo')
+    if ($versao -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw "Versao estavel invalida no manifesto: $versao" }
+    if (-not [string]::IsNullOrWhiteSpace($VersaoEsperada) -and $versao -ne $VersaoEsperada) {
+        throw "Manifesto declara $versao; esperado $VersaoEsperada."
+    }
+
+    $runtime = Obter-Artefato $Manifesto 'artifact'
+    $bootstrap = Obter-Artefato $Manifesto 'bootstrapArtifact'
+    $helper = Obter-Artefato $Manifesto 'helperArtifact'
+    if ($runtime.Name -cne "pmo-tool-$versao-windows.zip") { throw "Nome do artefato de runtime fora do contrato: $($runtime.Name)" }
+    if ($bootstrap.Name -cne "pmo-tool-$versao-bootstrap.zip") { throw "Nome do artefato de bootstrap fora do contrato: $($bootstrap.Name)" }
+    if ($helper.Name -cne 'portable-common.ps1') { throw "Nome do helper fora do contrato: $($helper.Name)" }
+
+    $runtimeManifest = Obter-Campo $Manifesto 'runtimeManifest' 'manifesto externo'
+    if ([string](Obter-Campo $runtimeManifest 'path' 'manifesto externo.runtimeManifest') -ne 'release.json') {
+        throw 'Caminho do manifesto de runtime invalido.'
+    }
+    $shaRelease = ([string](Obter-Campo $runtimeManifest 'sha256' 'manifesto externo.runtimeManifest')).ToLowerInvariant()
+    if ($shaRelease -notmatch '^[0-9a-f]{64}$') { throw 'SHA-256 do release.json invalido no manifesto.' }
+
+    return [pscustomobject]@{
+        Version = $versao
+        Runtime = $runtime
+        Bootstrap = $bootstrap
+        Helper = $helper
+        RuntimeManifestSha256 = $shaRelease
+    }
+}
+
 function Test-PmoArchive {
     param(
         [Parameter(Mandatory=$true)][string]$ZipPath,

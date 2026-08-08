@@ -29,9 +29,15 @@ da máquina B; o runtime publicado continua sem dependências externas.
 
 - `pmo-tool-<semver>-windows.zip`;
 - `pmo-tool-<semver>-manifest.json`;
-- `pmo-tool-<semver>-windows.zip.sha256`.
+- `pmo-tool-<semver>-windows.zip.sha256`;
+- `pmo-tool-<semver>-bootstrap.zip`;
+- `portable-common.ps1`.
 
-O ZIP contém somente a allowlist:
+Os três primeiros são o contrato histórico e não mudam de nome nem de forma: o updater da v1.4.1
+depende deles exatamente como estão. Os dois últimos são acréscimo, consumidos apenas por quem
+instala do zero.
+
+O ZIP de runtime contém somente a allowlist:
 
 - `serve.ps1`;
 - `dist/pmo-tool.html`;
@@ -44,6 +50,24 @@ O ZIP contém somente a allowlist:
 
 O pacote nunca inclui `data/`, `config/`, `state/`, `logs/`, `staging/`, fontes, `.git` ou
 artefatos locais. Qualquer entrada fora da allowlist bloqueia a release.
+
+## Pacote de bootstrap e helper
+
+`pmo-tool-<semver>-bootstrap.zip` contém `pmo.ps1`, `atualizar.ps1`, `bootstrap.json`, `LICENSE`,
+`NOTICE`, `tools/portable-common.ps1` e `tools/install-common.ps1` — e nada mais. São justamente
+os arquivos que o ZIP de runtime **não** pode conter: mantê-los fora dele é o que impede um update
+regular de substituir script de raiz. Uma instalação nova precisa deles; uma instalação existente,
+nunca.
+
+`portable-common.ps1` viaja também como asset solto, sem versão no nome. Ele é a única coisa que
+um instalador consegue verificar antes de saber validar qualquer ZIP: baixa, confere o SHA-256
+contra o digest do próprio GitHub e contra o manifesto, e só então carrega. Com isso o instalador
+não precisa conter nenhum código de segurança de arquivo compactado.
+
+`tools/Test-BootstrapPackage.ps1` valida esse pacote com allowlist e limites próprios, e é
+independente de `Test-ReleasePackage.ps1`: cada um recusa o pacote do outro, e um artefato íntegro
+não diz nada sobre o outro. Os limites são menores por natureza — 8 MiB de arquivo, 64 entradas,
+4 MiB por entrada.
 
 ## Manifesto
 
@@ -62,6 +86,17 @@ de HTTPS do GitHub e release imutável.
 O inventário interno é completo: `release.json` declara todo arquivo do ZIP exceto ele próprio,
 sem ausências, extras ou duplicidades, com caminho, tamanho e SHA-256. O manifesto externo ancora
 nome, tamanho e SHA-256 do ZIP, SHA-256 do `release.json`, versão, commit e timestamp.
+
+O manifesto externo ganhou `bootstrapArtifact` e `helperArtifact`, irmãos de `artifact`, com o
+mesmo trio nome/tamanho/SHA-256. `artifact` e `runtimeManifest` permanecem intocados em nome e
+forma, e é por isso que um updater da v1.4.1 continua funcionando contra uma release nova: ele
+compara exatamente os campos que sempre comparou e ignora o que não conhece. Retrocompatibilidade
+aqui é acréscimo, nunca renomeação.
+
+`Assert-PmoReleaseManifest`, em `tools/portable-common.ps1`, é o contrato do lado de quem instala:
+exige os quatro artefatos, recusa nome com separador de caminho e confere que cada nome
+corresponde à versão declarada. Ele vive no helper, e não em `install-common.ps1`, por causa da
+ordem de confiança — o helper é carregado antes de o pacote de bootstrap existir na máquina.
 
 `tools/Test-ReleasePackage.ps1` valida nomes, allowlist, manifesto completo, hashes e segurança do
 ZIP. Além dos limites expandidos, limita o arquivo ZIP, cada entrada comprimida, o total comprimido

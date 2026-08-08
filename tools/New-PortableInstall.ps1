@@ -43,23 +43,17 @@ try {
     New-Item -ItemType Directory -Path $artifactDir | Out-Null
     & (Join-Path $scriptDir 'New-ReleasePackage.ps1') -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp -OutputDirectory $artifactDir
     $zip = Join-Path $artifactDir ("pmo-tool-$Version-windows.zip")
-    if (-not (Test-Path -LiteralPath $zip)) { throw 'Empacotador nao produziu o ZIP esperado.' }
-
-    # Bootstrap montado a partir do checkout, no mesmo layout que o pacote de
-    # bootstrap de uma release tera.
-    $bootstrapDir = Join-Path $workFull 'bootstrap'
-    $bootstrapTools = Join-Path $bootstrapDir 'tools'
-    New-Item -ItemType Directory -Path $bootstrapTools -Force | Out-Null
-    foreach ($name in @('pmo.ps1','atualizar.ps1','bootstrap.json','LICENSE','NOTICE')) {
-        Copy-Item -LiteralPath (Join-Path $sourceRoot $name) -Destination (Join-Path $bootstrapDir $name)
-    }
-    Copy-Item -LiteralPath $common -Destination (Join-Path $bootstrapTools 'portable-common.ps1')
+    $bootstrapZip = Join-Path $artifactDir ("pmo-tool-$Version-bootstrap.zip")
+    if (-not (Test-Path -LiteralPath $zip)) { throw 'Empacotador nao produziu o ZIP de runtime esperado.' }
+    if (-not (Test-Path -LiteralPath $bootstrapZip)) { throw 'Empacotador nao produziu o ZIP de bootstrap esperado.' }
 
     $dadosDe = ''
     if ($IncludeCurrentData) { $dadosDe = Join-Path $sourceRoot 'data' }
 
+    # Os mesmos artefatos que a release publica; nao existe caminho local que
+    # monte o bootstrap de outro jeito.
     $resultado = Install-PmoPortableFromPackages `
-        -RuntimeZip $zip -BootstrapDir $bootstrapDir -Destination $Destination `
+        -RuntimeZip $zip -BootstrapZip $bootstrapZip -Destination $Destination `
         -Versao $Version -Repositorio $Repository -SourceRoot $sourceRoot -IncluirDadosDe $dadosDe
 
     Write-Host "Instalacao portatil criada em $($resultado.Destination)" -ForegroundColor Green
