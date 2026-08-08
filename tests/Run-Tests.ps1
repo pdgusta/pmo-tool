@@ -148,6 +148,77 @@ function Criar-ZipDeDiretorio([string] $Origem, [string] $Destino) {
     }
 }
 
+<#
+    Importa uma funcao do instalador para o escopo do teste. O instalador nao e
+    dot-sourceavel (ele executa ao ser carregado), entao vale o mesmo idioma que
+    Test-UpdaterRecovery.ps1 ja usa com o updater.
+#>
+function Import-FuncaoInstalador([string] $Nome) {
+    $tokens = $null
+    $erros = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $raiz 'tools\pmo-instalar.ps1'), [ref]$tokens, [ref]$erros)
+    if ($erros.Count -gt 0) { throw "Instalador com erro de parse: $($erros[0].Message)" }
+    $definicao = @($ast.FindAll({ param($no) $no -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $no.Name -eq $Nome }, $true)) | Select-Object -First 1
+    if (-not $definicao) { throw "Funcao $Nome nao encontrada no instalador." }
+    $corpo = $definicao.Body.Extent.Text
+    $corpo = $corpo.Substring(1, $corpo.Length - 2)
+    Set-Item -Path ('Function:\script:' + $Nome) -Value ([scriptblock]::Create($corpo))
+}
+
+function Invoke-Instalador([string[]] $Arguments) {
+    $script = Join-Path (Join-Path $raiz 'tools') 'pmo-instalar.ps1'
+    $anterior = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $linhas = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script @Arguments 2>&1 | ForEach-Object { [string]$_ })
+        $codigo = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $anterior }
+    return [pscustomobject]@{ ExitCode = $codigo; Output = ($linhas -join [Environment]::NewLine) }
+}
+
+<#
+    Servidor local que responde exatamente o status pedido no caminho. Serve
+    para produzir WebException reais - com HttpWebResponse de verdade - sem
+    depender de rede nem consumir o limite de taxa do GitHub. Nao usa a porta
+    8090: nao e a aplicacao, e sim um stub de teste.
+#>
+function Start-ServidorDeStatus([int] $Porta, [int] $Requisicoes) {
+    $job = Start-Job -ScriptBlock {
+        param($p, $n)
+        $listener = New-Object System.Net.HttpListener
+        $listener.Prefixes.Add("http://localhost:$p/")
+        $listener.Start()
+        try {
+            for ($i = 0; $i -lt $n; $i++) {
+                $ctx = $listener.GetContext()
+                $rota = $ctx.Request.Url.AbsolutePath
+                $corpo = [System.Text.Encoding]::UTF8.GetBytes('{"message":"stub"}')
+                $ctx.Response.ContentType = 'application/json'
+                if ($rota -eq '/403') { $ctx.Response.StatusCode = 403 }
+                elseif ($rota -eq '/404') { $ctx.Response.StatusCode = 404 }
+                else {
+                    $ctx.Response.StatusCode = 200
+                    $ctx.Response.ContentType = 'text/html'
+                    $corpo = [System.Text.Encoding]::UTF8.GetBytes('<html>isto nao e json</html>')
+                }
+                $ctx.Response.OutputStream.Write($corpo, 0, $corpo.Length)
+                $ctx.Response.Close()
+            }
+        }
+        finally { $listener.Stop(); $listener.Close() }
+    } -ArgumentList $Porta, $Requisicoes
+    return $job
+}
+
+function Get-PortaLivre {
+    $tcp = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
+    $tcp.Start()
+    $porta = $tcp.LocalEndpoint.Port
+    $tcp.Stop()
+    return $porta
+}
+
 function Alterar-ReleaseNoZip([string]$Origem,[string]$Destino,[string]$Padrao,[string]$Substituicao) {
     Copy-Item -LiteralPath $Origem -Destination $Destino
     Add-Type -AssemblyName System.IO.Compression
@@ -195,7 +266,7 @@ if (-not $tempDir.StartsWith($tempBase, [StringComparison]::OrdinalIgnoreCase)) 
 
 try {
     New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-    Write-Host '1/6 Sintaxe Windows PowerShell 5.1 e contratos JSON' -ForegroundColor Cyan
+    Write-Host '1/7 Sintaxe Windows PowerShell 5.1 e contratos JSON' -ForegroundColor Cyan
     foreach ($script in @(
         (Join-Path $raiz 'build.ps1'),
         (Join-Path $raiz 'serve.ps1'),
@@ -208,6 +279,7 @@ try {
         (Join-Path (Join-Path $raiz 'tools') 'New-ReleasePackage.ps1'),
         (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1'),
         (Join-Path (Join-Path $raiz 'tools') 'Test-BootstrapPackage.ps1'),
+        (Join-Path (Join-Path $raiz 'tools') 'pmo-instalar.ps1'),
         (Join-Path $testDir 'Invoke-ModelMigrationTests.ps1'),
         $MyInvocation.MyCommand.Path
     )) {
@@ -259,7 +331,7 @@ try {
     Assert-Igual $true (Test-PmoPathEqualOrSubPath $volumeRoot $tempDir) 'Raiz do volume deve conter o diretorio temporario.'
     Assert-Igual $volumeRoot (Assert-PmoPathWithoutReparse $volumeRoot) 'Guard de reparse deve preservar a raiz absoluta.'
 
-    Write-Host '2/6 Build reproduzivel' -ForegroundColor Cyan
+    Write-Host '2/7 Build reproduzivel' -ForegroundColor Cyan
     $buildA = Join-Path $tempDir 'build-a.html'
     $buildB = Join-Path $tempDir 'build-b.html'
     & (Join-Path $raiz 'build.ps1') -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp -OutputPath $buildA
@@ -270,7 +342,7 @@ try {
     $hashBuildB = (Get-FileHash -LiteralPath $buildB -Algorithm SHA256).Hash
     Assert-Igual $hashBuildA $hashBuildB 'Dois builds com as mesmas entradas devem ser identicos.'
 
-    Write-Host '3/6 Pacote deterministico e manifesto' -ForegroundColor Cyan
+    Write-Host '3/7 Pacote deterministico e manifesto' -ForegroundColor Cyan
     $releaseA = Join-Path $tempDir 'release-a'
     $releaseB = Join-Path $tempDir 'release-b'
     & (Join-Path (Join-Path $raiz 'tools') 'New-ReleasePackage.ps1') -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp -OutputDirectory $releaseA
@@ -346,7 +418,7 @@ try {
         if ($resultado) { throw "O updater da v1.4.1 recusaria o manifesto estendido: $condicao" }
     }
 
-    Write-Host '4/6 Rejeicoes de seguranca' -ForegroundColor Cyan
+    Write-Host '4/7 Rejeicoes de seguranca' -ForegroundColor Cyan
     $zipData = Join-Path $tempDir 'forbidden-data.zip'
     Criar-ZipComEntrada $zipData 'data/portfolio.json'
     Assert-Throws { & (Join-Path (Join-Path $raiz 'tools') 'Test-ReleasePackage.ps1') -ZipPath $zipData } 'allowlist' 'ZIP contendo data/'
@@ -438,7 +510,7 @@ try {
         } finally { $inspecao.Dispose() }
     }
 
-    Write-Host '5/6 Atomicidade e limites do instalador portatil' -ForegroundColor Cyan
+    Write-Host '5/7 Atomicidade e limites do instalador portatil' -ForegroundColor Cyan
     $insideSource = Join-Path $raiz ('.portable-install-forbidden-' + [Guid]::NewGuid().ToString('N'))
     Assert-Throws {
         & (Join-Path (Join-Path $raiz 'tools') 'New-PortableInstall.ps1') -Destination $insideSource -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp
@@ -465,7 +537,7 @@ try {
     $leftoverBuild = @(Get-ChildItem -LiteralPath $tempDir -Directory -Filter '.pmo-install-build-*' -ErrorAction SilentlyContinue)
     Assert-Igual 0 $leftoverBuild.Count 'Falha de instalacao deve limpar a area de build irma.'
 
-    Write-Host '6/6 Instalacao portatil inicial sem dados' -ForegroundColor Cyan
+    Write-Host '6/7 Instalacao portatil inicial sem dados' -ForegroundColor Cyan
     $portable = Join-Path $tempDir 'portable-install'
     New-Item -ItemType Directory -Path $portable | Out-Null
     & (Join-Path (Join-Path $raiz 'tools') 'New-PortableInstall.ps1') -Destination $portable -Version $Version -Commit $Commit -BuildTimestamp $BuildTimestamp
@@ -649,6 +721,173 @@ try {
         [System.IO.File]::AppendAllText($runtimeServePath,"`n# tamper-test`n",(New-Object System.Text.UTF8Encoding($false)))
         Assert-PmoExternalFails $portable @('-SemAtualizacao') 'tamanho divergente|hash divergente' 'arquivo do runtime adulterado'
     } finally { [System.IO.File]::WriteAllBytes($runtimeServePath,$runtimeServeBytes) }
+
+    Write-Host '7/7 Instalador pelo GitHub' -ForegroundColor Cyan
+    # A suite roda offline. Os erros de rede sao produzidos por um stub local
+    # que devolve status reais, para nao depender do GitHub nem gastar o limite
+    # de taxa dele.
+    Import-FuncaoInstalador 'Assert-UrlGitHub'
+    Import-FuncaoInstalador 'Converter-FalhaDeRede'
+    Import-FuncaoInstalador 'Find-Asset'
+    Import-FuncaoInstalador 'Assert-ReleaseEstavel'
+
+    # Resposta 200 que nao e uma release estavel: nao gera erro de rede, entao
+    # a recusa tem de vir da validacao de forma.
+    $releaseBoa = [pscustomobject]@{ tag_name = 'v1.5.0'; assets = @(); draft = $false; prerelease = $false; immutable = $true }
+    Assert-Igual '1.5.0' ([string](Assert-ReleaseEstavel $releaseBoa).Versao) 'Release estavel valida deve resolver a versao.'
+    Assert-Throws { Assert-ReleaseEstavel $null } 'vazio' 'Resposta vazia'
+    Assert-Throws { Assert-ReleaseEstavel ([pscustomobject]@{ mensagem = 'nao sou release' }) } "sem 'tag_name'" 'Resposta sem forma de release'
+    Assert-Throws { Assert-ReleaseEstavel ([pscustomobject]@{ tag_name = 'v1.5.0'; assets = @(); draft = $true; immutable = $true }) } 'draft' 'Release em draft'
+    Assert-Throws { Assert-ReleaseEstavel ([pscustomobject]@{ tag_name = 'v1.5.0'; assets = @(); prerelease = $true; immutable = $true }) } 'prerelease' 'Release em prerelease'
+    Assert-Throws { Assert-ReleaseEstavel ([pscustomobject]@{ tag_name = 'v1.5.0'; assets = @() }) } 'imutavel' 'Release sem marca de imutabilidade'
+    Assert-Throws { Assert-ReleaseEstavel ([pscustomobject]@{ tag_name = 'v1.5.0'; assets = @(); immutable = $false }) } 'imutavel' 'Release mutavel'
+    Assert-Throws { Assert-ReleaseEstavel ([pscustomobject]@{ tag_name = '1.5.0'; assets = @(); immutable = $true }) } 'padrao vX.Y.Z' 'Tag sem prefixo v'
+
+    foreach ($urlBoa in @('https://github.com/owner/repo/releases/download/v1/a.zip',
+                          'https://objects.githubusercontent.com/x/y')) {
+        $null = Assert-UrlGitHub $urlBoa
+    }
+    Assert-Throws { Assert-UrlGitHub 'http://github.com/a' } 'somente HTTPS' 'Download por HTTP'
+    Assert-Throws { Assert-UrlGitHub 'https://githubb.com/a' } 'host inesperado' 'Download de host parecido'
+    Assert-Throws { Assert-UrlGitHub 'https://github.com.exemplo.net/a' } 'host inesperado' 'Download de host com sufixo forjado'
+    Assert-Throws { Assert-UrlGitHub 'nao-e-url' } 'invalida' 'URL malformada'
+
+    $portaStub = Get-PortaLivre
+    $jobStub = Start-ServidorDeStatus $portaStub 2
+    try {
+        $pronto = $false
+        foreach ($tentativa in 1..40) {
+            try {
+                $sonda = New-Object System.Net.Sockets.TcpClient
+                $sonda.Connect('127.0.0.1', $portaStub)
+                $sonda.Close()
+                $pronto = $true
+                break
+            } catch { Start-Sleep -Milliseconds 250 }
+        }
+        if (-not $pronto) { throw 'O stub HTTP de teste nao subiu.' }
+
+        $capturar = {
+            param($rota)
+            $erro = $null
+            try { Invoke-RestMethod -UseBasicParsing -Uri "http://localhost:$portaStub/$rota" -TimeoutSec 10 | Out-Null }
+            catch { $erro = $_ }
+            if ($null -eq $erro) { throw "A rota $rota deveria ter falhado." }
+            return $erro
+        }
+        $msg403 = Converter-FalhaDeRede (& $capturar '403') 'ctx'
+        if ($msg403 -notmatch 'limite' -or $msg403 -notmatch '403') { throw "403 nao virou mensagem de limite de taxa: $msg403" }
+        $msg404 = Converter-FalhaDeRede (& $capturar '404') 'ctx'
+        if ($msg404 -notmatch 'Nao encontrado' -or $msg404 -notmatch 'Repositorio') { throw "404 nao virou mensagem acionavel: $msg404" }
+    }
+    finally {
+        Stop-Job -Job $jobStub -ErrorAction SilentlyContinue
+        Remove-Job -Job $jobStub -Force -ErrorAction SilentlyContinue
+    }
+
+    # Timeout e DNS: WebException real, construida com o status correspondente.
+    $erroTimeout = New-Object System.Management.Automation.ErrorRecord(
+        (New-Object System.Net.WebException('t', $null, [System.Net.WebExceptionStatus]::Timeout, $null)), 'x', 'NotSpecified', $null)
+    if ((Converter-FalhaDeRede $erroTimeout 'ctx') -notmatch 'expirou') { throw 'Timeout nao virou mensagem propria.' }
+    $erroDns = New-Object System.Management.Automation.ErrorRecord(
+        (New-Object System.Net.WebException('d', $null, [System.Net.WebExceptionStatus]::NameResolutionFailure, $null)), 'x', 'NotSpecified', $null)
+    if ((Converter-FalhaDeRede $erroDns 'ctx') -notmatch 'resolver') { throw 'Falha de DNS nao virou mensagem propria.' }
+
+    $assetsFalsos = @(
+        [pscustomobject]@{ name = 'bom.zip'; size = 10; digest = ('sha256:' + ('a' * 64)); browser_download_url = 'https://github.com/x' },
+        [pscustomobject]@{ name = 'sem-digest.zip'; size = 10; browser_download_url = 'https://github.com/x' },
+        [pscustomobject]@{ name = 'digest-torto.zip'; size = 10; digest = 'md5:abc'; browser_download_url = 'https://github.com/x' }
+    )
+    $null = Find-Asset $assetsFalsos 'bom.zip' 1MB
+    Assert-Throws { Find-Asset $assetsFalsos 'inexistente.zip' 1MB } 'exatamente um asset' 'Asset ausente'
+    Assert-Throws { Find-Asset $assetsFalsos 'sem-digest.zip' 1MB } 'digest SHA-256' 'Asset sem digest'
+    Assert-Throws { Find-Asset $assetsFalsos 'digest-torto.zip' 1MB } 'formato inesperado' 'Asset com digest invalido'
+    Assert-Throws { Find-Asset $assetsFalsos 'bom.zip' 5 } 'fora do limite' 'Asset maior que o limite'
+
+    # Instalacao real a partir dos artefatos ja construidos nesta suite.
+    $pacoteLocal = Join-Path $tempDir 'pacote-local'
+    New-Item -ItemType Directory -Path $pacoteLocal | Out-Null
+    foreach ($artefato in @(Get-ChildItem -LiteralPath $releaseA -File)) {
+        Copy-Item -LiteralPath $artefato.FullName -Destination (Join-Path $pacoteLocal $artefato.Name)
+    }
+
+    $destinoInstalador = Join-Path $tempDir 'instalado'
+    $resInstalar = Invoke-Instalador @('-PacoteLocal', $pacoteLocal, '-InstallDir', $destinoInstalador, '-Repositorio', 'exemplo/pmo-tool')
+    if ($resInstalar.ExitCode -ne 0) { throw ('Instalador falhou: ' + $resInstalar.Output) }
+
+    # A instalacao produzida tem de ser indistinguivel da do gerador local,
+    # exceto pelo log que o proprio instalador deposita em logs/.
+    $semLogs = { param($r) @(Get-PmoDirectoryInventory $r | Where-Object { -not ([string]$_.path).StartsWith('logs/') }) }
+    $invLocal = & $semLogs $portable
+    $invInstalado = & $semLogs $destinoInstalador
+    $caminhosLocal = @($invLocal | ForEach-Object { [string]$_.path }) | Sort-Object
+    $caminhosInstalado = @($invInstalado | ForEach-Object { [string]$_.path }) | Sort-Object
+    Assert-Igual ($caminhosLocal -join '|') ($caminhosInstalado -join '|') 'Instalacao pelo instalador deve ter o mesmo layout da local.'
+    $activeInstalado = [System.IO.File]::ReadAllText((Join-Path $destinoInstalador 'state\active.json'), [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    Assert-Igual ([string]$activePortable.activeReleaseManifestSha256) ([string]$activeInstalado.activeReleaseManifestSha256) 'Pin do runtime deve coincidir com a instalacao local.'
+    $installInstalado = Read-PmoJson (Join-Path $destinoInstalador 'config\install.json') $null
+    Assert-Igual 'exemplo/pmo-tool' ([string]$installInstalado.repository) 'Repositorio informado deve chegar ao install.json.'
+    $logsInstalados = @(Get-ChildItem -LiteralPath (Join-Path $destinoInstalador 'logs') -File -Filter 'pmo-instalar-*.log')
+    Assert-Igual 1 $logsInstalados.Count 'O log da instalacao deve migrar do TEMP para logs/.'
+    $conteudoLog = [System.IO.File]::ReadAllText($logsInstalados[0].FullName, [System.Text.Encoding]::UTF8)
+    if ($conteudoLog -notmatch 'diagnostico ok') { throw 'O log nao registra o diagnostico obrigatorio.' }
+
+    # Reexecucao sobre instalacao valida: somente leitura, orienta -Atualizar.
+    $inventarioAntes = @(Get-PmoDirectoryInventory $destinoInstalador | ForEach-Object { "$($_.path)|$($_.sha256)" }) | Sort-Object
+    $resRepetir = Invoke-Instalador @('-PacoteLocal', $pacoteLocal, '-InstallDir', $destinoInstalador, '-Repositorio', 'exemplo/pmo-tool')
+    Assert-Igual 0 $resRepetir.ExitCode 'Reexecucao sobre instalacao valida nao e erro.'
+    if ($resRepetir.Output -notmatch '-Atualizar') { throw 'Reexecucao deveria orientar o uso de -Atualizar.' }
+    $inventarioDepois = @(Get-PmoDirectoryInventory $destinoInstalador | ForEach-Object { "$($_.path)|$($_.sha256)" }) | Sort-Object
+    Assert-Igual ($inventarioAntes -join "`n") ($inventarioDepois -join "`n") 'Reexecucao deve ser estritamente somente leitura.'
+
+    # Destino ocupado por conteudo alheio permanece byte a byte intacto.
+    $destinoOcupado = Join-Path $tempDir 'destino-ocupado'
+    New-Item -ItemType Directory -Path $destinoOcupado | Out-Null
+    $sentinelaInstalador = Join-Path $destinoOcupado 'nao-toque.txt'
+    [System.IO.File]::WriteAllText($sentinelaInstalador, 'preservar', (New-Object System.Text.UTF8Encoding($false)))
+    $hashSentinela = (Get-FileHash -LiteralPath $sentinelaInstalador -Algorithm SHA256).Hash
+    $resOcupado = Invoke-Instalador @('-PacoteLocal', $pacoteLocal, '-InstallDir', $destinoOcupado)
+    if ($resOcupado.ExitCode -eq 0) { throw 'Destino ocupado por conteudo alheio deveria ser recusado.' }
+    Assert-Igual $hashSentinela (Get-FileHash -LiteralPath $sentinelaInstalador -Algorithm SHA256).Hash 'Destino recusado deve permanecer byte a byte intacto.'
+    Assert-Igual 1 @(Get-ChildItem -LiteralPath $destinoOcupado -Force).Count 'Destino recusado nao pode ganhar arquivos.'
+
+    # Pacote adulterado e pacote truncado: os dois reprovam contra o manifesto.
+    foreach ($caso in @(
+        @{ nome = 'adulterado'; acao = { param($p) $b = [System.IO.File]::ReadAllBytes($p); $b[$b.Length - 1] = [byte](($b[$b.Length - 1] + 1) % 256); [System.IO.File]::WriteAllBytes($p, $b) } },
+        @{ nome = 'truncado';   acao = { param($p) $b = [System.IO.File]::ReadAllBytes($p); [System.IO.File]::WriteAllBytes($p, [byte[]]($b[0..($b.Length - 64)])) } }
+    )) {
+        $pacoteRuim = Join-Path $tempDir ('pacote-' + $caso.nome)
+        New-Item -ItemType Directory -Path $pacoteRuim | Out-Null
+        foreach ($artefato in @(Get-ChildItem -LiteralPath $pacoteLocal -File)) {
+            Copy-Item -LiteralPath $artefato.FullName -Destination (Join-Path $pacoteRuim $artefato.Name)
+        }
+        & $caso.acao (Join-Path $pacoteRuim $zipNome)
+        $destinoRuim = Join-Path $tempDir ('destino-' + $caso.nome)
+        $resRuim = Invoke-Instalador @('-PacoteLocal', $pacoteRuim, '-InstallDir', $destinoRuim)
+        if ($resRuim.ExitCode -eq 0) { throw "Pacote $($caso.nome) deveria ter sido recusado." }
+        if ($resRuim.Output -notmatch 'Integridade') { throw "Pacote $($caso.nome) recusado por motivo inesperado: $($resRuim.Output)" }
+        if (Test-Path -LiteralPath $destinoRuim) { throw "Pacote $($caso.nome) deixou destino parcial." }
+    }
+
+    # Manifesto sem os campos novos - o formato da v1.4.1 - tem de ser recusado
+    # pelo instalador, nao so pela funcao de contrato.
+    $pacoteAntigo = Join-Path $tempDir 'pacote-manifesto-antigo'
+    New-Item -ItemType Directory -Path $pacoteAntigo | Out-Null
+    foreach ($artefato in @(Get-ChildItem -LiteralPath $pacoteLocal -File)) {
+        Copy-Item -LiteralPath $artefato.FullName -Destination (Join-Path $pacoteAntigo $artefato.Name)
+    }
+    $manifestoReduzido = [System.IO.File]::ReadAllText($manifestoA, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    $reduzido = [ordered]@{}
+    foreach ($campo in @('formatVersion', 'product', 'version', 'channel', 'commit', 'buildTimestamp', 'artifact', 'runtimeManifest')) {
+        $reduzido[$campo] = $manifestoReduzido.$campo
+    }
+    [System.IO.File]::WriteAllText((Join-Path $pacoteAntigo $manifestoNome), (($reduzido | ConvertTo-Json -Depth 12) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    $resAntigo = Invoke-Instalador @('-PacoteLocal', $pacoteAntigo, '-InstallDir', (Join-Path $tempDir 'destino-antigo'))
+    if ($resAntigo.ExitCode -eq 0) { throw 'Manifesto no formato antigo deveria ser recusado pelo instalador.' }
+    if ($resAntigo.Output -notmatch 'bootstrapArtifact') { throw "Recusa do manifesto antigo com motivo inesperado: $($resAntigo.Output)" }
+
+    $sobrasInstalador = @(Get-ChildItem -LiteralPath $tempBase -Directory -Filter 'pmo-instalar-*' -ErrorAction SilentlyContinue)
+    Assert-Igual 0 $sobrasInstalador.Count 'O instalador nao pode deixar area de trabalho em TEMP.'
 
     Write-Host "Todos os testes de build, release e portabilidade passaram para v$Version." -ForegroundColor Green
 }
