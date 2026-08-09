@@ -3,8 +3,10 @@
 Aplicação de **governança de portfólio** para PMO Leads. Inspirada em Oracle Primavera P6 EPPM
 (WBS, gates, EVM, dependências cross-project, baselines) e Monday.com (múltiplas views, edição
 inline, board). **Não** é ferramenta de micro-gestão: o detalhe de cronograma vive nos arquivos
-de projeto anexados (`.mpp`, `.xml`, `.xer`). A v1.4.1 acrescenta runtime portátil, releases
-imutáveis por versão e atualização transacional sem misturar código com dados do usuário.
+de projeto anexados (`.mpp`, `.xml`, `.xer`). A v1.4.1 acrescentou runtime portátil, releases
+imutáveis por versão e atualização transacional sem misturar código com dados do usuário. A v1.5.0
+acrescenta instalação direta pelo GitHub: a máquina nova baixa um único script e obtém uma
+instalação idêntica à que o gerador local produz.
 
 ---
 
@@ -115,6 +117,9 @@ pmo-tool/
   state/*.example.json       <- contratos versionados; estado real é ignorado
   docs/context/              <- L0, L1 e runbooks
   tools/                     <- pacote, instalação, update e validações
+    pmo-instalar.ps1         <- instala do GitHub; asset da release
+    install-common.ps1       <- materialização única de uma instalação
+    portable-common.ps1      <- helper compartilhado; asset da release
   src/
     shell.html               <- esqueleto com marcadores <!--@inject:...-->
     css/*.css                <- injetados em ordem alfabética
@@ -184,6 +189,7 @@ a fase durável do update. `release.json` declara versão, commit, build, contra
 ### Interfaces operacionais
 
 ```powershell
+.\pmo-instalar.ps1 -Repositorio OWNER/REPOSITORY
 .\pmo.ps1
 .\pmo.ps1 -Atualizar
 .\pmo.ps1 -SemAtualizacao
@@ -191,6 +197,12 @@ a fase durável do update. `release.json` declara versão, commit, build, contra
 .\pmo.ps1 -Rollback
 .\pmo.ps1 -RestaurarSnapshot <id>
 ```
+
+`pmo-instalar.ps1` é o único arquivo que uma máquina nova baixa. Ele não valida ZIP nem monta
+instalação por conta própria: baixa manifesto e `portable-common.ps1`, confere os dois contra o
+digest do GitHub, carrega o helper verificado, tira `install-common.ps1` do bootstrap validado e
+materializa com `Install-PmoPortableFromPackages` — a mesma função de `New-PortableInstall.ps1`.
+Existem exatamente duas origens de instalação, e as duas passam por essa função.
 
 O runtime portátil recebe `-DataDir`, `-ConfigDir`, `-StateDir`, `-Porta`, `-SemBuild`,
 `-SemBrowser`, `-HealthOnly` e `-AdminToken`. Rotas administrativas aceitam somente loopback e
@@ -209,6 +221,7 @@ O protocolo obrigatório está em `docs/context/README.md`: L0 descobre relevân
 `index.json`, L1 descreve arquitetura e L2 é a implementação/testes. Runbooks canônicos:
 
 - `docs/context/runbooks/publicar-release.md`;
+- `docs/context/runbooks/instalar-maquina-nova.md`;
 - `docs/context/runbooks/atualizar-maquina-b.md`;
 - `docs/context/runbooks/rollback-restauracao.md`;
 - `docs/context/runbooks/incidente-maquina-b.md`.

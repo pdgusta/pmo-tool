@@ -147,10 +147,12 @@ $bootstrapNome = "pmo-tool-$Version-bootstrap.zip"
 # O helper viaja sem versao no nome: o instalador o descobre pelo manifesto,
 # nao pelo nome, e precisa carrega-lo antes de saber validar qualquer ZIP.
 $helperNome = 'portable-common.ps1'
+$instaladorNome = 'pmo-instalar.ps1'
 $zipPath = Join-Path $OutputDirectory $zipNome
 $manifestoPath = Join-Path $OutputDirectory $manifestoNome
 $bootstrapPath = Join-Path $OutputDirectory $bootstrapNome
 $helperPath = Join-Path $OutputDirectory $helperNome
+$instaladorPath = Join-Path $OutputDirectory $instaladorNome
 $shaPath = $zipPath + '.sha256'
 
 try {
@@ -254,7 +256,7 @@ try {
         Copy-Item -LiteralPath $origem -Destination (Join-Path $bootstrapTools $nome)
     }
 
-    foreach ($alvo in @($zipPath, $manifestoPath, $shaPath, $bootstrapPath, $helperPath)) {
+    foreach ($alvo in @($zipPath, $manifestoPath, $shaPath, $bootstrapPath, $helperPath, $instaladorPath)) {
         if (Test-Path -LiteralPath $alvo -PathType Leaf) {
             Remove-Item -LiteralPath $alvo -Force
         }
@@ -273,6 +275,11 @@ try {
     Criar-ZipDeterministico $runtimeDir $zipPath $dataZip
     Criar-ZipDeterministico $bootstrapDir $bootstrapPath $dataZip
     Copy-Item -LiteralPath (Join-Path (Join-Path $raiz 'tools') 'portable-common.ps1') -Destination $helperPath
+    # O instalador vai solto e sem versao no nome: e o unico arquivo que uma
+    # maquina nova baixa, e a URL precisa ser previsivel. Ele nao entra no
+    # manifesto de proposito - o manifesto vem do mesmo canal e nao serviria
+    # para autentica-lo.
+    Copy-Item -LiteralPath (Join-Path (Join-Path $raiz 'tools') 'pmo-instalar.ps1') -Destination $instaladorPath
 
     $hashZip = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $hashRelease = (Get-FileHash -LiteralPath $releasePath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -319,6 +326,7 @@ try {
     Write-Host "  $([System.IO.Path]::GetFileName($shaPath))"
     Write-Host "  $bootstrapNome"
     Write-Host "  $helperNome"
+    Write-Host "  $instaladorNome"
 }
 finally {
     if (Test-Path -LiteralPath $tempDir -PathType Container) {

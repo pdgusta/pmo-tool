@@ -31,11 +31,18 @@ da máquina B; o runtime publicado continua sem dependências externas.
 - `pmo-tool-<semver>-manifest.json`;
 - `pmo-tool-<semver>-windows.zip.sha256`;
 - `pmo-tool-<semver>-bootstrap.zip`;
-- `portable-common.ps1`.
+- `portable-common.ps1`;
+- `pmo-instalar.ps1`.
 
 Os três primeiros são o contrato histórico e não mudam de nome nem de forma: o updater da v1.4.1
-depende deles exatamente como estão. Os dois últimos são acréscimo, consumidos apenas por quem
+depende deles exatamente como estão. Os três últimos são acréscimo, consumidos apenas por quem
 instala do zero.
+
+`pmo-instalar.ps1` é o único arquivo que uma máquina nova baixa, e por isso vai sem versão no nome:
+a URL precisa ser previsível. Ele **não** entra no manifesto. Um hash publicado no mesmo canal não
+autentica o arquivo que veio daquele canal; declará-lo daria uma falsa sensação de verificação.
+A garantia real é que o instalador é curto o suficiente para ser lido antes de executado, e que
+tudo o que ele carrega depois tem hash conferido.
 
 O ZIP de runtime contém somente a allowlist:
 
@@ -68,6 +75,27 @@ não precisa conter nenhum código de segurança de arquivo compactado.
 independente de `Test-ReleasePackage.ps1`: cada um recusa o pacote do outro, e um artefato íntegro
 não diz nada sobre o outro. Os limites são menores por natureza — 8 MiB de arquivo, 64 entradas,
 4 MiB por entrada.
+
+## Instalação a partir de uma release
+
+`tools/pmo-instalar.ps1` monta uma instalação nova baixando os artefatos da release. A ordem existe
+para resolver o problema do ovo e da galinha da confiança: ele baixa manifesto e helper, confere os
+dois contra o digest SHA-256 que a API do GitHub publica, carrega o helper já verificado e só então
+interpreta o manifesto e valida os pacotes. `install-common.ps1` sai do bootstrap validado, e a
+materialização é a mesma função que `New-PortableInstall.ps1` usa. O instalador não contém código
+próprio de validação de arquivo compactado nem de montagem de instalação.
+
+Ele recusa release em draft, prerelease ou ainda não imutável, aceita download só por HTTPS em host
+do GitHub, e trata `403` como limite de taxa por IP em vez de erro genérico. Reexecução sobre uma
+instalação válida é estritamente somente leitura e orienta `pmo.ps1 -Atualizar`.
+
+Uma instalação produzida pelo instalador é indistinguível de uma produzida pelo gerador local:
+mesmo layout, mesmo inventário e mesmo pin. A única diferença é o log da execução, depositado em
+`logs/` depois do commit.
+
+O procedimento humano está em `docs/context/runbooks/instalar-maquina-nova.md`, incluindo o
+pré-requisito de política de execução — que o script não consegue diagnosticar, porque
+`Get-ExecutionPolicy` só responde depois que algum script já executou.
 
 ## Manifesto
 
@@ -117,9 +145,15 @@ Windows e `shell: powershell`:
 3. exercita recuperação transacional com `tests/Test-UpdaterRecovery.ps1` e as APIs locais com
    `tests/Invoke-ServerIntegration.ps1`;
 4. compara versão da tag, app e manifesto;
-5. gera e testa o pacote reproduzível;
-6. em tag, cria uma GitHub Release em **draft**, anexa ZIP, manifesto e checksum e encerra sem
-   publicar.
+5. gera e testa os pacotes reproduzíveis, runtime e bootstrap;
+6. instala **offline** a partir dos artefatos recém-gerados com `-PacoteLocal` e roda
+   `pmo.ps1 -Diagnostico` na instalação resultante — o smoke test exercita os artefatos que seriam
+   publicados, não os que a suíte constrói para si;
+7. em tag, cria uma GitHub Release em **draft**, anexa os seis assets e encerra sem publicar.
+
+A conferência de assets é por **allowlist nominal**, não por contagem: nome a nome, um faltante ou
+um extra bloqueia a release. Contagem não diz se os arquivos são os certos e precisa ser mexida a
+cada artefato novo.
 
 Uma pessoa revisa o draft, as evidências e o plano de rollback. Somente então publica a release
 estável e imutável. Prerelease e draft nunca são oferecidos à máquina B.

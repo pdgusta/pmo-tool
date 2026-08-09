@@ -154,6 +154,7 @@
         "tools/New-ReleasePackage.ps1",
         "tools/Test-ReleasePackage.ps1",
         "tools/Test-BootstrapPackage.ps1",
+        "tools/pmo-instalar.ps1",
         "tests/fixtures/manifests/v1.4.1-publicado.json",
         ".github/workflows/release.yml",
         "tests/Run-Tests.ps1",
@@ -189,6 +190,19 @@
       "tags": ["github", "publicacao", "release", "runbook"],
       "criticality": "high",
       "dependsOn": ["build-release"]
+    },
+    {
+      "id": "runbook-instalar-maquina-nova",
+      "title": "Runbook de instalação em máquina nova",
+      "kind": "runbook",
+      "l0": "Procedimento para instalar do zero a partir de uma release do GitHub, incluindo pré-requisitos que o próprio script não consegue diagnosticar, verificação da instalação e o que fazer quando o destino já existe.",
+      "l1": "docs/context/runbooks/instalar-maquina-nova.md",
+      "l2": [
+        "tools/pmo-instalar.ps1"
+      ],
+      "tags": ["github", "instalacao", "maquina-nova", "runbook"],
+      "criticality": "high",
+      "dependsOn": ["build-release", "runtime-portatil"]
     },
     {
       "id": "runbook-atualizar-maquina-b",
@@ -317,6 +331,50 @@
         "release\\.json",
         "SHA256",
         "Arquivo sem hash no release\\.json"
+      ]
+    },
+    {
+      "id": "instalador-seguro",
+      "ownerId": "build-release",
+      "path": "tools/pmo-instalar.ps1",
+      "requiredPatterns": [
+        "function\\s+Assert-Preflight",
+        "function\\s+Assert-ReleaseEstavel",
+        "function\\s+Assert-UrlGitHub",
+        "function\\s+Find-Asset",
+        "function\\s+Receber-Asset",
+        "SecurityProtocolType\\]::Tls12",
+        "immutable",
+        "prerelease",
+        "Assert-PmoReleaseManifest",
+        "Install-PmoPortableFromPackages",
+        "-Diagnostico"
+      ]
+    },
+    {
+      "id": "materializacao-unica",
+      "ownerId": "runtime-portatil",
+      "path": "tools/install-common.ps1",
+      "requiredPatterns": [
+        "function\\s+Install-PmoPortableFromPackages",
+        "function\\s+Assert-PmoInstallDestination",
+        "function\\s+Assert-PmoBootstrapTree",
+        "function\\s+Get-PmoBootstrapArchiveRules",
+        "activeReleaseManifestSha256",
+        "Test-PmoInventory",
+        "Directory\\]::Move"
+      ]
+    },
+    {
+      "id": "contrato-manifesto-release",
+      "ownerId": "build-release",
+      "path": "tools/portable-common.ps1",
+      "requiredPatterns": [
+        "function\\s+Assert-PmoReleaseManifest",
+        "bootstrapArtifact",
+        "helperArtifact",
+        "\\[string\\[\\]\\]\\$ArquivosPermitidos",
+        "\\[string\\[\\]\\]\\$PrefixosPermitidos"
       ]
     },
     {

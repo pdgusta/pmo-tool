@@ -8,13 +8,13 @@ Uma aplicação para Windows, voltada a PMO Leads que precisam consolidar projet
 saúde, riscos, prazos, custos e preparar informações para comitês — sem enviar o portfólio para
 a nuvem.
 
-[Versão estável](https://github.com/pdgusta/pmo-tool/releases/tag/v1.4.1) ·
+[Versão estável](https://github.com/pdgusta/pmo-tool/releases/latest) ·
 [Instalação](#instalação) ·
 [Funcionalidades](#principais-benefícios-e-funcionalidades) ·
 [Atualização e recuperação](#atualizações-sem-perda-de-dados) ·
 [Suporte](#suporte-e-feedback)
 
-[![Versão estável](https://img.shields.io/github/v/release/pdgusta/pmo-tool?display_name=tag&label=vers%C3%A3o%20est%C3%A1vel)](https://github.com/pdgusta/pmo-tool/releases/tag/v1.4.1)
+[![Versão estável](https://img.shields.io/github/v/release/pdgusta/pmo-tool?display_name=tag&label=vers%C3%A3o%20est%C3%A1vel)](https://github.com/pdgusta/pmo-tool/releases/latest)
 ![Sistema: Windows](https://img.shields.io/badge/sistema-Windows-0078D4?logo=windows&logoColor=white)
 ![PowerShell 5.1 ou superior](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell&logoColor=white)
 ![Canal estável](https://img.shields.io/badge/canal-est%C3%A1vel-2E8B57)
@@ -23,10 +23,9 @@ a nuvem.
 
 </div>
 
-> **Importante — primeira instalação:** ela não é feita extraindo apenas o ZIP anexado à release.
-> Esse ZIP é o
-> runtime consumido pelo atualizador. A instalação portátil completa deve ser preparada em uma
-> máquina A com `tools/New-PortableInstall.ps1` e, depois, copiada integralmente para a máquina B.
+> **Importante — primeira instalação:** baixe **apenas** o `pmo-instalar.ps1` da release e execute.
+> Não monte a instalação extraindo o ZIP anexado: aquele ZIP é o runtime consumido pelo
+> atualizador, não uma instalação.
 
 ## O que é e para quem serve
 
@@ -109,39 +108,35 @@ OneDrive, SharePoint, pastas de rede e mídias removíveis estão fora do suport
 pasta local: a origem fixa e os diretórios persistentes fazem parte do contrato de segurança dos
 dados.
 
-### Primeira instalação portátil
+### Instalar
 
-Na **máquina A**, a pessoa responsável pela distribuição deve usar o código correspondente à
-[release estável v1.4.1](https://github.com/pdgusta/pmo-tool/releases/tag/v1.4.1). Na raiz desse
-código, execute:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\New-PortableInstall.ps1 `
-  -Destination "C:\PMO-Tool" `
-  -Repository "pdgusta/pmo-tool"
-```
-
-O destino precisa ser uma pasta nova ou vazia. O processo cria a instalação completa, incluindo o
-launcher estável, o runtime versionado e os diretórios persistentes. Por padrão, ele **não copia
-dados da máquina de desenvolvimento**.
-
-Use `-IncludeCurrentData` somente quando houver intenção explícita e autorização para transportar
-o portfólio, os anexos e os templates atuais:
+Baixe **apenas** o arquivo `pmo-instalar.ps1` da
+[release estável](https://github.com/pdgusta/pmo-tool/releases/latest) e execute:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\New-PortableInstall.ps1 `
-  -Destination "C:\PMO-Tool" `
-  -Repository "pdgusta/pmo-tool" `
-  -IncludeCurrentData
+powershell -NoProfile -ExecutionPolicy Bypass -File .\pmo-instalar.ps1 -Repositorio "pdgusta/pmo-tool"
 ```
 
-Depois da criação, copie a pasta `C:\PMO-Tool` **inteira** para uma pasta local e gravável da
-**máquina B**. Não monte a instalação da máquina B extraindo apenas o ZIP de runtime disponível na
-release.
+Sem indicar o destino, a instalação vai para `%LOCALAPPDATA%\PMO-Tool`. **Prefira esse destino.**
+Duas instalações do mesmo usuário compartilham o armazenamento do navegador em
+`http://localhost:8090`; a segunda detecta a divergência e abre em somente leitura. Para instalar
+em outro lugar, use `-InstallDir "D:\PMO-Tool"`; para fixar uma versão em vez da última estável,
+use `-Versao 1.5.0`.
 
-### Iniciar na máquina B
+O instalador baixa a release, confere o SHA-256 de cada arquivo contra o valor publicado pelo
+GitHub, instala em uma área temporária e só move para o destino final quando tudo passa. Ao final,
+ele executa um diagnóstico da instalação. Se qualquer etapa falhar antes desse ponto, nada é
+gravado no destino.
 
-Abra o PowerShell na raiz da instalação portátil e execute:
+Se o Windows recusar executar o arquivo baixado, libere-o explicitamente com
+`Unblock-File -LiteralPath .\pmo-instalar.ps1`. Se a política de execução for imposta por GPO como
+`AllSigned`, o instalador não roda e é preciso falar com quem administra a política — o projeto não
+assina código. O procedimento completo, com os pré-requisitos a verificar antes, está em
+[Instalar em uma máquina nova](docs/context/runbooks/instalar-maquina-nova.md).
+
+### Iniciar
+
+Abra o PowerShell na raiz da instalação e execute:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\pmo.ps1
@@ -149,6 +144,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\pmo.ps1
 
 O launcher abre a interface local em `http://localhost:8090`. Em usos futuros, continue iniciando
 por `pmo.ps1`; não execute diretamente o `serve.ps1` que existe dentro de uma versão.
+
+### Instalação sem acesso ao GitHub
+
+Quando a máquina de destino não alcança o GitHub, a instalação pode ser preparada em outra máquina,
+a partir do código-fonte, e copiada inteira:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\New-PortableInstall.ps1 `
+  -Destination "C:\PMO-Tool" `
+  -Repository "pdgusta/pmo-tool"
+```
+
+O destino precisa ser uma pasta nova ou vazia, e o resultado é idêntico ao do instalador — mesmo
+layout, mesmo inventário. Por padrão, ele **não copia dados da máquina de origem**; use
+`-IncludeCurrentData` apenas com intenção explícita e autorização para transportar portfólio,
+anexos e templates. Copie a pasta **inteira** para a máquina de destino.
 
 ## Primeiros passos
 
@@ -240,7 +251,10 @@ sincronizam dados entre si.
 ## Limitações conhecidas
 
 - Não há colaboração multiusuário simultânea, autenticação de usuários ou servidor compartilhado.
-- A instalação presume um usuário local e uma instância por vez.
+- A instalação presume um usuário local e uma instância por vez. Mais de uma instalação por usuário
+  e perfil de navegador está fora do suporte: elas dividem o mesmo armazenamento da origem fixa.
+- O instalador e os scripts não são assinados digitalmente. A confiança vem do HTTPS do GitHub, da
+  imutabilidade da release e da conferência de SHA-256 de cada arquivo baixado.
 - Não há sincronização de dados entre máquinas.
 - OneDrive, SharePoint, pastas de rede e mídias removíveis não são locais de instalação suportados inicialmente.
 - A porta `8090` é fixa; se estiver ocupada, a aplicação interrompe a inicialização em vez de mudar a origem.
@@ -269,6 +283,7 @@ Rollback de código e restauração de dados são decisões diferentes. Não esc
 pela data e não apague manualmente locks, staging, logs ou journals de recuperação. Antes de um
 procedimento sensível, siga os runbooks:
 
+- [Instalar em uma máquina nova](docs/context/runbooks/instalar-maquina-nova.md)
 - [Atualizar a máquina B](docs/context/runbooks/atualizar-maquina-b.md)
 - [Rollback e restauração](docs/context/runbooks/rollback-restauracao.md)
 - [Tratar incidente na máquina B](docs/context/runbooks/incidente-maquina-b.md)

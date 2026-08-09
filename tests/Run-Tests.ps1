@@ -370,7 +370,11 @@ try {
     Assert-Igual (Get-FileHash -LiteralPath $bootstrapA -Algorithm SHA256).Hash (Get-FileHash -LiteralPath $bootstrapB -Algorithm SHA256).Hash 'Pacote de bootstrap deve ser reproduzivel.'
     Assert-Igual (Get-FileHash -LiteralPath (Join-Path (Join-Path $raiz 'tools') 'portable-common.ps1') -Algorithm SHA256).Hash `
                  (Get-FileHash -LiteralPath $helperA -Algorithm SHA256).Hash 'Helper publicado deve ser o proprio portable-common.ps1.'
-    Assert-Igual 5 @(Get-ChildItem -LiteralPath $releaseA -File).Count 'A release deve produzir exatamente cinco artefatos.'
+    $artefatosEsperados = @($zipNome, "$zipNome.sha256", $manifestoNome, $bootstrapNome, $helperNome, 'pmo-instalar.ps1') | Sort-Object
+    $artefatosGerados = @(Get-ChildItem -LiteralPath $releaseA -File | ForEach-Object { $_.Name }) | Sort-Object
+    Assert-Igual ($artefatosEsperados -join '|') ($artefatosGerados -join '|') 'A release deve produzir exatamente os artefatos nomeados.'
+    Assert-Igual (Get-FileHash -LiteralPath (Join-Path (Join-Path $raiz 'tools') 'pmo-instalar.ps1') -Algorithm SHA256).Hash `
+                 (Get-FileHash -LiteralPath (Join-Path $releaseA 'pmo-instalar.ps1') -Algorithm SHA256).Hash 'Instalador publicado deve ser o proprio pmo-instalar.ps1.'
     & (Join-Path (Join-Path $raiz 'tools') 'Test-BootstrapPackage.ps1') -ZipPath $bootstrapA -ManifestPath $manifestoA
 
     # Contrato do manifesto estendido, do ponto de vista do instalador.
@@ -623,6 +627,13 @@ try {
 
     $leftoverStaging = @(Get-ChildItem -LiteralPath $tempDir -Directory -Filter '.pmo-install-staging-*' -ErrorAction SilentlyContinue)
     Assert-Igual 0 $leftoverStaging.Count 'Materializacao recusada deve limpar o staging irmao.'
+
+    # Sem -Version explicito, a instalacao tem de nascer na versao do modelo.
+    # Um default fixo no script envelheceria em silencio a cada release.
+    $portableAuto = Join-Path $tempDir 'portable-auto'
+    & (Join-Path (Join-Path $raiz 'tools') 'New-PortableInstall.ps1') -Destination $portableAuto -Commit $Commit -BuildTimestamp $BuildTimestamp
+    $activeAuto = [System.IO.File]::ReadAllText((Join-Path $portableAuto 'state\active.json'), [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    Assert-Igual $versaoFonte ([string]$activeAuto.activeVersion) 'Sem -Version, a instalacao deve usar APP_VERSION.'
 
     $diagnosticResult = Invoke-PmoExternal $portable @('-Diagnostico')
     if ($diagnosticResult.ExitCode -ne 0) { throw ('Diagnostico da instalacao portatil falhou: ' + $diagnosticResult.Output) }

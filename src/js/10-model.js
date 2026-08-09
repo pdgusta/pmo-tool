@@ -10,7 +10,7 @@
   const model = {};
 
   model.SCHEMA_VERSION = 4;
-  model.APP_VERSION = '1.4.1';
+  model.APP_VERSION = '1.5.0';
 
   /* ========================================================== stage-gate */
 
