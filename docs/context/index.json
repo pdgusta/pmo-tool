@@ -153,6 +153,8 @@
         "src/shell.html",
         "tools/New-ReleasePackage.ps1",
         "tools/Test-ReleasePackage.ps1",
+        "tools/Test-BootstrapPackage.ps1",
+        "tests/fixtures/manifests/v1.4.1-publicado.json",
         ".github/workflows/release.yml",
         "tests/Run-Tests.ps1",
         "tests/validate-built-html.mjs",

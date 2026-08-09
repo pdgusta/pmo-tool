@@ -1,0 +1,17 @@
+{
+    "formatVersion":  1,
+    "product":  "PMO Tool",
+    "version":  "1.4.1",
+    "channel":  "stable",
+    "commit":  "d0757b82bb6c95f990c0ae366590ddab822e8ff3",
+    "buildTimestamp":  "2026-08-03T10:52:36Z",
+    "artifact":  {
+                     "name":  "pmo-tool-1.4.1-windows.zip",
+                     "size":  314286,
+                     "sha256":  "28c2ff840872b69b7401c285d5b4e17e22b4db3d6ab7d09b4900df9966d15ad8"
+                 },
+    "runtimeManifest":  {
+                            "path":  "release.json",
+                            "sha256":  "5639a953afb0fd5edf010ac8205607c24653436e8ac57b1a66437cb08e10c241"
+                        }
+}

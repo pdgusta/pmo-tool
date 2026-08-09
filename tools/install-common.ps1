@@ -125,28 +125,24 @@ function Assert-PmoBootstrapTree {
 <#
     Monta a instalacao a partir dos dois pacotes e comita por rename.
 
-    O bootstrap chega como ZIP (caminho remoto) ou como diretorio ja
-    materializado (caminho local, onde os arquivos vem do proprio checkout).
-    Os dois convergem para a mesma arvore validada antes da copia.
+    Sempre a partir dos artefatos, nunca de um diretorio solto: e o que
+    garante que a instalacao local e a instalacao baixada de uma release
+    partam exatamente do mesmo material e passem pelas mesmas validacoes.
 #>
 function Install-PmoPortableFromPackages {
     param(
         [Parameter(Mandatory=$true)][string]$RuntimeZip,
+        [Parameter(Mandatory=$true)][string]$BootstrapZip,
         [Parameter(Mandatory=$true)][string]$Destination,
         [Parameter(Mandatory=$true)][string]$Versao,
-        [string]$BootstrapZip,
-        [string]$BootstrapDir,
         [string]$Repositorio = '',
         [string]$SourceRoot,
         [string]$IncluirDadosDe
     )
     Assert-PmoInstallCommonLoaded
 
-    $temZip = -not [string]::IsNullOrWhiteSpace($BootstrapZip)
-    $temDir = -not [string]::IsNullOrWhiteSpace($BootstrapDir)
-    if ($temZip -and $temDir) { throw 'Informe BootstrapZip ou BootstrapDir, nunca os dois.' }
-    if (-not $temZip -and -not $temDir) { throw 'Informe BootstrapZip ou BootstrapDir.' }
     if (-not (Test-Path -LiteralPath $RuntimeZip -PathType Leaf)) { throw 'Pacote de runtime inexistente.' }
+    if (-not (Test-Path -LiteralPath $BootstrapZip -PathType Leaf)) { throw 'Pacote de bootstrap inexistente.' }
 
     $destino = Assert-PmoInstallDestination -Destination $Destination -SourceRoot $SourceRoot
     $destinationFull = $destino.Full
@@ -175,19 +171,13 @@ function Install-PmoPortableFromPackages {
         if ([string]$runtimeManifest.version -ne $Versao) { throw 'Versao do runtime inicial diverge do destino solicitado.' }
         $runtimeManifestSha256 = Get-PmoSha256 (Join-Path $runtimeDir 'release.json')
 
-        # Bootstrap: o ZIP passa pela allowlist propria antes de qualquer
-        # extracao; o diretorio passa pela mesma checagem de layout.
-        $bootstrapRoot = $BootstrapDir
-        $bootstrapTemp = $null
-        if ($temZip) {
-            if (-not (Test-Path -LiteralPath $BootstrapZip -PathType Leaf)) { throw 'Pacote de bootstrap inexistente.' }
-            $regras = Get-PmoBootstrapArchiveRules
-            $checkBootstrap = Test-PmoArchive $BootstrapZip @regras
-            if (-not $checkBootstrap.ok) { throw ('Bootstrap rejeitado: ' + ($checkBootstrap.errors -join '; ')) }
-            $bootstrapTemp = Join-Path $stagingFull '.pmo-bootstrap-extract'
-            Expand-PmoArchiveSafe $BootstrapZip $bootstrapTemp @regras
-            $bootstrapRoot = $bootstrapTemp
-        }
+        # O bootstrap passa pela allowlist propria antes de qualquer extracao.
+        $regras = Get-PmoBootstrapArchiveRules
+        $checkBootstrap = Test-PmoArchive $BootstrapZip @regras
+        if (-not $checkBootstrap.ok) { throw ('Bootstrap rejeitado: ' + ($checkBootstrap.errors -join '; ')) }
+        $bootstrapTemp = Join-Path $stagingFull '.pmo-bootstrap-extract'
+        Expand-PmoArchiveSafe $BootstrapZip $bootstrapTemp @regras
+        $bootstrapRoot = $bootstrapTemp
         Assert-PmoBootstrapTree $bootstrapRoot
 
         $layout = Get-PmoBootstrapLayout
@@ -233,10 +223,8 @@ function Install-PmoPortableFromPackages {
             }
         }
 
-        if ($null -ne $bootstrapTemp) {
-            if (-not (Test-PmoSubPath $stagingFull $bootstrapTemp)) { throw 'Extracao do bootstrap escapou do staging.' }
-            Remove-PmoManagedTree -Root $stagingFull -Path $bootstrapTemp
-        }
+        if (-not (Test-PmoSubPath $stagingFull $bootstrapTemp)) { throw 'Extracao do bootstrap escapou do staging.' }
+        Remove-PmoManagedTree -Root $stagingFull -Path $bootstrapTemp
 
         $inventory = @(Get-PmoDirectoryInventory $stagingFull)
         $installManifestPath = Join-Path $stagingFull 'portable-install-manifest.json'
