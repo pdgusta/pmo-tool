@@ -178,7 +178,20 @@ if (-not (Test-Path $appHtml)) { throw "Nao encontrei $appHtml. Rode .\build.ps1
 
 $releaseInfo = Read-PmoJson (Join-Path $raiz 'release.json') $null
 $activeInfo = Read-PmoJson $activeJson $null
-$appVersion = if ($releaseInfo -and $releaseInfo.version) { [string]$releaseInfo.version } else { '1.4.1' }
+# Em uma instalacao existe release.json. No modo de desenvolvimento nao existe,
+# e a fonte da versao passa a ser o proprio modelo - um literal aqui envelhece
+# a cada release e faz a tela de ajuda mentir.
+$appVersion = if ($releaseInfo -and $releaseInfo.version) { [string]$releaseInfo.version } else {
+    $modeloDev = Join-Path (Join-Path (Join-Path $raiz 'src') 'js') '10-model.js'
+    $versaoDev = ''
+    if (Test-Path -LiteralPath $modeloDev -PathType Leaf) {
+        $achadoDev = [regex]::Match([System.IO.File]::ReadAllText($modeloDev, [System.Text.Encoding]::UTF8),
+                                    'model\.APP_VERSION\s*=\s*[''"]([^''"]+)[''"]')
+        if ($achadoDev.Success) { $versaoDev = $achadoDev.Groups[1].Value }
+    }
+    if ([string]::IsNullOrWhiteSpace($versaoDev)) { throw 'Nao foi possivel resolver a versao da aplicacao.' }
+    $versaoDev
+}
 $schemaVersion = if ($releaseInfo -and $releaseInfo.schemaVersion) { [int]$releaseInfo.schemaVersion } elseif ($releaseInfo -and $releaseInfo.schema -and $null -ne $releaseInfo.schema.write) { [int]$releaseInfo.schema.write } else { 4 }
 $buildId = if ($releaseInfo -and $releaseInfo.commit) { [string]$releaseInfo.commit } else { 'development' }
 

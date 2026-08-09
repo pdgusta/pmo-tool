@@ -108,10 +108,16 @@ correspondente, gera `install.json`, `active.json` e `update.json` com o pin
 `activeReleaseManifestSha256` calculado do runtime real, confere o inventário completo e comita
 por rename. Falha em qualquer ponto remove o staging e não toca no destino.
 
-`tools/New-PortableInstall.ps1` constrói os dois pacotes a partir do checkout e chama essa
-função; qualquer origem que traga os mesmos pacotes prontos chama exatamente a mesma função. É o
-que garante que instalações de origens diferentes tenham o mesmo layout, o mesmo inventário e o
-mesmo pin.
+Existem duas origens para esses pacotes, e apenas essas duas. `tools/New-PortableInstall.ps1`
+constrói os pacotes a partir do checkout; `tools/pmo-instalar.ps1` baixa os pacotes de uma release
+do GitHub. As duas chamam a mesma função, e é isso que garante que as instalações resultantes
+tenham o mesmo layout, o mesmo inventário e o mesmo pin.
+
+Montar uma instalação extraindo o ZIP de runtime à mão não é caminho suportado: aquele ZIP é o
+insumo do atualizador e não contém os scripts de raiz.
+
+`New-PortableInstall.ps1` sem `-Version` deriva a versão de `model.APP_VERSION`. Um default fixo no
+script envelheceria em silêncio a cada release.
 
 O bootstrap carrega `pmo.ps1`, `atualizar.ps1`, `bootstrap.json`, `LICENSE`, `NOTICE` e
 `tools/portable-common.ps1`. Esses arquivos ficam fora do pacote de runtime por construção: é

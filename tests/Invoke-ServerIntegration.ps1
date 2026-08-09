@@ -38,16 +38,21 @@ function Invoke-LocalApi {
     return Invoke-WebRequest @params
 }
 
+$modeloFixture = Join-Path (Join-Path (Join-Path $root 'src') 'js') '10-model.js'
+$achadoFixture = [regex]::Match([System.IO.File]::ReadAllText($modeloFixture, [System.Text.Encoding]::UTF8), 'model\.APP_VERSION\s*=\s*[''"]([^''"]+)[''"]')
+if (-not $achadoFixture.Success) { throw 'Nao foi possivel obter APP_VERSION para as fixtures.' }
+$appVersionFixture = $achadoFixture.Groups[1].Value
+
 try {
     # O checkout limpo de CI nao contem dist/. Gere a mesma entrada que o
     # servidor consumira, com metadados deterministas de fixture.
-    & (Join-Path $root 'build.ps1') -Version '1.4.1' `
+    & (Join-Path $root 'build.ps1') -Version $appVersionFixture `
         -Commit '0123456789abcdef0123456789abcdef01234567' `
         -BuildTimestamp '2026-01-01T00:00:00Z' `
         -OutputPath (Join-Path $root 'dist\pmo-tool.html') | Out-Null
     New-Item -ItemType Directory -Path $data,$config,$state -Force | Out-Null
     $portfolio = [ordered]@{
-        meta=[ordered]@{ schemaVersion=4; appVersion='1.4.1'; orgName='Teste'; salvoEm='2026-08-02T00:00:00Z' }
+        meta=[ordered]@{ schemaVersion=4; appVersion=$appVersionFixture; orgName='Teste'; salvoEm='2026-08-02T00:00:00Z' }
         settings=[ordered]@{ tema='auto'; salvarEmDisco=$true }
         pessoas=@(); programas=@(); projetos=@(); anexos=@(); auditLog=@(); imports=@(); visoesSalvas=@()
     }
@@ -57,7 +62,7 @@ try {
         dataDir='data'; configDir='config'; stateDir='state'; retention=[ordered]@{versions=2;snapshots=3;portfolioBackups=30}
     })
     Write-PmoJsonAtomic (Join-Path $state 'active.json') ([ordered]@{
-        formatVersion=1; bootstrapVersion='1.0.0'; activeVersion='1.4.1'; previousVersion='1.4.0'
+        formatVersion=1; bootstrapVersion='1.0.0'; activeVersion=$appVersionFixture; previousVersion='1.4.0'
         activeSchemaVersion=4; previousSchemaVersion=3; activatedAt='2026-08-02T00:00:00Z'
     })
 
@@ -197,7 +202,7 @@ try {
         throw 'Indice nao recuperou o anexo deixado apenas em .replace-backup.'
     }
 
-    $prepareInvalido = [ordered]@{ appVersion='1.4.1'; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm; anexos=@([ordered]@{
+    $prepareInvalido = [ordered]@{ appVersion=$appVersionFixture; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm; anexos=@([ordered]@{
         id=$attachmentId; tamanho=$attachmentBytes.Length; sha256=('0' * 64)
     }) } | ConvertTo-Json -Depth 10
     try {
@@ -211,7 +216,7 @@ try {
     [Array]::Copy($attachmentBytes,$corruptedBytes,$attachmentBytes.Length)
     $corruptedBytes[0] = $corruptedBytes[0] -bxor 255
     [System.IO.File]::WriteAllBytes($attachmentPath,$corruptedBytes)
-    $prepareBody = [ordered]@{ appVersion='1.4.1'; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm; anexos=@([ordered]@{
+    $prepareBody = [ordered]@{ appVersion=$appVersionFixture; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm; anexos=@([ordered]@{
         id=$attachmentId; tamanho=$attachmentBytes.Length; sha256=[string]$index.itens[0].sha256
     }) } | ConvertTo-Json -Depth 10
     $prepared = (Invoke-LocalApi '/api/update/prepare' 'POST' $prepareBody -Admin).Content | ConvertFrom-Json
@@ -252,7 +257,7 @@ try {
     })
     $restorePending = [ordered]@{
         formatVersion=1; restoreId=$restoreId; snapshotId=[string]$prepared.snapshotId; activationId=$activationId
-        portfolioSha256=$portfolioSha; sourceSchemaVersion=4; sourceAppVersion='1.4.1'
+        portfolioSha256=$portfolioSha; sourceSchemaVersion=4; sourceAppVersion=$appVersionFixture
         attachments=@([ordered]@{ id=$attachmentId; size=[Int64]$attachmentBytes.Length; sha256=[string]$index.itens[0].sha256 })
     }
     Write-PmoJsonAtomic (Join-Path $state 'restore-pending.json') $restorePending
@@ -262,7 +267,7 @@ try {
     }
     $ackBody = [ordered]@{
         snapshotId=[string]$prepared.snapshotId; activationId=$activationId; portfolioSha256=$portfolioSha
-        sourceSchemaVersion=4; sourceAppVersion='1.4.1'; indexedDbReady=$true
+        sourceSchemaVersion=4; sourceAppVersion=$appVersionFixture; indexedDbReady=$true
         attachments=@([ordered]@{ id=$attachmentId; size=[Int64]$attachmentBytes.Length; sha256=[string]$index.itens[0].sha256 })
     } | ConvertTo-Json -Depth 10
     $ack = (Invoke-LocalApi '/api/restore-ack' 'POST' $ackBody -Admin).Content | ConvertFrom-Json
@@ -272,14 +277,14 @@ try {
     }
 
     Write-PmoJsonAtomic (Join-Path $state 'update.json') ([ordered]@{
-        formatVersion=1; phase='activating'; activationId=$activationId; targetVersion='1.4.1'; snapshotId=[string]$prepared.snapshotId
+        formatVersion=1; phase='activating'; activationId=$activationId; targetVersion=$appVersionFixture; snapshotId=[string]$prepared.snapshotId
     })
     Write-PmoJsonAtomic (Join-Path $state 'active.json') ([ordered]@{
-        formatVersion=1; bootstrapVersion='1.0.0'; activeVersion='1.4.1'; previousVersion='1.4.0'
+        formatVersion=1; bootstrapVersion='1.0.0'; activeVersion=$appVersionFixture; previousVersion='1.4.0'
         activeSchemaVersion=4; previousSchemaVersion=3; activatedAt='2026-08-02T00:02:00Z'; pendingActivationId=$activationId
     })
     $readyBase = [ordered]@{
-        activationId=$activationId; appVersion='1.4.1'; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm
+        activationId=$activationId; appVersion=$appVersionFixture; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm
         somenteLeitura=$false; origemCarga='disco'; indexedDbReady=$true; diskReady=$true
         portfolioSha256=$portfolioSha
         attachments=@([ordered]@{ id=$attachmentId; size=[Int64]$attachmentBytes.Length; sha256=[string]$index.itens[0].sha256 })
@@ -298,7 +303,7 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $state 'app-ready.json'))) { throw 'Handshake app-ready nao foi persistido.' }
 
     $rollbackBody = [ordered]@{
-        operation='rollback'; appVersion='1.4.1'; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm
+        operation='rollback'; appVersion=$appVersionFixture; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm
         anexos=@([ordered]@{ id=$attachmentId; tamanho=$attachmentBytes.Length; sha256=[string]$index.itens[0].sha256 })
     } | ConvertTo-Json -Depth 10
     $rollbackPrepared = (Invoke-LocalApi '/api/update/prepare' 'POST' $rollbackBody -Admin).Content | ConvertFrom-Json
@@ -318,7 +323,7 @@ try {
 
     $restoreBody = [ordered]@{
         operation='restore'; targetSnapshotId=[string]$prepared.snapshotId
-        appVersion='1.4.1'; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm
+        appVersion=$appVersionFixture; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm
         anexos=@([ordered]@{ id=$attachmentId; tamanho=$attachmentBytes.Length; sha256=[string]$index.itens[0].sha256 })
     } | ConvertTo-Json -Depth 10
     $restorePrepared = (Invoke-LocalApi '/api/update/prepare' 'POST' $restoreBody -Admin).Content | ConvertFrom-Json

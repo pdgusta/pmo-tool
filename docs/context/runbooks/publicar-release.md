@@ -36,7 +36,17 @@ versão.
 3. Aguarde o workflow de release concluir.
 4. Confirme que a release permanece em **draft** e não é prerelease.
 
-O workflow deve fornecer exatamente o ZIP Windows, manifesto JSON e checksum SHA-256 esperados.
+O workflow confere os assets por allowlist nominal e deve fornecer exatamente estes seis:
+
+| Asset | Papel |
+|---|---|
+| `pmo-tool-<semver>-windows.zip` | runtime; entrada do atualizador |
+| `pmo-tool-<semver>-windows.zip.sha256` | checksum do runtime |
+| `pmo-tool-<semver>-manifest.json` | manifesto externo |
+| `pmo-tool-<semver>-bootstrap.zip` | scripts de raiz para uma instalação nova |
+| `portable-common.ps1` | helper verificável antes de qualquer extração |
+| `pmo-instalar.ps1` | único arquivo que uma máquina nova baixa |
+
 Ausência, duplicidade ou nome diferente bloqueia a publicação.
 
 ## 3. Revisar os assets
@@ -54,8 +64,17 @@ arquivo efetivamente baixado. Confira:
 - nenhum link simbólico, junction ou reparse point no conteúdo materializado;
 - hashes internos iguais ao conteúdo extraído pelo teste seguro.
 
+Valide também o pacote de bootstrap com `tools/Test-BootstrapPackage.ps1`, passando o manifesto
+baixado. Ele é independente do validador de runtime: aprovar um não diz nada sobre o outro.
+
+Confirme que o manifesto preserva `artifact` e `runtimeManifest` na forma antiga e que
+`bootstrapArtifact` e `helperArtifact` apenas se somam a eles. Uma release que renomeie ou remova os
+campos antigos quebra o atualizador já instalado nas máquinas.
+
 Faça um smoke test em instalação descartável usando dados fictícios. Não use a instalação real da
-máquina B para validar um draft.
+máquina B para validar um draft. O caminho mais próximo do usuário real é rodar o
+`pmo-instalar.ps1` baixado do próprio draft com `-PacoteLocal` apontando para os assets baixados —
+lembrando que `-PacoteLocal` não oferece autenticidade de canal e serve só para esta verificação.
 
 ## 4. Autorizar e publicar
 

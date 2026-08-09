@@ -9,7 +9,9 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$Destination,
-    [string]$Version = '1.4.1',
+    # Ausente, deriva de model.APP_VERSION. Um default fixo aqui envelhece em
+    # silencio a cada release.
+    [string]$Version = '',
     [string]$Repository = '',
     [switch]$IncludeCurrentData,
     [string]$BuildTimestamp = '2026-08-02T00:00:00Z',
@@ -23,6 +25,14 @@ $sourceRoot = Split-Path -Parent $scriptDir
 $common = Join-Path $scriptDir 'portable-common.ps1'
 . $common
 . (Join-Path $scriptDir 'install-common.ps1')
+
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $modeloPath = Join-Path (Join-Path (Join-Path $sourceRoot 'src') 'js') '10-model.js'
+    $achado = [regex]::Match([System.IO.File]::ReadAllText($modeloPath, [System.Text.Encoding]::UTF8),
+                             'model\.APP_VERSION\s*=\s*[''"]([^''"]+)[''"]')
+    if (-not $achado.Success) { throw "Nao foi possivel obter APP_VERSION de $modeloPath." }
+    $Version = $achado.Groups[1].Value
+}
 
 # Valida o destino antes de construir qualquer artefato: um destino recusado
 # nao pode custar um build inteiro nem deixar rastro no disco.

@@ -91,7 +91,23 @@ jobs:
 
           $zip = ".\artifacts\pmo-tool-$env:PMO_BUILD_VERSION-windows.zip"
           $manifest = ".\artifacts\pmo-tool-$env:PMO_BUILD_VERSION-manifest.json"
+          $bootstrap = ".\artifacts\pmo-tool-$env:PMO_BUILD_VERSION-bootstrap.zip"
           .\tools\Test-ReleasePackage.ps1 -ZipPath $zip -ManifestPath $manifest
+          .\tools\Test-BootstrapPackage.ps1 -ZipPath $bootstrap -ManifestPath $manifest
+
+      - name: Install from built artifacts offline
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Instala a partir dos artefatos que seriam publicados, nao dos que a
+          # suite constroi. Offline: -PacoteLocal nao toca a rede.
+          $destino = Join-Path $env:RUNNER_TEMP 'pmo-smoke'
+          if (Test-Path -LiteralPath $destino) { Remove-Item -LiteralPath $destino -Recurse -Force }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\pmo-instalar.ps1 `
+            -PacoteLocal '.\artifacts' -InstallDir $destino -Repositorio $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Instalacao offline a partir dos artefatos falhou.' }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $destino 'pmo.ps1') -Diagnostico | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostico da instalacao de smoke test falhou.' }
+          Remove-Item -LiteralPath $destino -Recurse -Force
 
       - name: Preserve validated workflow artifact
         uses: actions/upload-artifact@v4
@@ -120,10 +136,23 @@ jobs:
             throw "Release $env:GITHUB_REF_NAME already exists; assets will not be replaced."
           }
 
-          $assets = @(Get-ChildItem -LiteralPath '.\artifacts' -File | Sort-Object Name | ForEach-Object { $_.FullName })
-          if ($assets.Count -ne 3) {
-            throw "Expected exactly three release assets, found $($assets.Count)."
-          }
+          # Allowlist nominal: contar arquivos nao diz se sao os certos, e o
+          # conjunto cresce a cada artefato novo. Nome a nome, um extra ou um
+          # faltante bloqueia a release.
+          $esperados = @(
+            "pmo-tool-$env:PMO_BUILD_VERSION-windows.zip",
+            "pmo-tool-$env:PMO_BUILD_VERSION-windows.zip.sha256",
+            "pmo-tool-$env:PMO_BUILD_VERSION-manifest.json",
+            "pmo-tool-$env:PMO_BUILD_VERSION-bootstrap.zip",
+            'portable-common.ps1',
+            'pmo-instalar.ps1'
+          )
+          $encontrados = @(Get-ChildItem -LiteralPath '.\artifacts' -File | ForEach-Object { $_.Name })
+          $faltando = @($esperados | Where-Object { $encontrados -cnotcontains $_ })
+          $extras = @($encontrados | Where-Object { $esperados -cnotcontains $_ })
+          if ($faltando.Count -gt 0) { throw "Missing release assets: $($faltando -join ', ')" }
+          if ($extras.Count -gt 0) { throw "Unexpected release assets: $($extras -join ', ')" }
+          $assets = @($esperados | ForEach-Object { (Resolve-Path -LiteralPath (Join-Path '.\artifacts' $_)).Path })
           gh release create $env:GITHUB_REF_NAME $assets `
             --draft `
             --verify-tag `
