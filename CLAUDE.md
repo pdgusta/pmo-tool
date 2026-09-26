@@ -115,7 +115,8 @@ pmo-tool/
   serve.ps1                  <- HttpListener :8090, persistência e preflight
   config/*.example.json      <- contratos versionados; install.json local é ignorado
   state/*.example.json       <- contratos versionados; estado real é ignorado
-  docs/context/              <- L0, L1 e runbooks
+  docs/context/              <- L0, L1 e runbooks; validado por validar-contexto.ps1
+  docs/guia/                 <- guias de uso final; NÃO entram no index.json
   tools/                     <- pacote, instalação, update e validações
     pmo-instalar.ps1         <- instala do GitHub; asset da release
     install-common.ps1       <- materialização única de uma instalação
