@@ -115,7 +115,8 @@ pmo-tool/
   serve.ps1                  <- HttpListener :8090, persistência e preflight
   config/*.example.json      <- contratos versionados; install.json local é ignorado
   state/*.example.json       <- contratos versionados; estado real é ignorado
-  docs/context/              <- L0, L1 e runbooks
+  docs/context/              <- L0, L1 e runbooks; validado por validar-contexto.ps1
+  docs/guia/                 <- guias de uso final; NÃO entram no index.json
   tools/                     <- pacote, instalação, update e validações
     pmo-instalar.ps1         <- instala do GitHub; asset da release
     install-common.ps1       <- materialização única de uma instalação
@@ -392,3 +393,21 @@ abrirModal(titulo, conteudo, opts)   -> Promise
 9. Em mudança de persistência/update: executar preflight, snapshot, falhas simuladas, diagnóstico,
    rollback e restore drill conforme os runbooks; comparar IDs, contagens e SHA-256 pré/pós.
 10. Confirmar que `git status` não inclui dado real, configuração local, estado, logs ou artefatos.
+
+### Sessão na nuvem (`CLAUDE_CODE_REMOTE=true`)
+
+A VM da nuvem é Ubuntu, sem Windows PowerShell 5.1 e sem navegador. Nela:
+
+- Não execute `build.ps1`, `serve.ps1`, `pmo.ps1` nem os scripts de `tests/` e `tools/`.
+  Não instale PowerShell 7 nem porte scripts para bash: os testes chamam `powershell.exe`
+  e o alvo é o 5.1 (G2, G3).
+- Quem verifica é o CI do PR (`.github/workflows/release.yml`, Windows, PS 5.1). Todo trabalho
+  termina em branch + PR; só declare pronto com o CI verde.
+- Pode rodar: `node tests/model-migration.test.mjs` (Node 22 vem instalado), `git` e `gh`.
+- Não rode comandos `/gsd-*` nem crie ou edite `.planning/`: o planejamento GSD é mantido só na
+  máquina local.
+- Dos itens de "Antes de dizer pronto", o CI cobre 1, 2 e 8. O item 9 é coberto só em parte
+  (`Test-UpdaterRecovery.ps1` e `Invoke-ServerIntegration.ps1` exercitam journals, preflight e
+  API em porta de teste, sem o restore drill dos runbooks). O item 10 roda na própria VM com
+  `git status`. Os itens 3 a 7 e 9 ficam para a máquina local: liste no corpo do PR o que
+  precisa ser conferido no navegador.
