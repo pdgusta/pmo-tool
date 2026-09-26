@@ -5,6 +5,9 @@ description: Compilar, servir e verificar o PMO Tool (app de governança de port
 
 # PMO Tool — compilar, servir e verificar
 
+> **Sessão na nuvem (`CLAUDE_CODE_REMOTE=true`):** este ciclo não se aplica — a VM não tem
+> PowerShell 5.1 nem navegador. Siga a seção "Sessão na nuvem" do `CLAUDE.md`.
+
 App de governança de portfólio entregue como **um único arquivo HTML autocontido**,
 servido em `http://localhost:8090`. Sem Node, sem npm, sem dependências.
 
@@ -45,7 +48,14 @@ normalizada: `$BS = [string][char]92; $texto = $BS + 'u0005'`.
 
 ## Verificação antes de declarar pronto
 
-Não existe runner de testes. A verificação é dirigir o app no navegador e inspecionar o
+Primeiro rode a suíte automatizada (build, release, portabilidade e instalador; não usa a
+porta 8090):
+
+```bash
+powershell -ExecutionPolicy Bypass -File .\tests\Run-Tests.ps1
+```
+
+Ela não abre a interface. A verificação da UI é dirigir o app no navegador e inspecionar o
 DOM — mais confiável que screenshot, que falha quando o painel não está visível.
 
 1. **Console limpo e todas as views montam** — navegue por `Object.keys(PMO.views)` e
