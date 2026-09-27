@@ -36,12 +36,19 @@ Node.js 24 LTS e npm são permitidos em desenvolvimento e CI, e `npm install` pa
 `docs/context/avaliacao-evolucao.md`, seção "Dependências aprovadas (G2)". Dependência nova exige
 proposta ao Maestro (regra 8 do time) e uma linha nessa lista — com versão, licença e motivo —
 antes de qualquer `npm install` (D-06). O lockfile é commitado. A licença precisa ser compatível
-com open source — MIT, Apache-2.0, BSD ou ISC — verificada item a item. Zero CDN e zero fetch
-externo em runtime; dependências de navegador entram embutidas no HTML pelo bundle, nunca por
-`<script src>` externo (D-07). O build oficial continua `build.ps1` até o Vite provar paridade no
-CI (Fase 4), quando `build.ps1` é removido; até lá os dois coexistem (D-08). O servidor continua
-`serve.ps1` (`System.Net.HttpListener`) até a troca de runtime (Fases 11–13). Nenhum outro
-runtime (Python, .NET SDK) entra sem proposta aprovada.
+com open source — MIT, Apache-2.0, BSD ou ISC — verificada item a item. Zero CDN e zero recurso
+externo em runtime: nenhum script, folha de estilo, fonte, imagem ou pacote é buscado de origem
+externa, e dependências de navegador entram embutidas no HTML pelo bundle, nunca por
+`<script src>` externo (D-07). Isso não proíbe as duas chamadas operacionais autorizadas, feitas
+por processos locais e nunca pelo HTML (G1): (1) API e assets do GitHub Releases do repositório
+configurado, para consultar update (`serve.ps1`), consultar e baixar manifesto e ZIP do update
+(`tools/update-runtime.ps1`) e instalar (`tools/pmo-instalar.ps1`), com tamanho e SHA-256 de cada
+download conferidos contra o digest do GitHub; (2) login delegado da PMO na Microsoft e Microsoft
+Graph, só pelo módulo conector das Fases 17–18 (G6, D-09). Qualquer outra chamada a origem
+externa em runtime exige proposta aprovada. O build oficial continua `build.ps1` até o Vite provar
+paridade no CI (Fase 4), quando `build.ps1` é removido; até lá os dois coexistem (D-08). O
+servidor continua `serve.ps1` (`System.Net.HttpListener`) até a troca de runtime (Fases 11–13).
+Nenhum outro runtime (Python, .NET SDK) entra sem proposta aprovada.
 
 ### G3 — Node 24 LTS no runtime; Windows PowerShell 5.1 nos scripts de entrada
 Node.js 24 LTS é o runtime de desenvolvimento, CI e produção (D-01). Na máquina da PMO ele chega

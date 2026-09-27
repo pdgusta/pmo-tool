@@ -837,6 +837,10 @@ dependências aprovadas na avaliação (lista no documento); dependência nova =
 (regra 8 do time); lockfile commitado; licença compatível com open source (MIT/Apache-2.0/BSD/ISC
 — verificar cada item); zero CDN e zero fetch externo em runtime. A lista inicial sai da
 avaliação (base: `.planning/research/STACK.md`).
+**Esclarecimento (01-10):** a regra de runtime acima vale para recursos e dependências: nenhum
+script, estilo, fonte, imagem ou pacote é buscado de fora em runtime. Ela não proíbe as duas
+chamadas operacionais autorizadas (GitHub Releases no update e na instalação; Microsoft Graph só
+pelo conector delegado, D-09), listadas nas **Regras** de `## Dependências aprovadas (G2)`.
 
 **Justificativa:** o gate de legitimidade de pacotes já executado nesta fase (`npm view`
 somente leitura para vite, vite-plugin-singlefile, zod e `@modelcontextprotocol/sdk`, com
@@ -1194,7 +1198,19 @@ de licença ou repositório encontrada).
   `@byteink/mppjs` na Fase 17.
 - Dependências usadas no navegador entram embutidas no HTML único pelo bundle (D-07); nunca CDN,
   nunca `<script src>` externo — mesma regra do G1.
-- Zero fetch externo em runtime, em qualquer ambiente (navegador ou servidor Node).
+- Zero CDN e zero recurso externo em runtime, em qualquer ambiente (navegador ou servidor Node):
+  nenhum script, folha de estilo, fonte, imagem ou pacote é buscado de origem externa. A regra não
+  proíbe as duas chamadas operacionais autorizadas, feitas por processos locais e nunca pelo HTML
+  (G1); qualquer outra chamada a origem externa em runtime exige proposta aprovada e uma linha
+  nesta regra:
+  - **Atual:** API e assets do GitHub Releases do repositório configurado (`repository` em
+    `config/install.json`; `-Repositorio` na instalação): consulta de update em `serve.ps1`
+    (`ConsultarAtualizacao`), consulta da release e download de manifesto e ZIP em
+    `tools/update-runtime.ps1` (`Get-LatestRelease` e `Invoke-UpdateOperation`) e instalação em
+    `tools/pmo-instalar.ps1` (`Get-Release` e `Receber-Asset`); todo download é conferido por
+    tamanho e SHA-256 contra o digest publicado pelo GitHub.
+  - **Alvo:** login delegado da PMO na Microsoft e Microsoft Graph, só pelo módulo conector das
+    Fases 17–18 (G6, D-09); nenhuma chamada autenticada à Microsoft existe no código hoje.
 - `build.ps1` e Vite coexistem até o Vite provar paridade no CI (Fase 4); só então `build.ps1` é
   removido (D-08).
 
@@ -1214,6 +1230,7 @@ divergência conhecida está listada abaixo como **Corrigida** (com o plano que 
 | G2/G3 afirmavam "não existe Node... nesta máquina" enquanto `tests/Run-Tests.ps1` já exigia Node de desenvolvimento | CLAUDE.md, G2/G3 | Corrigida (01-07) | Fase 1 | `grep -c 'Não existe Node' CLAUDE.md` = 0; `tests/Run-Tests.ps1` linhas 22-28 já lançavam erro sem `$NodePath` |
 | A subseção D-09 deste L1 repetia, no presente, o caminho do conector inexistente da G6 antiga como se o arquivo existisse hoje | `docs/context/avaliacao-evolucao.md`, D-09 | Corrigida (01-09) | Fase 1 | a subseção D-09 não cita mais nenhum arquivo de conector e diz que não existe módulo conector no código hoje; a busca por nome de arquivo de conector entre os arquivos versionados continua sem resultado |
 | "Interfaces operacionais" dizia que `GET /api/health`, `/api/update/check` e `/api/update/status` exigiam o token efêmero da sessão; em `serve.ps1` só `GET /api/restore-pending` e as rotas `POST` listadas chamam `ExigirAdministracao` | CLAUDE.md, "Interfaces operacionais" | Corrigida (01-09) | Fase 1 | as três consultas aparecem como "somente loopback, sem token"; a divergência é anterior à Fase 1 (já existia em `main`) |
+| A G2 do CLAUDE.md e as Regras de `## Dependências aprovadas (G2)` deste L1 proibiam qualquer busca externa em runtime, "em qualquer ambiente (navegador ou servidor Node)", mas `serve.ps1`, `tools/update-runtime.ps1` e `tools/pmo-instalar.ps1` já consultam e baixam do GitHub Releases, e a D-09 autoriza o Microsoft Graph pelo conector delegado | CLAUDE.md, G2; `docs/context/avaliacao-evolucao.md`, D-06 e Regras da G2 | Corrigida (01-10) | Fase 1 | a proibição vale para recursos e dependências buscados em runtime; a G2 e as Regras listam as duas chamadas autorizadas; a D-06 manteve o texto ratificado e ganhou um Esclarecimento (01-10); `Invoke-WebRequest` e `Invoke-RestMethod` aparecem só em `serve.ps1` (1), `tools/update-runtime.ps1` (4, uma delas o health em `localhost`) e `tools/pmo-instalar.ps1` (2) |
 | `.claude/skills/pmo-app/SKILL.md` diz "Sem Node, sem npm, sem dependências" | `.claude/skills/pmo-app/SKILL.md` (linha 12) | Registrada — **Alvo** | Fase 2 | atualizar o SKILL.md na mesma PR que introduz `package.json` |
 | CI fixa `node-version: '22.22.0'` e o contrato `workflow-gates-release` de `docs/context/index.json` exige esse valor exato | `.github/workflows/release.yml` (linha 66) | Registrada — **Alvo** | Fase 2 | bumpar o workflow para Node 24 e o `requiredPatterns` do contrato na mesma PR, ou `validar-contexto.ps1` falha por descompasso |
 | "Convenções de código" do CLAUDE.md proíbe módulos ES ("nada de módulos ES") | CLAUDE.md, "Convenções de código" | Registrada — **Alvo** | Fase 4 (MOD-02) | revisar junto com a extração ESM real de `10-model.js` |
