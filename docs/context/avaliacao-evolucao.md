@@ -498,6 +498,161 @@ $ grep -c 'McpServer' bridge.mjs
 sentidos e fechamento conjunto) e zero ocorrências da classe de hospedagem de ferramentas do
 servidor — a ponte não carrega lógica de ferramenta nem acesso a dados, só repassa.
 
+### Spike C — negativos e ciclo de vida: token, Host/Origin, auto-start, porta ocupada, limpeza (D-11, D-12, G4)
+
+Continuação do Spike C acima, com `server.mjs` rodando em `127.0.0.1:18090` (porta de teste; nunca
+8090, G4). Uma observação de ferramenta, não de comportamento do servidor: o `fetch()` global do
+Node (undici) trata `Host` como cabeçalho proibido e o sobrescreve silenciosamente — os testes de
+cabeçalho forjado abaixo usam `node:http` diretamente (`probe.mjs`, script do spike, não citado
+aqui em código-fonte) para garantir que o cabeçalho realmente chega ao servidor.
+
+**Achado central para a Fase 14 (resolve a premissa A3 do RESEARCH):** o SDK `1.30.1` mantém
+`enableDnsRebindingProtection` (e as listas `allowedHosts`/`allowedOrigins` que o acompanham) em
+`WebStandardStreamableHTTPServerTransportOptions`, mas o **valor padrão é `false`** — a proteção
+fica **desligada por padrão**, exatamente como a citação do GHSA-w48q-cv73-mx4w em
+`.planning/research/PITFALLS.md` alertava; a Assumption A3 do RESEARCH (que sugeria proteção
+ligada por padrão) está **reprovada** pela evidência direta do pacote instalado. Mais além: o
+`.d.ts` do próprio pacote marca as três opções (`allowedHosts`, `allowedOrigins`,
+`enableDnsRebindingProtection`) como `@deprecated`, com a nota "Use external middleware for
+[host/origin validation / DNS rebinding protection] instead" — ou seja, o SDK não promete manter
+esse mecanismo interno; a Fase 14 deve tratar a validação de Host/Origin como responsabilidade de
+um middleware do próprio servidor Node do produto, não como algo que basta "ligar" no SDK.
+
+| Cenário | Esperado | Obtido |
+|---|---|---|
+| (a) `/mcp` sem cabeçalho `Authorization` | `401` | `401` (`{"error":"unauthorized"}`) |
+| (a) `/mcp` com token errado | `401` | `401` (`{"error":"unauthorized"}`) |
+| (b) `Host: evil.example:18090`, opções padrão (proteção desligada) | aceito (proteção desligada por padrão) | `200` — requisição processada normalmente |
+| (b) `Origin: http://evil.example`, opções padrão (proteção desligada) | aceito (proteção desligada por padrão) | `200` — requisição processada normalmente |
+| (b) `Host: evil.example:18090`, com `allowedHosts`/`enableDnsRebindingProtection: true` | recusa 4xx | `403` (`"Invalid Host header: evil.example:18090"`) |
+| (b) `Origin: http://evil.example`, com `allowedOrigins`/`enableDnsRebindingProtection: true` | recusa 4xx | `403` (`"Invalid Origin header: http://evil.example"`) |
+| (b) controle positivo: `Host`/`Origin` corretos (`127.0.0.1:18090`), mesmas opções ligadas | aceito | `200` — requisição processada normalmente |
+| (c) auto-start: servidor parado, `bridge.mjs` verifica `/health`, sobe `server.mjs`, espera o health | ponte sobe o servidor e a chamada completa | `BRIDGE_AUTOSTART_MS=527`; `listTools`/`ping`/`eco` completaram normalmente depois |
+| (d) porta ocupada: outro processo Node escutando em 18090 respondendo `ocupado` em `/` | erro claro, saída não-zero, nenhum segundo servidor | mensagem "porta 18090 ocupada por outro processo (resposta inesperada em /health)" no stderr da ponte; `client.mjs` terminou com código de saída `1`; `GET /` continuou respondendo `ocupado` (nenhum segundo servidor subiu) |
+
+**1-2. Token (a):**
+
+```text
+$ (sem Authorization) POST /mcp initialize
+STATUS=401 BODY={"error":"unauthorized"}
+
+$ (Authorization: Bearer <token-errado>) POST /mcp initialize
+STATUS=401 BODY={"error":"unauthorized"}
+```
+
+**3-5. Host/Origin (b), primeiro com as opções padrão do `StreamableHTTPServerTransport`
+(nenhuma passada — `enableDnsRebindingProtection` não especificado, portanto `false`):**
+
+```text
+$ (Host: evil.example:18090, token valido) POST /mcp initialize
+HOST_FORJADO_OFF STATUS=200 BODY=event: message
+data: {"result":{"protocolVersion":"2025-06-18",...}}
+
+$ (Origin: http://evil.example, token valido) POST /mcp initialize
+ORIGIN_FORJADO_OFF STATUS=200 BODY=event: message
+data: {"result":{"protocolVersion":"2025-06-18",...}}
+```
+
+Depois, reiniciando o servidor com `allowedHosts: ['127.0.0.1:18090','localhost:18090']`,
+`allowedOrigins: ['http://127.0.0.1:18090','http://localhost:18090']` e
+`enableDnsRebindingProtection: true` passados ao construtor de `StreamableHTTPServerTransport`:
+
+```text
+$ (Host: evil.example:18090, token valido) POST /mcp initialize
+HOST_FORJADO_ON STATUS=403 BODY={"jsonrpc":"2.0","error":{"code":-32000,"message":"Invalid Host header: evil.example:18090"},"id":null}
+
+$ (Origin: http://evil.example, token valido) POST /mcp initialize
+ORIGIN_FORJADO_ON STATUS=403 BODY={"jsonrpc":"2.0","error":{"code":-32000,"message":"Invalid Origin header: http://evil.example"},"id":null}
+
+$ (Host: 127.0.0.1:18090, Origin: http://127.0.0.1:18090, token valido — controle positivo)
+CONTROLE_POSITIVO_ON STATUS=200 BODY=event: message
+data: {"result":{"protocolVersion":"2025-06-18",...}}
+```
+
+O controle positivo confirma que a rejeição de `Host`/`Origin` forjados não é um efeito colateral
+de outra coisa quebrada — a mesma configuração aceita a requisição legítima e só rejeita as
+forjadas.
+
+**6. Auto-start (c) — `bridge.mjs` estendido para checar `/health` antes de conectar:**
+
+```text
+$ (servidor parado, nenhum listener em 18090) node client.mjs
+BRIDGE_AUTOSTART_MS=527
+TOOLS=["ping","eco"]
+PING_RESULT={"content":[{"type":"text","text":"pong"}]}
+ECO_RESULT={"content":[{"type":"text","text":"olá"}]}
+```
+
+A ponte detectou que `/health` não respondia, subiu `server.mjs` (`spawn` detached, equivalente ao
+`pmo.ps1` sem browser no produto), sondou `/health` a cada 250 ms e, 527 ms depois, seguiu com o
+relay normalmente — o cliente recebeu os mesmos resultados do caminho feliz do Task 1.
+
+**7. Porta ocupada (d) — `node:http` simples escutando em 18090 e respondendo `ocupado`:**
+
+```text
+$ node occupy.mjs &
+OCCUPY_READY
+
+$ node client.mjs
+porta 18090 ocupada por outro processo (resposta inesperada em /health)
+McpError: MCP error -32000: Connection closed
+    at ... (encadeamento de erro do SDK ao ver o subprocesso da ponte fechar)
+CLIENT_EXIT=1
+
+$ curl-equivalente GET http://127.0.0.1:18090/   # depois da tentativa
+BODY=ocupado
+```
+
+A ponte nunca chega a chamar `spawn` para um segundo `server.mjs` porque `isOurServer(body)` já
+identifica pela primeira resposta de `/health` (que não é `{ok:true, app:'pmo-spike'}`) que a
+porta pertence a outro processo — imprime o erro em pt-BR no stderr e sai com código `1` antes de
+qualquer tentativa de subida. O stack trace do `McpError` que aparece depois vem do próprio SDK
+cliente reagindo ao fechamento do subprocesso da ponte (efeito colateral esperado de `client.mjs`
+não tratar esse caso graciosamente neste spike, não um segundo servidor). `GET /` continuou
+respondendo `ocupado` depois da tentativa — confirma que nenhum segundo servidor assumiu a porta.
+
+**8. `clientInfo` visto pelo servidor (D-13):**
+
+```text
+D13_CLIENT_INFO={"name":"pmo-spike-client","version":"0.0.0-spike"}
+```
+
+O servidor logou o `clientInfo.name`/`version` exatamente como o cliente os declarou na chamada
+`initialize` — confirma que a autoria (`tipo=agente` + `clientInfo`) do D-13 é extraível
+diretamente da mensagem JSON-RPC de handshake, sem instrumentação adicional no SDK.
+
+**9. Limpeza:** todo processo Node do spike (`server.mjs` nas três configurações, `occupy.mjs`,
+o subprocesso auto-iniciado da ponte) foi parado com `Stop-Process -Id <pid> -Force` usando o PID
+real reportado por `netstat -ano`, não o PID do job do shell. Confirmação final:
+
+```text
+$ netstat -ano | grep -E ':(18090|18091) .*LISTENING'
+(sem saída — nenhum listener)
+```
+
+Só restam entradas `TIME_WAIT` transitórias de sockets cliente já fechados (mesmo padrão inócuo
+observado no Spike A) — nenhuma entrada `LISTENING` na porta 18090 ou 18091.
+
+**Resultado:** aprovado — os quatro mecanismos (token, Host/Origin, auto-start, porta ocupada)
+comportaram-se como o D-10/D-11/D-12/G4 exigem, com uma ressalva importante sobre o padrão do SDK
+registrada como achado para a Fase 14.
+
+**Implicação:**
+- **D-10** (ponte relay-only): viável — a ponte de 43/111 linhas (Task 1/Task 2) nunca importou
+  classe de hospedagem de ferramentas do servidor e relayou corretamente nos dois sentidos.
+- **D-11** (custo do auto-start): ~527 ms nesta máquina para subir o processo e responder ao
+  primeiro `/health` — nem instantâneo nem lento a ponto de preocupar uma PMO abrindo um cliente
+  MCP; o produto deve orçar essa espera na UX da ponte real.
+- **D-12** (token + Host/Origin): o token local funciona como projetado (401 sem ele/com ele
+  errado); **a Fase 14 precisa habilitar Host/Origin explicitamente** — `allowedHosts`,
+  `allowedOrigins` e `enableDnsRebindingProtection: true` no `StreamableHTTPServerTransport` — e,
+  por essas três opções estarem marcadas `@deprecated` no SDK `1.30.1` a favor de "middleware
+  externo", **a Fase 14 deve implementar a validação de Host/Origin como middleware do próprio
+  servidor Node do produto** (checagem antes de repassar ao SDK), não confiar apenas nas opções
+  internas do transporte, que podem ser removidas em versão futura do SDK.
+- **D-13** (autoria): `clientInfo` do handshake MCP é suficiente para popular
+  `autor.tipo='agente'` + `clientInfo` no audit log, sem trabalho extra de instrumentação.
+
 ## Decisões ratificadas
 
 Lista as decisões D-01 a D-13 (Node 24 LTS, distribuição do runtime, transporte MCP, acesso
