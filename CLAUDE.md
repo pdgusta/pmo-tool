@@ -117,6 +117,20 @@ ser marcados como persistidos. Schema futuro abre em modo protegido e não pode 
 Update só pode começar depois de flush, materialização dos blobs, inventário e snapshot completo
 selado. Falha em qualquer fase deve manter a versão ativa e os dados anteriores (`fail closed`).
 
+**Reforço (D-32, 27/09/2026):** todo trecho novo de código atende a estes cinco mínimos
+verificáveis:
+- exclusão lógica (tombstone): o conteúdo apagado vai para o audit e pode ser restaurado;
+- "Limpar" e "substituir" só rodam depois de um snapshot verificado, sem perder nenhuma entrada de
+  `auditLog` nem de `imports`;
+- backups são retidos por janela de tempo, nunca só por contagem;
+- a PMO exporta uma cópia verificável (manifesto SHA-256) para um destino que ela escolhe, fora
+  da máquina — um artefato de backup, não sincronização de instalação (a G11 continua valendo);
+- itens removidos na origem são detectados e sinalizados, nunca apagados em silêncio.
+
+**Alvo:** o código atual ainda não atende a esses mínimos; eles entram na Fase 20 (proteção da
+captura) e, para os itens removidos na origem, na Fase 23. As janelas concretas de retenção vivem
+no ADR (`docs/context/adr-v1-captura.md`, D-32).
+
 ### G9 — Funciona offline e com dados vazios
 Abrir sem servidor (`file://`) deve funcionar em modo somente-IndexedDB com aviso, mas esse modo é
 apenas fallback funcional: não oferece update, réplica em disco nem o contrato de recuperação da
@@ -152,6 +166,28 @@ Antes de alterar um domínio, ler `docs/context/index.json` (L0), os documentos 
 somente então os arquivos L2 necessários. Mudança de contrato, schema, persistência, diretórios,
 release ou recuperação exige atualizar o L1 correspondente e executar
 `tools/validar-contexto.ps1`.
+
+### G14 — Uso local (S5)
+O registro de uso (telas abertas, filtros, exportações, documentos gerados, correções de dado
+importado) é local, visível para a PMO e desligável, e só sai da máquina dentro do pacote de
+captura que ela exporta; nenhuma chamada de rede para telemetria. Padrão: ligado, com aviso
+visível e botão de desligar (D-33). O consentimento da PMO para esse registro de uso continua
+pendente: se ela recusar, a G14 volta a "desligado por padrão" por ADR.
+
+---
+
+## Fora do escopo da v1
+
+A v1 (edição local) é o instrumento de captura para a v2 corporativa (D-19; ADR em
+`docs/context/adr-v1-captura.md`).
+
+- Colaboração multiusuário e MCP remoto com OAuth → v2 corporativa (D-34); "Sem MCP na v1" (D-31).
+- Sincronização bidirecional contínua e o app escrever nas Listas do SharePoint da PMO → fora
+  (D-20, D-34).
+- Local-first vira "local na v1 (captura); servidor primeiro, com tolerância offline, na v2"
+  (D-34).
+- Congelado até o ADR corporativo: servidor Node local, fila offline local, MCP e conector
+  Microsoft (D-23).
 
 ---
 
