@@ -12,6 +12,33 @@ Registra o resultado consolidado da avaliação técnica: a recomendação de ev
 (tooling, dependências, arquitetura, framework de UI) e a lista das decisões ratificadas,
 preenchida pelos planos seguintes desta fase.
 
+Esta fase primeiro mediu o protótipo v1.5.0 como ele é hoje, sem julgamento: os módulos maiores
+(`10-model.js` com 2.723 linhas, `62-views-principais.js` com 2.059), um build de mediana 176 ms,
+e uma cobertura de testes concentrada — só `10-model.js` tem teste de comportamento real, os
+outros treze módulos de `src/js/` não têm. Depois disso vieram três spikes descartáveis, fora do
+repositório, para provar cada decisão arriscada com evidência antes de ratificá-la (D-15): o
+Spike A mostrou que o `node.exe` oficial roda isolado, sem instalação, com hash e assinatura
+Authenticode conferidos; o Spike B mostrou que Vite com `vite-plugin-singlefile` gera um único
+HTML autocontido, menor que o `build.ps1` de hoje; e o Spike C mostrou uma ponte stdio fina
+repassando corretamente chamadas para um servidor MCP Streamable HTTP, com token e validação de
+Host/Origin funcionando — e um achado importante: a proteção contra DNS rebinding do SDK vem
+desligada por padrão, então a Fase 14 precisa de um middleware próprio. Com essa evidência em
+mãos, o dono do projeto ratificou em 27/09/2026 (D-14, este L1 novo é o registro oficial) o Node
+24 LTS como motor de desenvolvimento, CI e produção, e o transporte MCP (Streamable HTTP mais a
+ponte stdio). As guardrails do CLAUDE.md foram reescritas de acordo: a G1 (HTML único) continua
+valendo até a Fase 13, quando o servidor Node assume a fonte da verdade; a G2 passa de "zero
+dependências" para uma lista permitida com licença verificada item a item; a G3 troca "sem Node"
+por Node 24 LTS portátil dentro da release, com PowerShell 5.1 restrito aos três scripts de
+entrada; e a G6 troca a antiga proibição de integração Microsoft por login delegado da PMO, sem
+chave própria do app. As divergências conhecidas entre código e CLAUDE.md (D-17) foram corrigidas
+já nesta fase quando o custo era baixo — o contrato real de `reconciliar()` e a lista completa de
+rotas administrativas — e as demais (pino de Node do CI, o SKILL.md do app, a proibição de ESM, a
+menção a `build.ps1` na Estrutura e a frase do README sobre runtime) ficaram registradas na tabela
+abaixo com a fase certa para corrigi-las. Fica propositalmente para depois (D-16) a escolha do
+framework de UI — a Fase 8 decide isso junto com a PMO, a partir dos candidatos e critérios listados
+em `### Framework de UI`. Por fim, toda a reescrita de guardrails e as correções do D-17 aconteceram
+na execução desta fase, na branch e via PR (D-18), não durante a conversa que produziu as decisões.
+
 ## Medições do protótipo
 
 Traz números medidos do protótipo nesta execução — tamanho e complexidade dos módulos, tempo de
@@ -1167,7 +1194,22 @@ de licença ou repositório encontrada).
 ## Divergências código × documentação
 
 Registra as divergências corrigidas nesta fase entre o código e o CLAUDE.md: o contrato de
-`PMO.importar.reconciliar()` e a lista de rotas administrativas de `serve.ps1`.
+`PMO.importar.reconciliar()` e a lista de rotas administrativas de `serve.ps1`. Por D-17, cada
+divergência conhecida está listada abaixo como **Corrigida** (com o plano que corrigiu) ou
+**Registrada** (com a fase que vai corrigi-la).
+
+| Divergência | Onde | Situação | Fase | Evidência |
+| --- | --- | --- | --- | --- |
+| Contrato de `reconciliar()` citava `semCorrespondencia:[]`; o retorno real é `{novos, atualizacoes, conflitos, resumo}` | CLAUDE.md, `PMO.importar` | Corrigida (plano 01-02) | Fase 1 | `grep -c 'semCorrespondencia' CLAUDE.md` agora imprime `0` |
+| Lista de rotas administrativas do CLAUDE.md tinha 4 rotas; `serve.ps1` expõe 11 (faltavam rollback/restore) | CLAUDE.md, "Interfaces operacionais" | Corrigida (01-02) | Fase 1 | `grep -oE '/api/(rollback/apply\|restore/apply\|restore-pending\|restore-ack)' CLAUDE.md \| sort -u \| wc -l` = 4, confirmado contra as rotas reais de `serve.ps1` |
+| L1 de importação não nomeava os campos de retorno de `reconciliar()` | `docs/context/importacao-reconciliacao.md` | Corrigida (01-02) | Fase 1 | parágrafo **Atual** em "Correspondência e diff" nomeia os oito campos |
+| G6 citava `js/38-connectors.js` como caminho real do conector, mas o arquivo nunca existiu | CLAUDE.md, G6 | Corrigida (01-07) | Fase 1 | `git ls-files \| grep -i connector` sem resultado, registrado em 01-07-SUMMARY.md |
+| G2/G3 afirmavam "não existe Node... nesta máquina" enquanto `tests/Run-Tests.ps1` já exigia Node de desenvolvimento | CLAUDE.md, G2/G3 | Corrigida (01-07) | Fase 1 | `grep -c 'Não existe Node' CLAUDE.md` = 0; `tests/Run-Tests.ps1` linhas 22-28 já lançavam erro sem `$NodePath` |
+| `.claude/skills/pmo-app/SKILL.md` diz "Sem Node, sem npm, sem dependências" | `.claude/skills/pmo-app/SKILL.md` (linha 12) | Registrada — **Alvo** | Fase 2 | atualizar o SKILL.md na mesma PR que introduz `package.json` |
+| CI fixa `node-version: '22.22.0'` e o contrato `workflow-gates-release` de `docs/context/index.json` exige esse valor exato | `.github/workflows/release.yml` (linha 66) | Registrada — **Alvo** | Fase 2 | bumpar o workflow para Node 24 e o `requiredPatterns` do contrato na mesma PR, ou `validar-contexto.ps1` falha por descompasso |
+| "Convenções de código" do CLAUDE.md proíbe módulos ES ("nada de módulos ES") | CLAUDE.md, "Convenções de código" | Registrada — **Alvo** | Fase 4 (MOD-02) | revisar junto com a extração ESM real de `10-model.js` |
+| "Estrutura" e a descrição de build do CLAUDE.md citam `build.ps1` como o build único | CLAUDE.md, "Estrutura" | Registrada — **Alvo** | Fase 4 (D-08: removido depois da paridade do Vite) | `build.ps1` sai do CLAUDE.md quando a Fase 4 provar paridade no CI |
+| README.md diz "Nenhum runtime adicional — sem Node, npm, Python ou .NET SDK" | `README.md` (linha 49) | Registrada — **Alvo** | Fase 13 | continua verdadeiro para quem instala hoje (o `node.exe` viaja dentro do pacote), mas o texto precisa mencionar o runtime embutido quando a Fase 13 trocar o runtime do servidor |
 
 ## Adiado para fases seguintes
 
