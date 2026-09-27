@@ -18,6 +18,125 @@ Traz números medidos do protótipo nesta execução — tamanho e complexidade 
 build, inventário de testes e cobertura por módulo — cada um pareado com o comando exato que o
 produziu.
 
+**Base:** commit `571d058` (`git rev-parse --short HEAD`), medido em 27/09/2026.
+
+### Tamanho dos módulos
+
+Comando: `wc -l src/js/*.js src/css/*.css`
+
+| Arquivo | Linhas |
+|---|---|
+| `src/js/10-model.js` | 2.723 |
+| `src/js/62-views-principais.js` | 2.059 |
+| `src/js/30-import.js` | 1.866 |
+| `src/js/50-charts.js` | 1.661 |
+| `src/js/42-export-relatorios.js` | 1.600 |
+| `src/js/20-store.js` | 1.348 |
+| `src/js/66-views-dados.js` | 1.232 |
+| `src/js/90-app.js` | 1.165 |
+| `src/js/64-views-governanca.js` | 1.069 |
+| `src/js/40-export-dados.js` | 1.032 |
+| `src/js/60-views-comuns.js` | 966 |
+| `src/js/00-util.js` | 950 |
+| `src/js/80-seed.js` | 757 |
+| `src/js/70-views-config.js` | 510 |
+| `src/js/68-editores.js` | 404 |
+| `src/css/20-componentes.css` | 880 |
+| `src/css/10-layout.css` | 515 |
+| `src/css/00-theme.css` | 364 |
+| `src/css/50-charts.css` | 265 |
+
+Total `src/js/*.js`: **19.342 linhas** em 15 arquivos. Total `src/css/*.css`: **2.024 linhas** em
+4 arquivos. Os cinco maiores arquivos de `src/js/` são `10-model.js` (2.723 linhas),
+`62-views-principais.js` (2.059), `30-import.js` (1.866), `50-charts.js` (1.661) e
+`42-export-relatorios.js` (1.600) — confirmam a observação de `.planning/PROJECT.md` sobre módulos
+grandes.
+
+Comando: `du -sh src/` → **1016K**.
+
+### Proxy de complexidade
+
+Comando: `grep -cE 'function\s*\(|function [a-zA-Z_]+\(|=>\s*\{|=\s*function' src/js/*.js` — proxy
+grosseiro de contagem de declarações função-símile; não é uma ferramenta real de complexidade
+ciclomática (nenhum linter de complexidade está instalado antes da Fase 2).
+
+| Arquivo | Declarações função-símile (aprox.) |
+|---|---|
+| `src/js/62-views-principais.js` | 347 |
+| `src/js/10-model.js` | 272 |
+| `src/js/64-views-governanca.js` | 235 |
+| `src/js/50-charts.js` | 214 |
+| `src/js/66-views-dados.js` | 183 |
+
+### Tempo de build
+
+Comando (PowerShell 5.1, três execuções cronometradas com `Stopwatch`, argumentos fixos):
+
+```powershell
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+.\build.ps1 -Version '1.5.0' -Commit '0000000000000000000000000000000000000000' `
+  -BuildTimestamp '2026-09-27T00:00:00Z' -OutputPath 'dist\pmo-tool-medicao.html'
+$sw.Stop(); Write-Host ('ELAPSED_MS=' + $sw.ElapsedMilliseconds)
+```
+
+Saída real desta execução (três rodadas consecutivas):
+- ELAPSED_MS=486
+- ELAPSED_MS=176
+- ELAPSED_MS=157
+
+Mediana: **176 ms**. Resumo do build (idêntico nas três rodadas): `css: 4 arquivo(s)  js: 15
+arquivo(s)  versao: 1.5.0  linhas: 21576  tamanho: 957.4 KB  sha256:
+ce6e42999759168a34b5d412a7c5c68c79e9ad839b5746085747fe01acd7932e  guardrails: OK`. O arquivo
+`dist/pmo-tool-medicao.html` foi apagado logo após a medição — não é artefato desta fase. Esta
+mediana (176 ms) é a referência que o spike do Vite (plano 01-03) deve comparar.
+
+### Inventário de testes
+
+Comando: `wc -l tests/*.ps1 tests/*.mjs`
+
+| Arquivo | Linhas | Framework |
+|---|---|---|
+| `tests/Run-Tests.ps1` | 920 | PowerShell 5.1, helpers `Assert-*` próprios, sem framework declarativo |
+| `tests/Test-UpdaterRecovery.ps1` | 445 | PowerShell 5.1, mesmo estilo |
+| `tests/Invoke-ServerIntegration.ps1` | 362 | PowerShell 5.1, mesmo estilo |
+| `tests/model-migration.test.mjs` | 167 | Node `assert/strict`, sem framework |
+| `tests/validate-built-html.mjs` | 34 | Node, sem framework |
+| `tests/Invoke-ModelMigrationTests.ps1` | 20 | PowerShell 5.1, wrapper que chama o `.mjs` |
+
+Total: 1.948 linhas em 6 arquivos, nenhum usando runner declarativo (`describe`/`it`). Comando:
+`find tests/fixtures -type f | wc -l` → **5** arquivos (4 fixtures de migração em
+`tests/fixtures/migrations/` mais 1 manifesto em `tests/fixtures/manifests/`).
+
+### Mapa de cobertura por módulo
+
+Para cada arquivo em `src/js/*.js`, busca por nome de arquivo em `tests/*.ps1 tests/*.mjs`
+(`grep -l <nome-do-arquivo>`):
+
+| Módulo | Referenciado por |
+|---|---|
+| `00-util.js` | `model-migration.test.mjs` (importado só como dependência de `10-model.js`) |
+| `10-model.js` | `Invoke-ServerIntegration.ps1`, `Run-Tests.ps1`, `model-migration.test.mjs` |
+| `20-store.js`, `30-import.js`, `40-export-dados.js`, `42-export-relatorios.js`, `50-charts.js`, `60-views-comuns.js`, `62-views-principais.js`, `64-views-governanca.js`, `66-views-dados.js`, `68-editores.js`, `70-views-config.js`, `80-seed.js`, `90-app.js` | nenhum arquivo de teste referencia pelo nome |
+
+`Run-Tests.ps1` compila o HTML completo (chama `build.ps1`) e `validate-built-html.mjs` faz o
+parse do único `<script>` inline resultante — isso dá cobertura sintática de todos os módulos (o
+build falha se algum arquivo tiver erro de sintaxe), mas só `10-model.js` tem teste comportamental
+real (`model-migration.test.mjs`, que também importa `00-util.js` como dependência, sem testá-lo
+diretamente). Os outros 13 módulos de `src/js/` — de `20-store.js` a `90-app.js` na tabela acima —
+estão **sem teste comportamental**.
+
+### Fatos de runtime
+
+Comando: `grep -n "node-version" .github/workflows/release.yml` → linha 66: `node-version:
+'22.22.0'`. O CI ainda está fixado no Node 22, não no Node 24 (D-01); bumpar esse pino é escopo da
+Fase 2 (junto com o contrato `workflow-gates-release` em `index.json`), não desta fase.
+
+`tests/Run-Tests.ps1` (linhas 22-28) já resolve e **exige** um Node.js de desenvolvimento —
+`throw 'Node.js de desenvolvimento e obrigatorio para validar migracoes e o JavaScript do
+artefato.'` quando nenhum `$NodePath` é encontrado. Isso é evidência de que a premissa antiga da
+G2 ("não existe Node... nesta máquina") já era falsa antes desta ratificação: os próprios testes
+do protótipo dependem de Node para rodar.
+
 ## Spikes de verificação
 
 Registra o resultado e a evidência (comandos e saída, nunca o código) dos spikes descartáveis que
