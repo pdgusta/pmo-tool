@@ -1010,6 +1010,113 @@ cliente fornecido é tratado como anotação, não como fronteira de segurança.
 Avalia tooling, dependências, arquitetura e framework de UI, com as alternativas descartadas e o
 motivo de cada descarte.
 
+### Tooling
+
+**Estado atual (medido):** sem type check e sem lint; 1.948 linhas de teste sem framework
+declarativo, distribuídas em 6 arquivos, nenhum usando `describe`/`it` (`## Medições do
+protótipo` → "Inventário de testes"); só `10-model.js` tem teste comportamental real
+(`model-migration.test.mjs`) — os outros 13 módulos de `src/js/` estão sem cobertura
+comportamental (mesma seção → "Mapa de cobertura por módulo"). `build.ps1` tem mediana de 176 ms
+(três rodadas: 486/176/157 ms) para o build completo (`## Medições do protótipo` → "Tempo de
+build").
+
+**Recomendação:** JSDoc + `checkJs` do TypeScript como checador de tipo (sem reescrever a sintaxe
+de `src/js/`), ESLint em flat config com ambientes separados de navegador e Node, Vitest
+reaproveitando o pipeline de transformação do Vite (primeiro alvo de porte:
+`tests/model-migration.test.mjs`), e Playwright contra o servidor real para automatizar a
+checklist "Antes de dizer pronto" do CLAUDE.md. As suítes PowerShell 5.1 (`Run-Tests.ps1`,
+`Test-UpdaterRecovery.ps1`, `Invoke-ServerIntegration.ps1`) continuam rodando em paralelo — nada
+disso é substituído nesta fase. Faseamento sugerido: Fase 2 (scaffold), Fase 3 (testes de
+caracterização antes de qualquer divisão de arquivo).
+
+**Alternativas descartadas:**
+
+| Alternativa | Motivo |
+|---|---|
+| Reescrever `src/js/` em sintaxe TypeScript | Contradiz o mandato "evoluir, não reescrever" do PROJECT.md; `checkJs` já dá o benefício de tipo sem tocar a sintaxe existente |
+| esbuild direto, sem Vite | Falta servidor de desenvolvimento com HMR e o ecossistema de plugins que Playwright/Vitest compartilham via config do Vite; o Vite 8 já usa esbuild internamente (via Oxc/Rolldown), então a velocidade não é perdida |
+| Jest | Pipeline de transformação separado do Vite; Vitest reaproveita a mesma config e é a escolha natural já que a Fase 4 adota Vite |
+
+### Dependências
+
+**Estado atual (medido):** zero dependências npm; build por concatenação de string em
+`build.ps1`, servidor `serve.ps1` (`HttpListener`). `tests/Run-Tests.ps1` (linhas 22-28) já
+**exige** um Node.js de desenvolvimento hoje (lança erro sem `$NodePath`) — a premissa antiga da
+G2 ("não existe Node... nesta máquina") já era falsa antes desta ratificação (`## Medições do
+protótipo` → "Fatos de runtime").
+
+**Recomendação:** a política de lista permitida do D-06/D-07 — ver `## Dependências aprovadas
+(G2)` abaixo para a lista concreta e as regras que a G2 reescrita do CLAUDE.md referencia.
+
+**Alternativas descartadas:**
+
+| Alternativa | Motivo |
+|---|---|
+| Manter "zero dependências" | Bloquearia o MCP SDK oficial, `@azure/msal-node` e o Vite — nenhum tem alternativa viável sem Node (D-01) |
+| Entrega via CDN | Viola G1 (HTML autocontido) e o modo offline do G9; toda dependência de navegador precisa vir embutida no bundle (D-07) |
+| Pacote `xlsx` puro (não `@e965/xlsx`) | Última publicação em 2022-03-24 — mais obsoleto ainda que `@e965/xlsx` (parado desde 2024-07-19), que ao menos é um mirror mantido do SheetJS Community Edition atual |
+
+### Arquitetura
+
+**Estado atual (medido):** um único HTML autocontido (957,4 KB, 21.576 linhas injetadas — `##
+Medições do protótipo`) servido por `serve.ps1` (`HttpListener`); o navegador (`Store`) é a fonte
+da verdade, com IndexedDB + réplica em disco. `10-model.js` (2.723 linhas) já é puro e sem efeito
+colateral — candidato natural à extração ESM.
+
+**Recomendação:** evoluir, não reescrever. Ordem de dependência: núcleo ESM compartilhado
+(`10-model.js` extraído primeiro, Fase 4), catálogo de ações nomeadas substituindo os closures ad
+hoc de `20-store.js` (Fase 6), servidor Node autoritativo em `localhost:8090` (Fases 11–13)
+hospedando `/api/*` e o endpoint MCP no mesmo processo (D-10), conector Microsoft dentro desse
+mesmo processo Node para o token nunca alcançar o navegador (D-09/D-12), `node.exe` portátil
+dentro da release (D-02). `GET /api/eventos` via SSE (não WebSocket) para notificar mudanças a
+qualquer aba aberta — não há necessidade de push bidirecional de baixa latência nesta ferramenta.
+
+**Alternativas descartadas:**
+
+| Alternativa | Motivo |
+|---|---|
+| Reescrever do zero | Fora do escopo do REQUIREMENTS ("evoluir, não reescrever"); perderia o reaproveitamento de `PMO.model`/`PMO.util` |
+| Electron | 100+ MB por release, traz auto-update próprio que competiria com o updater transacional já funcional (G11/G12) |
+| Node SEA (single executable application) | Build/assinatura mais caros e mais atrito de antivírus/SmartScreen por reputação — o Spike A mostrou que mesmo o `node.exe` oficial assinado sofre um scan único; um SEA sem assinatura reconhecida tende a sofrer mais, não menos (D-02) |
+| Bun | `@azure/msal-node` e `@byteink/mppjs` têm binários nativos validados contra Node, não Bun — risco de compatibilidade em duas dependências já incertas ao mesmo tempo |
+| .NET single-file executable (C#) | Perde o reaproveitamento de `PMO.model`/`PMO.util` (são JS); não há SDK MCP oficial para .NET tão maduro quanto o TypeScript |
+| Fastify / Koa / NestJS | Servidor single-user, single-machine, só-localhost — nenhuma vantagem de throughput (Fastify) ou DI/módulos para times grandes (NestJS) se aplica aqui; `express` (ou até `node:http` puro) basta |
+| Processo MCP separado por cliente (stdio-only) | Cada cliente spawnaria seu próprio servidor — N processos disputando o mesmo mutex de instância única do runtime, o que quebra a garantia de instância única (D-10) |
+| WebSocket para notificação de mudança | SSE já basta para push unidirecional servidor→navegador; nada nesta ferramenta precisa de push bidirecional de baixa latência ou colaboração em tempo real |
+
+### Framework de UI
+
+Per D-16, esta fase só aponta candidatos e critérios — nenhuma escolha é feita aqui.
+
+**Estado atual (medido):** DOM imperativo via `PMO.util.el()`, sem framework de componentes; as
+views mais complexas somam centenas de "declarações função-símile" (`62-views-principais.js`
+~347, `64-views-governanca.js` ~235 — `## Medições do protótipo` → "Proxy de complexidade").
+
+**Candidatos:** vanilla + Web Components com Lit (adoção incremental componente a componente,
+dentro do contrato `montar()`/`desmontar()` de view já existente); Preact (modelo de virtual DOM,
+mais familiar a quem já usa React, mas é uma mudança conceitual maior em relação ao `el()`
+imperativo atual).
+
+**Alternativas descartadas:**
+
+| Alternativa | Motivo |
+|---|---|
+| Svelte | O passo de compilação quer possuir a árvore de componentes inteira — serve melhor uma reescrita completa do que uma adoção cirúrgica, componente por componente, dentro de uma app vanilla de 15 mil+ linhas |
+| SolidJS | Mesmo motivo do Svelte: compilador orientado a possuir toda a árvore, mau encaixe para adoção incremental dentro do contrato `montar()`/`desmontar()` existente |
+
+**Critérios:**
+
+| Critério | O que avaliar |
+|---|---|
+| Adoção incremental | Encaixa dentro do contrato `montar()`/`desmontar()` de view existente, sem exigir migração de tudo de uma vez |
+| Peso no HTML único | Custo em KB embutido no bundle, enquanto G1 exige HTML autocontido (até a Fase 13) |
+| Acessibilidade e RAG | Mantém AA e RAG com cor + rótulo/ícone (convenção do CLAUDE.md), sem regressão |
+| Encaixe com `el()` | Coexiste ou substitui o DOM helper imperativo atual sem exigir reescrever tudo de uma vez |
+| Curva de aprendizado | Custo de manutenção para quem só conhece o padrão vanilla atual |
+| Licença | Termos compatíveis com a lista permitida do D-06 (MIT/Apache-2.0/BSD/ISC) |
+
+Nenhum framework é escolhido nesta fase: a decisão é da Fase 8, com a PMO (UI-01).
+
 ## Dependências aprovadas (G2)
 
 Registra a lista inicial de dependências aprovadas pela avaliação (nome, versão, licença, motivo)
@@ -1025,6 +1132,33 @@ Registra as divergências corrigidas nesta fase entre o código e o CLAUDE.md: o
 Registra o que foi propositalmente deixado para depois: revisão da G1 (Fase 13), escolha do
 framework de UI (Fase 8), formato do token MCP (Fase 14) e migração do updater para Node
 (Fase 13).
+
+- **Revisão da G1** (HTML único vs. arquivos servidos pelo Node) — Fase 13, quando o servidor
+  Node vira fonte da verdade (D-05).
+- **Escolha do framework de UI** — Fase 8, com a PMO, entre os candidatos e critérios listados em
+  `### Framework de UI` acima (D-16).
+- **Formato do token MCP, nome da rota e UX de configuração do cliente** — Fase 14; `/mcp`
+  sugerido como nome de rota (D-12, Claude's Discretion do CONTEXT).
+- **Migração do updater para Node** — Fase 13, junto com a troca de runtime do servidor; o
+  updater transacional atual (journals, fail-closed) permanece em PowerShell até lá e só migra
+  repetindo os mesmos testes de falha simulada (D-03).
+- **Pino de Node do CI (`.github/workflows/release.yml`, hoje `22.22.0`) e o contrato
+  `workflow-gates-release`** — Fase 2, na mesma PR (bump para 24 e atualização do regex do
+  contrato em `index.json`, ou `validar-contexto.ps1` falha por descompasso).
+- **Reverificação do default de `enableDnsRebindingProtection` contra a versão do SDK MCP
+  efetivamente fixada** — Fase 14; o Spike C encontrou `false` como padrão e as três opções
+  (`allowedHosts`, `allowedOrigins`, `enableDnsRebindingProtection`) marcadas `@deprecated` no
+  `1.30.1` — a Fase 14 precisa de middleware próprio de Host/Origin, não só das opções internas
+  do transporte (D-12).
+- **Validação de `@byteink/mppjs` com arquivos `.mpp` reais e gate de legitimidade** — Fase 17
+  (IMP-04); pacote `[SUS]`, com binário nativo LGPL-2.1-or-later fora da lista de licenças do
+  D-06 — ver linha `condicionada — não aprovada` em `## Dependências aprovadas (G2)`.
+- **Reverificação de atualidade de `@e965/xlsx`** — Fase 7, no momento da adoção; sem publicação
+  desde 19/07/2024 (mais de dois anos), conforme a linha `aprovada com ressalva` em `##
+  Dependências aprovadas (G2)`.
+- **Proibição de ESM em "Convenções de código" do CLAUDE.md** — Fase 4, quando `10-model.js` for
+  extraído para ESM real (MOD-02); a proibição atual ("nada de módulos ES") precisa ser revista
+  junto com essa extração, não antes.
 
 ## Gate de validação
 
