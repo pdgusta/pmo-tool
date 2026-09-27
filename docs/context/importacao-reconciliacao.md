@@ -35,6 +35,14 @@ Cada atualização contém `de`, `para` e escolha do usuário. Tolerâncias num�
 arredondamento sem ocultar mudança material. Itens novos e atualizações são aplicados de modo
 atômico; se qualquer validação bloqueante falhar, o plano não é parcialmente aplicado.
 
+**Atual:** `reconciliar(candidatos, bundleAtual)` devolve `{novos, atualizacoes, conflitos,
+resumo}`. `novos` lista `{candidato, motivo}` para candidatos sem correspondência. `atualizacoes`
+lista `{projetoId, codigo, nome, candidato, motivoMatch, campos}`, em que cada campo carrega
+`campo`, `rotulo`, `formatador`, `de`, `para`, `deTexto`, `paraTexto`, `relevancia`, `escolhido` e,
+para coleções, `substituiColecao`. `conflitos` lista `{candidato, projetoId, motivo}` para
+casamentos por similaridade de nome, que nunca atualizam automaticamente. `resumo` carrega as
+contagens `novos`, `atualizados`, `camposAlterados`, `semMudanca` e `conflitos`.
+
 ## Persistência e auditoria
 
 `aplicar` usa `Store.mutate`, registra origem no projeto e adiciona uma entrada ao histórico de
@@ -54,6 +62,9 @@ interface mantém a importação e exibe aviso explícito; não descreve o arqui
 - O arquivo MPP nunca é descrito como cronograma importado.
 - Aplicação gera auditoria e pode participar do desfazer enquanto a sessão estiver aberta.
 - Um update não reexecuta imports nem depende dos arquivos originais para preservar o bundle.
+- O contrato de retorno de `reconciliar` documentado no `CLAUDE.md` e neste L1 deve bater com
+  `src/js/30-import.js`; se divergirem, o L2 prevalece e os dois documentos são corrigidos na
+  mesma mudança (G13).
 
 ## Gate de validação
 
