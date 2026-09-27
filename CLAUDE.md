@@ -21,12 +21,40 @@ Todo CSS e JS inline. Nenhum `<link>`,
 `<script src>`, `@import`, `fetch` de origem externa, webfont remota, imagem remota.
 Ícones = SVG inline ou glifos Unicode. Gráficos = SVG construído à mão.
 
-### G2 — Zero dependências, zero CDN, zero build tooling de terceiros
-Não existe Node, npm, Python nem .NET SDK nesta máquina. **Nunca** sugerir `npm install`.
-O build é `build.ps1` (PowerShell 5.1, concatenação/inline). O servidor é `serve.ps1`
-(`System.Net.HttpListener`). Nada mais.
+**Vigência e revisão (D-05, ratificada em 27/09/2026):** a regra acima vale integralmente até a
+Fase 13. A partir da Fase 4, o HTML único passa a ser gerado por Vite + `vite-plugin-singlefile`,
+com paridade verificada contra `build.ps1` no CI; as dependências de navegador entram embutidas
+no HTML pelo próprio bundle, nunca por CDN ou `<script src>` externo (D-07).
 
-### G3 — Windows PowerShell 5.1, não PowerShell 7
+**Gatilho de revisão:** na Fase 13, quando o servidor Node vira fonte da verdade, a G1 é
+reavaliada (HTML único vs. arquivos servidos pelo Node). Até essa revisão, nenhuma mudança pode
+produzir mais de um arquivo de interface.
+
+### G2 — Dependências só pela lista aprovada; zero CDN
+Node.js 24 LTS e npm são permitidos em desenvolvimento e CI, e `npm install` para desenvolvimento
+é permitido (D-01, D-04). Só entram dependências que constam na lista aprovada em
+`docs/context/avaliacao-evolucao.md`, seção "Dependências aprovadas (G2)". Dependência nova exige
+proposta ao Maestro (regra 8 do time) e uma linha nessa lista — com versão, licença e motivo —
+antes de qualquer `npm install` (D-06). O lockfile é commitado. A licença precisa ser compatível
+com open source — MIT, Apache-2.0, BSD ou ISC — verificada item a item. Zero CDN e zero fetch
+externo em runtime; dependências de navegador entram embutidas no HTML pelo bundle, nunca por
+`<script src>` externo (D-07). O build oficial continua `build.ps1` até o Vite provar paridade no
+CI (Fase 4), quando `build.ps1` é removido; até lá os dois coexistem (D-08). O servidor continua
+`serve.ps1` (`System.Net.HttpListener`) até a troca de runtime (Fases 11–13). Nenhum outro
+runtime (Python, .NET SDK) entra sem proposta aprovada.
+
+### G3 — Node 24 LTS no runtime; Windows PowerShell 5.1 nos scripts de entrada
+Node.js 24 LTS é o runtime de desenvolvimento, CI e produção (D-01). Na máquina da PMO ele chega
+como `node.exe` oficial portátil dentro do pacote de release (`versions/<semver>/`), com versão e
+SHA-256 declarados no `release.json` e na allowlist do ZIP, nada instalado globalmente, e
+rollback troca o Node junto com o código (D-02). Nenhuma instalação real recebe o runtime Node
+antes do ensaio de migração (FUND-02, Fase 13) (D-04). Só `pmo.ps1`, `atualizar.ps1` e
+`tools/pmo-instalar.ps1` permanecem definitivamente em Windows PowerShell 5.1 — a entrada sem
+pré-requisito em qualquer Windows (D-03). O servidor e o updater migram para Node; o updater
+transacional atual (journals, fail-closed) permanece em PowerShell até a troca de runtime da Fase
+13 e só migra repetindo os mesmos testes de falha simulada (D-03). Todo `.ps1` que existe no
+repositório roda em 5.1 e segue sua sintaxe:
+
 Sem `&&`, sem `||`, sem `??`, sem `?.`, sem ternário `? :`, sem `ConvertFrom-Json -AsHashtable`.
 Encadear com `;` ou `if ($?) { }`. Ao gravar arquivos que o browser vai ler, usar
 `-Encoding utf8` explícito. Fechamento de here-string (`'@`) sempre na coluna 0.
@@ -42,12 +70,18 @@ em sua forma de mercado: EVM, PV, EV, AC, SPI, CPI, EAC, ETC, VAC, TCPI, BAC, RA
 stage-gate, kanban, CAPEX, OPEX, stakeholder, sponsor, steering committee, backlog, WBS.
 Datas em `dd/mm/aaaa`. Moeda em `R$ 1.234.567` (pt-BR). Sem acentuação quebrada — UTF-8 sempre.
 
-### G6 — Sem integração direta com Microsoft (decisão do usuário, 30/07/2026)
-**Não** implementar MSAL, Microsoft Graph, OAuth, App Registration ou qualquer chamada de rede
-autenticada. O usuário não tem como testar contra um tenant Entra ID. A compatibilidade com o
-ecossistema Microsoft é **file-based**: import/export de MSPDI, XER, PMXML, CSV, XLSX, ICS, e
-campos de deep link (URLs coladas manualmente). Se um dia houver tenant, o ponto de extensão é
-`js/38-connectors.js` — mas hoje ele fica inerte.
+### G6 — Microsoft só com login delegado da PMO (decisão do usuário, 26/09/2026)
+Integração com SharePoint/OneDrive é permitida **apenas** com o login delegado da própria PMO.
+**Nunca** criar App Registration própria nem usar permissão de aplicação no Microsoft Graph.
+Caminho candidato = client público de primeira parte da Microsoft com device code. Fallback
+garantido = a pasta sincronizada pelo OneDrive, lida sem login. O token nunca fica em `data/`,
+`config/` nem `versions/` (nem em snapshot ou no ZIP de release). O conector é validado primeiro,
+com cautela, no tenant do dono do projeto, antes do tenant da PMO (SP-04, Fase 18). A
+compatibilidade file-based continua: import/export de MSPDI, XER, PMXML, CSV, XLSX, ICS, e
+campos de deep link (URLs coladas manualmente). **Atual:** não existe módulo conector no código
+hoje — ele é criado nas Fases 17–18 e se torna o único ponto de extensão para chamadas
+autenticadas à Microsoft; nenhuma chamada de rede autenticada existe fora dele. Ver D-09 e
+`docs/context/avaliacao-evolucao.md` para a justificativa completa.
 
 ### G7 — Honestidade sobre `.mpp`
 `.mpp` é OLE/CFB binário proprietário. Não existe parser JS do conteúdo de cronograma.
