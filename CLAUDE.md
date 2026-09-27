@@ -21,14 +21,15 @@ Todo CSS e JS inline. Nenhum `<link>`,
 `<script src>`, `@import`, `fetch` de origem externa, webfont remota, imagem remota.
 Ícones = SVG inline ou glifos Unicode. Gráficos = SVG construído à mão.
 
-**Vigência e revisão (D-05, ratificada em 27/09/2026):** a regra acima vale integralmente até a
-Fase 13. A partir da Fase 4, o HTML único passa a ser gerado por Vite + `vite-plugin-singlefile`,
-com paridade verificada contra `build.ps1` no CI; as dependências de navegador entram embutidas
-no HTML pelo próprio bundle, nunca por CDN ou `<script src>` externo (D-07).
+**Vigência e revisão (D-05, ratificada em 27/09/2026; reancorada por D-35):** a regra acima vale
+integralmente em toda a v1. Quando uma fase adotar o Vite para embutir dependência (hoje, a Fase
+27), o HTML único passa a ser gerado por Vite + `vite-plugin-singlefile`, com paridade verificada
+contra `build.ps1` no CI; as dependências de navegador entram embutidas no HTML pelo próprio
+bundle, nunca por CDN ou `<script src>` externo (D-07).
 
-**Gatilho de revisão:** na Fase 13, quando o servidor Node vira fonte da verdade, a G1 é
-reavaliada (HTML único vs. arquivos servidos pelo Node). Até essa revisão, nenhuma mudança pode
-produzir mais de um arquivo de interface.
+**Gatilho de revisão:** no ADR corporativo (v2), quando o servidor corporativo vira fonte da
+verdade, a G1 é reavaliada (HTML único vs. arquivos servidos pelo servidor). Até essa revisão,
+nenhuma mudança pode produzir mais de um arquivo de interface.
 
 ### G2 — Dependências só pela lista aprovada; zero CDN
 Node.js 24 LTS e npm são permitidos em desenvolvimento e CI, e `npm install` para desenvolvimento
@@ -44,32 +45,37 @@ por processos locais e nunca pelo HTML (G1): (1) API e assets do GitHub Releases
 configurado, para consultar update (`serve.ps1`), consultar e baixar manifesto e ZIP do update
 (`tools/update-runtime.ps1`) e instalar (`tools/pmo-instalar.ps1`), com tamanho e SHA-256 de cada
 download conferidos contra o digest do GitHub; (2) login delegado da PMO na Microsoft e Microsoft
-Graph, só pelo módulo conector das Fases 17–18 (G6, D-09). Qualquer outra chamada a origem
-externa em runtime exige proposta aprovada. O build oficial continua `build.ps1` até o Vite provar
-paridade no CI (Fase 4), quando `build.ps1` é removido; até lá os dois coexistem (D-08). O
-servidor continua `serve.ps1` (`System.Net.HttpListener`) até a troca de runtime (Fases 11–13).
+Graph, só pelo módulo conector, quando existir (hoje congelado, D-23) (G6, D-29). Qualquer outra
+chamada a origem externa em runtime exige proposta aprovada. O build oficial continua `build.ps1`
+até o Vite provar paridade no CI, na fase que adotar o Vite para embutir dependência (hoje, a Fase
+27), quando `build.ps1` é removido; até lá os dois coexistem (D-08, D-35). O servidor da edição
+local continua `serve.ps1` (`System.Net.HttpListener`) e não troca de runtime (G3, D-27).
 Nenhum outro runtime (Python, .NET SDK) entra sem proposta aprovada.
 
-### G3 — Node 24 LTS no runtime; Windows PowerShell 5.1 nos scripts de entrada
-Node.js 24 LTS é o runtime de desenvolvimento, CI e produção (D-01). Na máquina da PMO ele chega
-como `node.exe` oficial portátil dentro do pacote de release (`versions/<semver>/`), com versão e
-SHA-256 declarados no `release.json` e na allowlist do ZIP, nada instalado globalmente, e
-rollback troca o Node junto com o código (D-02). Nenhuma instalação real recebe o runtime Node
-antes do ensaio de migração (FUND-02, Fase 13) (D-04). Só `pmo.ps1`, `atualizar.ps1` e
-`tools/pmo-instalar.ps1` permanecem definitivamente em Windows PowerShell 5.1 — a entrada sem
-pré-requisito em qualquer Windows (D-03). O servidor e o updater migram para Node; o updater
-transacional atual (journals, fail-closed) permanece em PowerShell até a troca de runtime da Fase
-13 e só migra repetindo os mesmos testes de falha simulada (D-03). Todo `.ps1` que existe no
-repositório roda em 5.1 e segue sua sintaxe:
+### G3 — Duas edições: a local não troca de runtime; Node 24 LTS em dev, CI e na corporativa
+**Edição local** (a v1): o servidor é o `serve.ps1`, e o updater e os scripts de entrada
+(`pmo.ps1`, `atualizar.ps1`, `tools/pmo-instalar.ps1`) ficam em Windows PowerShell 5.1 — a entrada
+sem pré-requisito em qualquer Windows (D-03); a edição local não troca de runtime (D-27; ver D-27
+em `docs/context/adr-v1-captura.md`). O updater transacional atual (journals, fail-closed)
+permanece em PowerShell. **Node.js 24 LTS** vale no desenvolvimento, no CI e no servidor da
+edição corporativa (v2) (D-01, D-27). O Node é permitido na máquina da PMO como `node.exe` oficial
+portátil dentro de `versions/<semver>/` — versão e SHA-256 declarados no `release.json` e na
+allowlist do ZIP, nada instalado globalmente, rollback troca o Node junto com o código (D-02) —,
+mas só entra no pacote quando uma fase precisar e justificar o uso por proposta ao Maestro; até
+lá, nenhum release leva `node.exe`. A edição local não tem servidor Node, fila offline local nem
+ensaio de troca de runtime local; a migração é local → nuvem pelo bundle JSON (D-27, D-28). Todo
+`.ps1` que existe no repositório roda em 5.1 e segue sua sintaxe:
 
 Sem `&&`, sem `||`, sem `??`, sem `?.`, sem ternário `? :`, sem `ConvertFrom-Json -AsHashtable`.
 Encadear com `;` ou `if ($?) { }`. Ao gravar arquivos que o browser vai ler, usar
 `-Encoding utf8` explícito. Fechamento de here-string (`'@`) sempre na coluna 0.
 
-### G4 — Porta 8090
-O servidor usa **8090** e a origem canônica é sempre `http://localhost:8090/`. Porta ocupada é
-erro bloqueante: nunca escolher outra porta nem trocar `localhost` por IP/hostname, porque a
-origem identifica IndexedDB e `localStorage`.
+### G4 — Porta 8090 na edição local
+A G4 vale só para a edição local (D-28). Nela, o servidor usa **8090** e a origem canônica é
+sempre `http://localhost:8090/`. Porta ocupada é erro bloqueante: nunca escolher outra porta nem
+trocar `localhost` por IP/hostname, porque a origem identifica IndexedDB e `localStorage`. Na
+edição corporativa (v2), a origem é a corporativa (HTTPS) e o dado mora no servidor; a migração
+local → nuvem usa o bundle JSON com um ensaio no estilo FUND-02.
 
 ### G5 — Interface em português (pt-BR)
 Todos os rótulos, menus, mensagens e relatórios em pt-BR. Preservar termos de PMO consagrados
