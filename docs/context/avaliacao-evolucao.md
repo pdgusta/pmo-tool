@@ -306,6 +306,112 @@ scan único do antivírus na primeira execução; ainda assim é evidência a fa
 portátil oficial) sobre um SEA sem assinatura reconhecida, que tende a sofrer mais atrito de
 SmartScreen/antivírus por reputação, não menos.
 
+### Spike B — Vite + vite-plugin-singlefile (D-05, D-07, D-08)
+
+**Objetivo:** provar que Vite + `vite-plugin-singlefile` gera um único HTML autocontido a partir
+de uma cópia de `src/`, comparando tempo e tamanho com a mediana de `build.ps1` medida em
+`## Medições do protótipo` (176 ms, 957,4 KB).
+
+Todo o spike rodou em `%TEMP%\pmo-spikes-f1\vite-singlefile`, fora de qualquer árvore Git (mesma
+confirmação `git -C ... rev-parse --show-toplevel` com exit 128 do Spike A).
+
+**1. Instalação exata, com os flags aprovados no gate de legitimidade:**
+
+```text
+$ npm init -y
+$ npm install --save-exact --ignore-scripts --no-audit --no-fund -D vite@8.3.1 vite-plugin-singlefile@2.3.3
+added 22 packages in 7s
+
+$ npm ls --depth=0
+vite-singlefile@1.0.0 %TEMP%\pmo-spikes-f1\vite-singlefile
+├── vite-plugin-singlefile@2.3.3
+└── vite@8.3.1
+```
+
+Instalação limpa com versões exatas; nenhum binding nativo faltou sob `--ignore-scripts` — o
+fallback `npm rebuild` não foi necessário.
+
+**2-5. Cópia de `src/`, geração de `index.html`/`main.js`/`vite.config.mjs`:**
+
+`src/shell.html`, `src/css/*.css` e `src/js/*.js` foram copiados (uso só-leitura do repositório)
+para a pasta do spike. `<!--@inject:css-->` foi substituído por nada, `<!--@inject:js-->` por
+`<script type="module" src="/main.js"></script>`, e `@@BUILD_VERSION@@` por `0.0.0-spike`.
+`main.js` importa os 4 arquivos de `src/css/` e depois os 15 de `src/js/`, na mesma ordem por
+prefixo numérico que `build.ps1` usa. `vite.config.mjs` usa `viteSingleFile()` como único plugin,
+saída em `dist/`.
+
+**6. Três builds cronometrados (`npx vite build`):**
+
+```text
+RUN1 exit=0 ms=6459
+RUN2 exit=0 ms=1961
+RUN3 exit=0 ms=2443
+
+# tempo interno reportado pelo próprio Vite, por rodada:
+✓ built in 1.45s   (RUN1)
+✓ built in 363ms   (RUN2)
+✓ built in 182ms   (RUN3)
+```
+
+| Build | Mediana (3 rodadas) | Tamanho da saída |
+|---|---|---|
+| `build.ps1` (Medições do protótipo) | **176 ms** | 957,4 KB |
+| Vite + `vite-plugin-singlefile` (este spike) | **2.443 ms** (wall-clock, inclui start do processo `npx`/Node) | ~581 KB (594.978 bytes) |
+
+Nenhuma rodada falhou por binding nativo ausente — `npm rebuild` não foi acionado. O tempo
+interno do Vite (coluna "built in", medido pelo próprio bundler, sem o overhead de iniciar o
+processo Node/`npx`) cai para 182 ms na terceira rodada, na mesma ordem de grandeza da mediana de
+`build.ps1`; a maior parte da diferença de wall-clock vem do custo de processo, não da
+transformação em si.
+
+**7. Autocontenção do `dist/index.html` (23 módulos transformados):**
+
+```text
+$ grep -o '<script' dist/index.html | wc -l
+1
+
+$ grep -oE '(src|href)="(https?:)?//[^"]*"' dist/index.html | wc -l
+0
+
+$ grep -oE "@import\s+(url\()?['\"]?(https?:)?//" dist/index.html | wc -l
+0
+
+$ node --check inline.mjs
+PARSE_OK
+```
+
+Um único `<script>`, zero referências externas `src=`/`href=` para `http(s)://`/`//`, zero
+`@import` remoto — mesmo critério que `build.ps1` já aplica. O script inline extraído
+(`inline.mjs`, 527.202 caracteres) passa `node --check` sem erro de parse.
+
+**8. Sinal de modo estrito ESM para a Fase 4 (cada `src/js/*.js` como `.mjs`):**
+
+```text
+$ for f in src/js/*.js; do node --check "strict/$(basename "$f" .js).mjs"; done
+TOTAL_FAILURES=0 of 15
+```
+
+Nenhum dos 15 arquivos de `src/js/` falhou `node --check` quando tratado como módulo ESM estrito
+(0 é resultado válido) — sinal de que a conversão da Fase 4 não deve encontrar incompatibilidade
+sintática de nível ESM nesses arquivos, embora isso não teste `import`/`export` real nem execução
+em navegador.
+
+**9. Limite explícito deste spike:** a equivalência de comportamento em runtime de navegador **não
+é provada aqui** (não há navegador nesta execução) — isso é o gate de paridade da Fase 4 (MOD-01)
+contra `build.ps1`, mais a suíte Playwright da Fase 3.
+
+**Resultado:** aprovado — Vite + `vite-plugin-singlefile` gera um único HTML autocontido a partir
+de uma cópia de `src/`, sem referência externa, menor que a saída de `build.ps1` (~581 KB vs 957,4
+KB), com todos os módulos passando checagem sintática ESM.
+
+**Implicação:** para D-05/D-08, a Fase 4 pode migrar para Vite mantendo o contrato de HTML único
+sem regressão de autocontenção; o gate de paridade real (comportamento no navegador, não só
+estrutura do HTML) fica para a Fase 4 (MOD-01) e a suíte Playwright da Fase 3 — este spike só
+prova a mecânica de bundling e a saída estática. Para D-07, este spike só bundlou código próprio
+de `src/`; não incluiu nenhuma dependência de terceiros no navegador (ex.: `@e965/xlsx`) — a
+prova de que uma dependência npm real fica embutida no HTML pelo bundler (e não como CDN) ainda
+precisa ser verificada quando essa dependência for de fato adicionada (Fase 7).
+
 ## Decisões ratificadas
 
 Lista as decisões D-01 a D-13 (Node 24 LTS, distribuição do runtime, transporte MCP, acesso
