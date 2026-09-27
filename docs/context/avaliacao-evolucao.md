@@ -915,7 +915,7 @@ instala `typescript`, `eslint` e `vitest`.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
-### D-09 — G6: Microsoft com login delegado
+### D-09 — G6: Microsoft só com acesso delegado
 
 **Status:** Ratificada em 27/09/2026
 
@@ -923,14 +923,21 @@ instala `typescript`, `eslint` e `vitest`.
 nunca tem uma chave-mestra própria — e se o crachá não funcionar, ainda existe a porta dos
 fundos (a pasta sincronizada do OneDrive).
 
-**Decisão:** (já decidido no new-project, só aplicar) G6 reescrita: integração com
-SharePoint/OneDrive **com login delegado da PMO**, sem App Registration própria nem permissão de
-aplicação no Graph; caminho candidato = client público Microsoft com device code; fallback
-garantido = pasta sincronizada pelo OneDrive. Token fora de `data/`, `config/` e `versions/`.
-Ponto de extensão continua sendo o conector.
+**Decisão:** nunca uma permissão de aplicação no Microsoft Graph, nem App Registration fora do
+tenant da empresa. Edição local: o login delegado é opcional e permitido, com o client público de
+primeira parte da Microsoft; fluxo = login interativo com PKCE; o device code só como fallback, se
+o tenant permitir; a alternativa garantida continua sendo a pasta sincronizada mais o export do
+Power Automate, lidos sem login. Edição corporativa (v2): um registro Entra no tenant da empresa,
+criado e governado pela TI, com permissões delegadas mínimas e app roles; login interativo com
+PKCE, device code como fallback se a TI permitir. Nenhum token é persistido junto com dados,
+configuração, versões, snapshots, pacotes de release ou pacotes de captura (D-30). Nenhuma fase do
+v1.6 implementa o login local — ele é só permitido; o ponto de extensão continua sendo o módulo
+conector, quando existir (hoje congelado, D-23); a validação no tenant do dono antes do tenant da
+PMO (SP-04) vira item do portão v1→v2.
 **Correção factual (01-09):** o texto original desta decisão dava um arquivo de conector como já
 existente, mas esse arquivo nunca existiu no repositório (ver a tabela de divergências abaixo);
-não existe módulo conector no código hoje — ele é criado nas Fases 17–18.
+não existe módulo conector no código hoje; ele só é criado quando o conector sair do congelamento
+(D-23).
 
 **Justificativa:** `@azure/msal-node` confirma que o fluxo device code é Node/desktop-only (não
 existe em `msal-browser`) contra um client público de primeira parte da Microsoft (candidato:
@@ -940,16 +947,20 @@ sistema operacional (DPAPI, por usuário Windows), fora de `data/`, `config/`, `
 segredo dentro.
 A decisão em si é do usuário, tomada em 26/09/2026 no new-project (substituindo a de
 30/07/2026); esta fase a ratificou como D-09 em 27/09/2026, e o cabeçalho da G6 no CLAUDE.md
-registra as duas datas.
+registra as duas datas. Revista no mesmo dia pela D-29 — PKCE primeiro porque a Microsoft
+recomenda bloquear o device code.
 
-**Efeito nas fases seguintes:** o conector é criado nas Fases 17–18; não existe código dele hoje.
-Nome e local do arquivo do conector são definidos nessas fases; até lá, nenhuma chamada
-autenticada à Microsoft existe no código.
+**Efeito nas fases seguintes:** nenhuma fase do v1.6 implementa o login local (só permitido); a
+ponte das Listas (Fase 23) lê só a pasta; quando o conector existir, ele é o único ponto de
+extensão para chamadas autenticadas; a validação no tenant do dono antes do da PMO (SP-04) é item
+do portão v1→v2.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
 **Alternativas descartadas:** PnP PowerShell (exige App Registration própria desde 09/2024 — não
 é mais uma opção delegada-sem-registro).
+
+Revista por D-29 em 27/09/2026.
 
 ### D-10 — Transporte MCP: Streamable HTTP + ponte stdio
 
@@ -958,11 +969,10 @@ autenticada à Microsoft existe no código.
 **Em linguagem simples:** um balcão único de atendimento (o servidor) e um ramal telefônico (a
 ponte stdio) que só transfere a ligação, sem atender ninguém por conta própria.
 
-**Decisão:** Ratificado: **Streamable HTTP como endpoint principal** no servidor em
-`http://localhost:8090/` (ex.: `/mcp`) **+ ponte stdio fina** que apenas repassa as chamadas ao
-endpoint HTTP, sem acessar dados. Preserva a instância única e a fonte da verdade única;
-compatível com clientes que só falam stdio. Descartados: só stdio (conflita com a instância
-única) e só HTTP (exige adaptador de terceiros para clientes stdio).
+**Decisão:** o transporte fica — **Streamable HTTP como endpoint principal** mais **ponte stdio
+fina** que apenas repassa as chamadas ao endpoint HTTP, sem acessar dados — para o MCP da edição
+corporativa (v2), onde a autenticação vira OAuth Entra (metadados de recurso protegido). Sem MCP
+na v1: nenhum endpoint MCP roda na edição local.
 
 **Justificativa:** Spike C provou o caminho feliz ponta a ponta — um cliente que só fala stdio
 (spawna a ponte como subprocesso) listou as duas ferramentas registradas no servidor Streamable
@@ -974,8 +984,8 @@ STACK.md (recomendava stdio + HTTP como duas portas de entrada separadas) e ARCH
 assenta a divergência com a ponte relay-only: um único processo servidor (mutex preservado),
 acessível por HTTP direto e por qualquer cliente stdio via ponte.
 
-**Efeito nas fases seguintes:** Fase 11 (servidor Node hospeda `/mcp` no mesmo processo/porta
-8090); Fases 14–15 (implementação real da ponte e das ferramentas MCP).
+**Efeito nas fases seguintes:** o servidor corporativo da v2 hospeda o endpoint MCP (congelado até
+o ADR corporativo, D-23); "MCP remoto com OAuth" sai do "fora do escopo" e vai para a v2 (D-34).
 
 **Reversibilidade:** costly — clientes MCP configurados e a superfície de segurança dependem do
 transporte.
@@ -985,6 +995,8 @@ transporte.
 `docs/context/runtime-portatil.md`, conflita com a instância única); só HTTP (exige adaptador de
 terceiros para os clientes que só falam stdio, como Claude Desktop/Claude Code por padrão).
 
+Revista por D-31 em 27/09/2026.
+
 ### D-11 — A ponte stdio sobe o servidor
 
 **Status:** Ratificada em 27/09/2026
@@ -992,9 +1004,10 @@ terceiros para os clientes que só falam stdio, como Claude Desktop/Claude Code 
 **Em linguagem simples:** se a loja estiver fechada quando o telefone tocar, o próprio ramal liga
 as luzes e espera o balcão abrir antes de transferir a ligação.
 
-**Decisão:** Se o servidor não estiver rodando, a **ponte stdio sobe o servidor** (via `pmo.ps1`
-sem browser, aguardando o health). Porta 8090 ocupada por outro processo = erro claro e
-bloqueante (G4).
+**Decisão:** sem MCP na v1 (D-31), nenhuma ponte stdio sobe um servidor local; o comportamento
+validado no Spike C — a ponte sobe o servidor quando ele não responde e aguarda o health; porta
+8090 ocupada por outro processo é erro claro e bloqueante (G4) — fica como evidência para o
+desenho do MCP da v2, onde o servidor é o corporativo.
 
 **Justificativa:** Spike C estendeu a ponte para checar `/health` antes de conectar: com o
 servidor parado, a ponte detectou a ausência de resposta, subiu o processo (`spawn` detached,
@@ -1003,24 +1016,28 @@ seguiu normalmente. Com a porta ocupada por outro processo, a ponte identificou 
 resposta de `/health` (corpo diferente do esperado) que a porta pertence a outro processo e saiu
 com código 1 sem nunca tentar subir um segundo servidor.
 
-**Efeito nas fases seguintes:** Fases 14–15 orçam ~527 ms de espera de auto-start na UX da ponte
-real; o erro de porta ocupada segue o mesmo padrão bloqueante do G4.
+**Efeito nas fases seguintes:** nada no v1.6; o MCP da v2 (congelado, D-23) decide se alguma ponte
+ainda sobe um processo; a espera de ~527 ms fica como referência.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
-### D-12 — Token local por instalação em state/
+Revista por D-31 em 27/09/2026.
+
+### D-12 — Autenticação do endpoint MCP: OAuth Entra na v2
 
 **Status:** Ratificada em 27/09/2026
 
 **Em linguagem simples:** um crachá guardado na portaria da própria casa, que não viaja na
 mudança nem na cópia de segurança.
 
-**Decisão:** Autenticação do endpoint HTTP: **token local por instalação em `state/`** (fora de
-`data/`, dos snapshots e do ZIP); a ponte stdio lê automaticamente; clientes HTTP diretos usam o
-token na configuração. Host/Origin sempre validados (anti DNS rebinding).
+**Decisão:** na v2 o endpoint MCP autentica com OAuth Entra (metadados de recurso protegido),
+substituindo o token local por instalação em `state/` ratificado originalmente; Host/Origin
+sempre validados, como middleware do próprio servidor (anti DNS rebinding). Sem MCP na v1 não há
+token MCP local; nenhum token é persistido junto com dados, configuração, versões, snapshots,
+pacotes de release ou pacotes de captura (D-30).
 
 **Justificativa:** Spike C confirmou o token: `/mcp` sem `Authorization` ou com token errado
-retorna `401`. Achado importante para a Fase 14: o SDK `@modelcontextprotocol/sdk@1.30.1` mantém
+retorna `401`. Achado importante para o MCP da v2: o SDK `@modelcontextprotocol/sdk@1.30.1` mantém
 `enableDnsRebindingProtection` (e `allowedHosts`/`allowedOrigins`) em
 `WebStandardStreamableHTTPServerTransportOptions`, mas **o valor padrão é `false`** — a proteção
 contra DNS rebinding fica **desligada por padrão** (confirma o alerta do GHSA-w48q-cv73-mx4w
@@ -1032,14 +1049,13 @@ externo" para validação de Host/Origin/DNS rebinding. Com as opções explicit
 forjados foram recusados com `403`, e um controle positivo com `Host`/`Origin` corretos confirmou
 que a rejeição não é efeito colateral de outra coisa quebrada.
 
-**Efeito nas fases seguintes:** a Fase 14 precisa habilitar Host/Origin explicitamente no
-`StreamableHTTPServerTransport` **e**, por essas opções estarem `@deprecated` no SDK `1.30.1`,
-implementar a validação de Host/Origin como middleware do próprio servidor Node do produto
-(checagem antes de repassar ao SDK) — não confiar apenas nas opções internas do transporte, que
-podem ser removidas em versão futura do SDK; a Fase 14 deve reverificar esse comportamento contra
-a versão do SDK de fato fixada no momento da implementação.
+**Efeito nas fases seguintes:** o MCP da v2 (congelado, D-23) implementa OAuth Entra e a validação
+de Host/Origin como middleware do próprio servidor Node do produto, reverificando o comportamento
+do SDK contra a versão de fato fixada no momento da implementação.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+Revista por D-31 em 27/09/2026.
 
 ### D-13 — Autoria de agente no audit log
 
@@ -1058,7 +1074,8 @@ mensagem JSON-RPC de handshake, sem instrumentação adicional no SDK. Este acha
 com ARCHITECTURE.md: "came via MCP" é o fato confiável (qual token local chamou), e o nome de
 cliente fornecido é tratado como anotação, não como fronteira de segurança.
 
-**Efeito nas fases seguintes:** Fase 11 (autoria no audit log, SRV-04) e Fase 15 (MCP-04).
+**Efeito nas fases seguintes:** v2 corporativa: o servidor autoritativo registra autor = identidade
+Entra e o MCP registra a autoria de agente (ambos congelados até o ADR corporativo, D-23).
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
