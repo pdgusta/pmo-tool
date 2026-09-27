@@ -412,6 +412,92 @@ de `src/`; não incluiu nenhuma dependência de terceiros no navegador (ex.: `@e
 prova de que uma dependência npm real fica embutida no HTML pelo bundler (e não como CDN) ainda
 precisa ser verificada quando essa dependência for de fato adicionada (Fase 7).
 
+### Spike C — transporte MCP: Streamable HTTP + ponte stdio (D-10, D-11, D-12)
+
+**Objetivo:** provar que um cliente MCP que só fala stdio lista e chama ferramentas de um
+servidor Streamable HTTP por meio de uma ponte stdio que apenas repassa mensagens (D-10), com
+autenticação por token local e validação de Host/Origin (D-12), subida automática do servidor
+pela ponte (D-11) e erro bloqueante para porta ocupada (G4).
+
+Todo o spike rodou em `%TEMP%\pmo-spikes-f1\mcp-transport`, fora de qualquer árvore Git (mesma
+confirmação `git -C ... rev-parse --show-toplevel` com exit 128 dos Spikes A e B). O gate de
+legitimidade de `zod@4.6.5` e `@modelcontextprotocol/sdk@1.30.1` já estava aprovado
+(`"aprovado"`, plano 01-03) — este spike reaproveitou essa aprovação sem repetir o
+`checkpoint:human-verify`.
+
+**1. Instalação exata, com os flags já aprovados no gate de legitimidade:**
+
+```text
+$ npm init -y
+$ (definir "type": "module" no package.json gerado)
+$ npm install --save-exact --ignore-scripts --no-audit --no-fund @modelcontextprotocol/sdk@1.30.1 zod@4.6.5
+added 94 packages in 9s
+
+$ npm ls --depth=0
+mcp-transport@1.0.0 %TEMP%\pmo-spikes-f1\mcp-transport
+├── @modelcontextprotocol/sdk@1.30.1
+└── zod@4.6.5
+```
+
+Instalação limpa com versões exatas; nenhum binding nativo faltou sob `--ignore-scripts`.
+
+**2. Caminhos de módulo confirmados no `exports` e nas declarações de tipo do pacote instalado**
+(o `package.json` do SDK expõe um catch-all `"./*"`, então cada subpath abaixo resolve para
+`dist/esm/<subpath>.js`; nomes de classe confirmados via `grep 'declare class'` nos `.d.ts`
+correspondentes):
+
+| Módulo | Caminho de import | Classe/uso |
+|---|---|---|
+| Servidor MCP (tools) | `@modelcontextprotocol/sdk/server/mcp.js` | `McpServer` — `registerTool(nome, config, cb)` (`tool()` está `@deprecated`) |
+| Servidor Streamable HTTP | `@modelcontextprotocol/sdk/server/streamableHttp.js` | `StreamableHTTPServerTransport` — wrapper Node.js (`IncomingMessage`/`ServerResponse`) sobre `WebStandardStreamableHTTPServerTransport`; usa `@hono/node-server` internamente |
+| Servidor stdio | `@modelcontextprotocol/sdk/server/stdio.js` | `StdioServerTransport` |
+| Cliente Streamable HTTP | `@modelcontextprotocol/sdk/client/streamableHttp.js` | `StreamableHTTPClientTransport(url, { requestInit })` — `requestInit.headers` carrega o `Authorization: Bearer <token>` |
+| Cliente stdio | `@modelcontextprotocol/sdk/client/stdio.js` | `StdioClientTransport({ command, args, env?, cwd? })` — spawna o processo da ponte |
+| Cliente | `@modelcontextprotocol/sdk/client/index.js` | `Client(clientInfo, options?)` — `connect()`, `listTools()`, `callTool()` |
+
+Nenhum nome de classe ou caminho divergiu do que a pesquisa (ARCHITECTURE.md) previa; a única
+observação nova é que `StreamableHTTPServerTransport` (Node) é hoje um wrapper fino sobre
+`WebStandardStreamableHTTPServerTransport` (Web Standards `Request`/`Response`), não uma
+implementação HTTP nativa separada — irrelevante para o contrato de `handleRequest(req, res,
+parsedBody?)` que o servidor do produto vai chamar.
+
+**3. Papel de cada arquivo (só comandos e papéis — nenhum código-fonte colado aqui):**
+
+- `state/mcp-token.txt` — token de 32 bytes em hex (64 caracteres), gerado com `crypto.randomBytes(32)`, nunca impresso neste documento.
+- `server.mjs` — `node:http` em `127.0.0.1:18090` (porta de teste; 8090 é do app, G4); `GET /health`; `/mcp` confere `Authorization: Bearer <token>` antes de qualquer coisa (401 se ausente/errado), depois cria um `McpServer` + `StreamableHTTPServerTransport` novos por requisição (modo stateless) e registra as ferramentas `ping` (sem argumento, retorna `pong`) e `eco` (schema zod `{ texto: string }`, retorna o texto).
+- `bridge.mjs` — a ponte stdio fina do D-10: lê o token do arquivo, cria `StdioServerTransport` + `StreamableHTTPClientTransport` apontando para `http://127.0.0.1:18090/mcp` com o cabeçalho `Authorization`, inicia os dois, repassa toda mensagem de um para o outro nos dois sentidos e fecha ambos quando qualquer um fecha. Não importa nenhuma classe de hospedagem de ferramentas do lado servidor, não registra ferramenta nenhuma e não lê nenhum dado além do arquivo de token.
+- `client.mjs` — `Client` do SDK com `StdioClientTransport` que spawna `node bridge.mjs` (via `process.execPath`), chama `listTools()`, `callTool` para `ping` e `callTool` para `eco` com `texto` = `olá`; imprime cada resultado como JSON.
+
+**4. Execução do caminho feliz (servidor em background, depois `node client.mjs`):**
+
+```text
+$ node server.mjs &
+SERVER_READY host=127.0.0.1 port=18090 dnsRebindingProtection=false
+
+$ node client.mjs
+TOOLS=["ping","eco"]
+PING_RESULT={"content":[{"type":"text","text":"pong"}]}
+ECO_RESULT={"content":[{"type":"text","text":"olá"}]}
+```
+
+O cliente que só fala stdio (spawnou `bridge.mjs` como subprocesso) listou as duas ferramentas
+registradas no servidor Streamable HTTP e recebeu `pong` e `olá` de volta — a ponte relay-only
+funcionou nos dois sentidos sem nenhuma lógica de ferramenta própria.
+
+**5. Evidência de que a ponte é fina (`wc -l bridge.mjs`):**
+
+```text
+$ wc -l bridge.mjs
+43 bridge.mjs
+
+$ grep -c 'McpServer' bridge.mjs
+0
+```
+
+43 linhas no total (imports, configuração de transporte, encaminhamento de mensagens nos dois
+sentidos e fechamento conjunto) e zero ocorrências da classe de hospedagem de ferramentas do
+servidor — a ponte não carrega lógica de ferramenta nem acesso a dados, só repassa.
+
 ## Decisões ratificadas
 
 Lista as decisões D-01 a D-13 (Node 24 LTS, distribuição do runtime, transporte MCP, acesso
