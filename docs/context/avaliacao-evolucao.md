@@ -684,7 +684,9 @@ registrada como achado para a Fase 14.
 
 Lista as decisões D-01 a D-13 (Node 24 LTS, distribuição do runtime, transporte MCP, acesso
 Microsoft delegado), cada uma com data, justificativa, efeito nas fases seguintes e
-reversibilidade.
+reversibilidade. As D-01, D-02, D-09 e D-10..D-12 foram reescritas no lugar pelo ADR D-19+
+(`docs/context/adr-v1-captura.md`) e terminam com "Revista por D-xx em 27/09/2026"; as D-03, D-04,
+D-05 e D-08 foram reancoradas pela D-35 e terminam com "Reancorada por D-35 em 27/09/2026".
 
 ### D-01 — Node.js 24 LTS em dev/CI e no servidor corporativo
 
@@ -819,28 +821,30 @@ troca de runtime; a regra de PS 5.1 continua valendo para `pmo.ps1`, `atualizar.
 
 Reancorada por D-35 em 27/09/2026.
 
-### D-05 — G1: HTML único até a Fase 13
+### D-05 — G1: HTML único em toda a v1
 
 **Status:** Ratificada em 27/09/2026
 
 **Em linguagem simples:** a casa continua com uma porta de entrada só até o dia em que o servidor
 passar a morar dentro dela; aí a planta é revista.
 
-**Decisão:** G1 reescrita: a interface continua **um único HTML autocontido até a Fase 13** (Vite
-+ `vite-plugin-singlefile` na Fase 4, com paridade contra `build.ps1`); a G1 é **revisada na Fase
-13**, quando o servidor Node vira fonte da verdade. Registrar isso explicitamente como gatilho de
-revisão.
+**Decisão:** G1 reescrita: a interface continua **um único HTML autocontido em toda a v1** (Vite
++ `vite-plugin-singlefile` quando uma fase adotar o Vite para embutir dependência — hoje, a Fase
+27 —, com paridade contra `build.ps1`); a G1 é **revisada no ADR corporativo (v2)**, quando o
+servidor corporativo vira fonte da verdade. Registrar isso explicitamente como gatilho de revisão.
 
 **Justificativa:** Spike B provou que Vite + `vite-plugin-singlefile` gera um único HTML
 autocontido (1 `<script>`, zero referências externas `src=`/`href=` para `http(s)://`/`//`, zero
 `@import` remoto) a partir de uma cópia de `src/`, menor que a saída de `build.ps1` (~581 KB vs
-957,4 KB) — a migração de tooling da Fase 4 não perde a autocontenção do G1.
+957,4 KB) — a migração de tooling para o Vite não perde a autocontenção do G1.
 
-**Efeito nas fases seguintes:** Fase 4 (Vite + singlefile; o gate de paridade real de
-comportamento no navegador, não só estrutura do HTML, fica para MOD-01 e a suíte Playwright da
-Fase 3); Fase 13 (revisão explícita da G1 quando o servidor Node vira fonte da verdade).
+**Efeito nas fases seguintes:** fase que adotar o Vite (hoje, a Fase 27): Vite + singlefile, com
+gate de paridade de comportamento no navegador, não só de estrutura do HTML, e uma suíte E2E
+quando uma fase a adotar; ADR corporativo (v2): revisão explícita da G1.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+Reancorada por D-35 em 27/09/2026.
 
 ### D-06 — G2: dependências por lista permitida
 
@@ -884,9 +888,10 @@ por telefone a outra loja toda vez que a casa abre.
 `src=`/`href=` nem `@import` remoto no HTML final.
 
 **Efeito nas fases seguintes:** quando `@e965/xlsx` ou qualquer lib de componentes de fato for
-adicionada (ex.: Fase 7), a prova de que o bundler embute a dependência no HTML (e não a serve
-via CDN) precisa ser verificada nesse momento — Spike B só bundlou código próprio de `src/`, sem
-nenhuma dependência de terceiros no navegador ainda.
+adicionada (ex.: a fase que adotar o Vite para embutir dependência; hoje, a Fase 27), a prova de
+que o bundler embute a dependência no HTML (e não a serve via CDN) precisa ser verificada nesse
+momento — Spike B só bundlou código próprio de `src/`, sem nenhuma dependência de terceiros no
+navegador ainda.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
@@ -897,23 +902,25 @@ nenhuma dependência de terceiros no navegador ainda.
 **Em linguagem simples:** as duas ferramentas de montagem trabalham lado a lado até a nova provar
 que faz o mesmo trabalho; só então a antiga se aposenta.
 
-**Decisão:** `build.ps1` é **removido depois que o Vite provar paridade no CI** (Fase 4). Até lá
-coexistem. A G2 reescrita deve dizer isso (e o CLAUDE.md deixa de proibir `npm install` para
-desenvolvimento).
+**Decisão:** `build.ps1` é **removido depois que o Vite provar paridade no CI** (na fase que
+adotar o Vite; hoje, a Fase 27). Até lá coexistem. A G2 reescrita deve dizer isso (e o CLAUDE.md
+deixa de proibir `npm install` para desenvolvimento).
 
 **Justificativa:** Spike B mediu que o tempo interno do Vite ("built in", sem o custo de iniciar
 o processo `npx`/Node) cai para 182 ms na terceira rodada — mesma ordem de grandeza da mediana de
 `build.ps1` (176 ms, seção `## Medições do protótipo`); a maior parte da diferença de wall-clock
-(2.443 ms) vem do custo de processo, não da transformação em si. Isso dá confiança de que a Fase
-4 pode alcançar paridade sem perder a autocontenção do G1 (D-05).
+(2.443 ms) vem do custo de processo, não da transformação em si. Isso dá confiança de que a fase
+que adotar o Vite pode alcançar paridade sem perder a autocontenção do G1 (D-05).
 
-**Efeito nas fases seguintes:** Fase 4 mede paridade real de `build.ps1` vs Vite (tempo e
-comportamento no navegador); só depois `build.ps1` é removido. A paridade condiciona apenas essa
-remoção: `npm install` para desenvolvimento já é permitido desde a ratificação (G2, D-01, D-04),
-restrito às dependências de `## Dependências aprovadas (G2)` (D-06); é por essa via que a Fase 2
-instala `typescript`, `eslint` e `vitest`.
+**Efeito nas fases seguintes:** a fase que adotar o Vite mede paridade real de `build.ps1` vs Vite
+(tempo e comportamento no navegador); só depois `build.ps1` é removido. A paridade condiciona
+apenas essa remoção: `npm install` para desenvolvimento já é permitido desde a ratificação (G2,
+D-01, D-04), restrito às dependências de `## Dependências aprovadas (G2)` (D-06); é por essa via
+que uma fase do v1.6 que adotar tooling instala `typescript`, `eslint` e `vitest`.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+Reancorada por D-35 em 27/09/2026.
 
 ### D-09 — G6: Microsoft só com acesso delegado
 
