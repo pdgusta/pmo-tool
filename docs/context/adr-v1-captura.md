@@ -491,3 +491,52 @@ justificar.
 **Efeito nas fases seguintes:** planos 19-04 e 19-05.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+## Mapa das guardrails
+
+Depois deste ADR, o CLAUDE.md deve dizer o mesmo que esta tabela sobre cada guardrail:
+
+| Guardrail | O que muda | Decisão |
+|---|---|---|
+| G1 | sentido mantido; só as citações de fase trocam; revisão no ADR corporativo | D-35 |
+| G2 | sentido mantido; a exceção (2) aponta o módulo conector, quando existir (hoje congelado, D-23); build e servidor reancorados | D-29, D-35 |
+| G3 | duas edições | D-27 |
+| G4 | vale só para a edição local | D-28 |
+| G5 | sem mudança | — |
+| G6 | reescrita em duas edições, regra de token genérica | D-29, D-30 |
+| G7 | sem mudança | — |
+| G8 | reforçada com cinco mínimos, sem números | D-32 |
+| G9 | sem mudança | — |
+| G10 | sem mudança | — |
+| G11 | sem mudança | — |
+| G12 | sem mudança | — |
+| G13 | sem mudança | — |
+| G14 | nova, uso local | D-33 |
+
+O CLAUDE.md também recebe uma seção curta "Fora do escopo da v1" (D-34).
+
+## Pendências (D-26)
+
+Pendências que tocam este ADR, com resposta ainda aberta:
+
+- o consentimento da PMO para o registro de uso local (G14, D-33);
+- o formato real do export agendado das Listas (ponte das Listas, Fase 23; D-25);
+- os critérios, templates e materiais que a PMO vai enviar (Fases 26 e 27);
+- as regras de serviços recorrentes e de incentivos (Fases 28 e 29);
+- as respostas da TI sobre o tenant (dono do registro do app, consentimento de usuário, device
+  code, assinatura Azure), que bloqueiam só a v2;
+- a validação do login delegado no tenant do dono antes do tenant da PMO (SP-04), item do portão
+  v1→v2.
+
+## Gate de validação
+
+O gate mecânico desta fase é `tools/validar-contexto.ps1`:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/validar-contexto.ps1 -Detalhado
+```
+
+Resultado esperado depois desta entrada: `Entradas: 17  Contratos: 30` e, na última linha,
+`Contexto valido.` — código de saída `0`.
+
+Este ADR não muda código de produto (`src/`, `serve.ps1`, `tools/`, `tests/`).
