@@ -242,6 +242,22 @@
       "tags": ["incidente", "maquina-b", "recuperacao", "runbook"],
       "criticality": "critical",
       "dependsOn": ["operacao-recuperacao"]
+    },
+    {
+      "id": "avaliacao-evolucao",
+      "title": "Avaliação técnica e decisões de evolução",
+      "kind": "domain",
+      "l0": "Avaliação técnica do protótipo v1.5.0 com medições reais e spikes descartáveis; ratifica Node 24 LTS e o transporte MCP Streamable HTTP com ponte stdio. Toda fase que dependa de Node, MCP ou do conector Microsoft lê este L1 antes de planejar: registra alternativas descartadas e o motivo de cada guardrail reescrito.",
+      "l1": "docs/context/avaliacao-evolucao.md",
+      "l2": [
+        "CLAUDE.md",
+        "build.ps1",
+        "serve.ps1",
+        "src/js/30-import.js"
+      ],
+      "tags": ["avaliacao", "decisoes", "dependencias", "guardrails", "mcp", "node"],
+      "criticality": "high",
+      "dependsOn": []
     }
   ],
   "contracts": [
