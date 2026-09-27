@@ -257,6 +257,22 @@
       "tags": ["avaliacao", "decisoes", "dependencias", "guardrails", "mcp", "node"],
       "criticality": "high",
       "dependsOn": []
+    },
+    {
+      "id": "adr-v1-captura",
+      "title": "ADR D-19+: a v1 como roupa de captura e as guardrails da v1",
+      "kind": "domain",
+      "l0": "ADR D-19+: a v1 como instrumento de captura e pode(papel, ação, recurso, vínculo) como regra única de acesso; reescreve G3/G4 (edição local), G6, D-01/D-02, D-10..D-12 e o fora do escopo; reforça a G8 e cria a G14 (uso local). Toda fase que dependa de runtime, Microsoft, MCP ou proteção de dados lê este L1 primeiro.",
+      "l1": "docs/context/adr-v1-captura.md",
+      "l2": [
+        "pmo.ps1",
+        "serve.ps1",
+        "src/js/20-store.js",
+        "tools/portable-common.ps1"
+      ],
+      "tags": ["adr", "autorizacao", "decisoes", "edicao-local", "guardrails", "microsoft", "protecao-dados", "v1-captura"],
+      "criticality": "critical",
+      "dependsOn": ["avaliacao-evolucao"]
     }
   ],
   "contracts": [
