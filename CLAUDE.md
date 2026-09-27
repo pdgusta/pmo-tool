@@ -61,7 +61,7 @@ permanece em PowerShell. **Node.js 24 LTS** vale no desenvolvimento, no CI e no 
 edição corporativa (v2) (D-01, D-27). O Node é permitido na máquina da PMO como `node.exe` oficial
 portátil dentro de `versions/<semver>/` — versão e SHA-256 declarados no `release.json` e na
 allowlist do ZIP, nada instalado globalmente, rollback troca o Node junto com o código (D-02) —,
-mas só entra no pacote quando uma fase precisar e justificar o uso por proposta ao Maestro; até
+mas só entra no pacote quando uma fase precisar e justificar o uso por proposta ao dono; até
 lá, nenhum release leva `node.exe`. A edição local não tem servidor Node, fila offline local nem
 ensaio de troca de runtime local; a migração é local → nuvem pelo bundle JSON (D-27, D-28). Todo
 `.ps1` que existe no repositório roda em 5.1 e segue sua sintaxe:

@@ -250,7 +250,7 @@ runtime. O Node 24 LTS vale em dev, no CI e no servidor corporativo (v2). O Node
 máquina da PMO como `node.exe` oficial portátil em `versions/<semver>/` (versão e SHA-256
 declarados no `release.json` e na allowlist do ZIP, nada instalado globalmente, rollback troca o
 Node junto com o código), mas só entra no pacote quando uma fase precisar e justificar o uso por
-proposta ao Maestro; até lá, nenhum release leva `node.exe`. Caem da D-01/D-02: o servidor Node
+proposta ao dono; até lá, nenhum release leva `node.exe`. Caem da D-01/D-02: o servidor Node
 local, a fila offline local e o ensaio de troca de runtime local (FUND-02 na forma local). A
 migração vira "local → nuvem" pelo bundle JSON. Isso emenda a D-23 no ponto do `node.exe`. Revê:
 G3, D-01, D-02; D-03 e D-04 são reancoradas em consequência (D-35). O texto antigo do roadmap

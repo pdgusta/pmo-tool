@@ -751,7 +751,7 @@ quando uma viagem específica precisar dela.
 **Decisão:** o Node é permitido na máquina da PMO como o `node.exe` oficial portátil em
 `versions/<semver>/`, com versão e SHA-256 declarados no `release.json` e na allowlist do ZIP,
 nada instalado globalmente e rollback trocando o Node junto com o código (coerente com G11/G12);
-mas só entra no pacote quando uma fase precisar e justificar o uso por proposta ao Maestro — até
+mas só entra no pacote quando uma fase precisar e justificar o uso por proposta ao dono — até
 lá, nenhum release leva `node.exe` (o empacotamento automático desta ratificação original não
 está em vigor). SEA e Node instalado globalmente continuam descartados.
 
