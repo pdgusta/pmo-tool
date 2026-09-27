@@ -1122,6 +1122,48 @@ Nenhum framework é escolhido nesta fase: a decisão é da Fase 8, com a PMO (UI
 Registra a lista inicial de dependências aprovadas pela avaliação (nome, versão, licença, motivo)
 que a G2 reescrita do CLAUDE.md referencia como allow-list.
 
+**Verificação:** cada pacote abaixo foi reconferido contra o registro npm nesta execução
+(`npm view <pkg> version license repository.url time.modified`, somente leitura, sem
+`npm install`) em 27/09/2026; o Node.js 24 LTS foi reconferido contra
+`https://nodejs.org/dist/index.json`. Os números coincidem com os já registrados em
+`.planning/phases/01-avalia-o-t-cnica-e-decis-es-de-evolu-o/01-RESEARCH.md` (nenhuma divergência
+de licença ou repositório encontrada).
+
+| Pacote | Versão verificada | Licença | Uso | Ambiente | Fase de adoção | Situação |
+|---|---|---|---|---|---|---|
+| Node.js | 24.21.0 (LTS Krypton) | MIT | Runtime de dev/CI e produção | runtime (node.exe portátil na release, D-02) | Fase 2 (dev/CI); Fase 11–13 (servidor de produção) | aprovada |
+| `typescript` | 7.0.2 | Apache-2.0 | Checagem de tipo via JSDoc + `checkJs`, sem reescrever `src/js/` | dev/CI | Fase 2 | aprovada |
+| `vite` | 8.3.1 | MIT | Servidor de desenvolvimento (HMR) e bundler de produção | dev/CI | Fase 4 | aprovada |
+| `vite-plugin-singlefile` | 2.3.3 | MIT | Injeta JS/CSS construído em um único HTML (substitui a concatenação do `build.ps1`) | dev/CI | Fase 4 | aprovada |
+| `eslint` | 10.11.0 | MIT | Lint em flat config com ambientes separados de navegador e Node | dev/CI | Fase 2 | aprovada |
+| `vitest` | 5.0.2 | MIT | Testes unitários reaproveitando o pipeline de transformação do Vite | dev/CI | Fase 2 | aprovada |
+| `@playwright/test` | 1.63.0 | Apache-2.0 | Testes end-to-end contra `localhost:8090`, automatiza a checklist "Antes de dizer pronto" | dev/CI | Fase 3 | aprovada |
+| `@modelcontextprotocol/sdk` | 1.30.1 | MIT | SDK oficial do servidor MCP (Streamable HTTP + ponte stdio) | Node (servidor) | Fase 14–15 | aprovada |
+| `zod` | 4.6.5 | MIT | Validação de schema dos argumentos das ferramentas MCP | Node (servidor) | Fase 14–15 | aprovada |
+| `express` | 5.2.1 | MIT | Servidor HTTP hospedando `/`, `/api/*` e `/mcp` no mesmo processo | Node (servidor) | Fase 11+ | aprovada |
+| `@azure/msal-node` | 7.0.0 | MIT | Fluxo device code, autenticação delegada da PMO com a Microsoft | Node (servidor) | Fase 17–18 | aprovada |
+| `@microsoft/microsoft-graph-client` | 3.0.7 | MIT | Chamadas típadas ao Microsoft Graph (SharePoint/OneDrive) | Node (servidor) | Fase 17–18 | aprovada |
+| `@e965/xlsx` | 0.20.3 | Apache-2.0 | Leitura/escrita de `.xlsx` (mirror mantido do SheetJS Community Edition) | navegador (embutido no bundle, D-07) | Fase 7 | aprovada com ressalva — sem publicação desde 19/07/2024 (mais de 2 anos); reverificar atualidade na Fase 7 antes de instalar |
+| `@byteink/mppjs` | 0.1.8 | MIT (wrapper) / **LGPL-2.1-or-later** (binário nativo, embute o MPXJ compilado) | Conversão `.mpp` → MSPDI XML, sem JVM | Node (servidor) | Fase 17 | condicionada — não aprovada — flag `[SUS]` no audit de legitimidade (~4,5 meses, 5 versões publicadas); a licença do binário fica fora da lista MIT/Apache-2.0/BSD/ISC do D-06, então a adoção exige decisão explícita mais o spike com arquivos `.mpp` reais e o gate de legitimidade bloqueante da Fase 17 |
+| `lit` | 3.3.3 | BSD-3-Clause | Candidato de framework de UI (Web Components), avaliação D-16 | navegador (embutido no bundle, D-07) | Fase 8 | candidata — não aprovada — a escolha do framework de UI é da Fase 8, com a PMO |
+
+**Regras:**
+
+- Esta lista governa dependências diretas; dependências transitivas são fixadas pelo lockfile
+  commitado (`package-lock.json` a partir da Fase 2) — não precisam de linha própria aqui.
+- Dependência nova = proposta ao Maestro (regra 8 do time) antes de qualquer `npm install`; só
+  depois disso ela ganha uma linha nesta lista.
+- Licença verificada item a item: só entram como `aprovada` pacotes com MIT, Apache-2.0, BSD ou
+  ISC confirmados no registro nesta ou em verificação futura equivalente.
+- Pacote marcado `[ASSUMED]`/`[SUS]` no audit de legitimidade exige um `checkpoint:human-verify`
+  bloqueante (`gate="blocking-human"`) antes de qualquer `npm install` — é o caso de
+  `@byteink/mppjs` na Fase 17.
+- Dependências usadas no navegador entram embutidas no HTML único pelo bundle (D-07); nunca CDN,
+  nunca `<script src>` externo — mesma regra do G1.
+- Zero fetch externo em runtime, em qualquer ambiente (navegador ou servidor Node).
+- `build.ps1` e Vite coexistem até o Vite provar paridade no CI (Fase 4); só então `build.ps1` é
+  removido (D-08).
+
 ## Divergências código × documentação
 
 Registra as divergências corrigidas nesta fase entre o código e o CLAUDE.md: o contrato de
