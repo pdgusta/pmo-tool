@@ -904,7 +904,10 @@ fundos (a pasta sincronizada do OneDrive).
 SharePoint/OneDrive **com login delegado da PMO**, sem App Registration própria nem permissão de
 aplicação no Graph; caminho candidato = client público Microsoft com device code; fallback
 garantido = pasta sincronizada pelo OneDrive. Token fora de `data/`, `config/` e `versions/`.
-Ponto de extensão continua sendo o conector (hoje `js/38-connectors.js`).
+Ponto de extensão continua sendo o conector.
+**Correção factual (01-09):** o texto original desta decisão dava um arquivo de conector como já
+existente, mas esse arquivo nunca existiu no repositório (ver a tabela de divergências abaixo);
+não existe módulo conector no código hoje — ele é criado nas Fases 17–18.
 
 **Justificativa:** `@azure/msal-node` confirma que o fluxo device code é Node/desktop-only (não
 existe em `msal-browser`) contra um client público de primeira parte da Microsoft (candidato:
@@ -914,7 +917,8 @@ sistema operacional (DPAPI, por usuário Windows), fora de `data/`, `config/`, `
 segredo dentro.
 
 **Efeito nas fases seguintes:** o conector é criado nas Fases 17–18; não existe código dele hoje.
-`js/38-connectors.js` continua sendo o ponto de extensão inerte até lá.
+Nome e local do arquivo do conector são definidos nessas fases; até lá, nenhuma chamada
+autenticada à Microsoft existe no código.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
@@ -1205,6 +1209,7 @@ divergência conhecida está listada abaixo como **Corrigida** (com o plano que 
 | L1 de importação não nomeava os campos de retorno de `reconciliar()` | `docs/context/importacao-reconciliacao.md` | Corrigida (01-02) | Fase 1 | parágrafo **Atual** em "Correspondência e diff" nomeia os oito campos |
 | G6 citava `js/38-connectors.js` como caminho real do conector, mas o arquivo nunca existiu | CLAUDE.md, G6 | Corrigida (01-07) | Fase 1 | `git ls-files \| grep -i connector` sem resultado, registrado em 01-07-SUMMARY.md |
 | G2/G3 afirmavam "não existe Node... nesta máquina" enquanto `tests/Run-Tests.ps1` já exigia Node de desenvolvimento | CLAUDE.md, G2/G3 | Corrigida (01-07) | Fase 1 | `grep -c 'Não existe Node' CLAUDE.md` = 0; `tests/Run-Tests.ps1` linhas 22-28 já lançavam erro sem `$NodePath` |
+| A subseção D-09 deste L1 repetia, no presente, o caminho do conector inexistente da G6 antiga como se o arquivo existisse hoje | `docs/context/avaliacao-evolucao.md`, D-09 | Corrigida (01-09) | Fase 1 | a subseção D-09 não cita mais nenhum arquivo de conector e diz que não existe módulo conector no código hoje; a busca por nome de arquivo de conector entre os arquivos versionados continua sem resultado |
 | `.claude/skills/pmo-app/SKILL.md` diz "Sem Node, sem npm, sem dependências" | `.claude/skills/pmo-app/SKILL.md` (linha 12) | Registrada — **Alvo** | Fase 2 | atualizar o SKILL.md na mesma PR que introduz `package.json` |
 | CI fixa `node-version: '22.22.0'` e o contrato `workflow-gates-release` de `docs/context/index.json` exige esse valor exato | `.github/workflows/release.yml` (linha 66) | Registrada — **Alvo** | Fase 2 | bumpar o workflow para Node 24 e o `requiredPatterns` do contrato na mesma PR, ou `validar-contexto.ps1` falha por descompasso |
 | "Convenções de código" do CLAUDE.md proíbe módulos ES ("nada de módulos ES") | CLAUDE.md, "Convenções de código" | Registrada — **Alvo** | Fase 4 (MOD-02) | revisar junto com a extração ESM real de `10-model.js` |
