@@ -83,18 +83,23 @@ em sua forma de mercado: EVM, PV, EV, AC, SPI, CPI, EAC, ETC, VAC, TCPI, BAC, RA
 stage-gate, kanban, CAPEX, OPEX, stakeholder, sponsor, steering committee, backlog, WBS.
 Datas em `dd/mm/aaaa`. Moeda em `R$ 1.234.567` (pt-BR). Sem acentuação quebrada — UTF-8 sempre.
 
-### G6 — Microsoft só com login delegado da PMO (decisão do usuário em 26/09/2026, ratificada como D-09 em 27/09/2026)
-Integração com SharePoint/OneDrive é permitida **apenas** com o login delegado da própria PMO.
-**Nunca** criar App Registration própria nem usar permissão de aplicação no Microsoft Graph.
-Caminho candidato = client público de primeira parte da Microsoft com device code. Fallback
-garantido = a pasta sincronizada pelo OneDrive, lida sem login. O token nunca fica em `data/`,
-`config/` nem `versions/` (nem em snapshot ou no ZIP de release). O conector é validado primeiro,
-com cautela, no tenant do dono do projeto, antes do tenant da PMO (SP-04, Fase 18). A
-compatibilidade file-based continua: import/export de MSPDI, XER, PMXML, CSV, XLSX, ICS, e
+### G6 — Microsoft só com acesso delegado (D-29, 27/09/2026; revê a D-09)
+Integração com SharePoint/OneDrive só com acesso delegado. **Nunca** uma permissão de aplicação
+no Microsoft Graph, nem App Registration fora do tenant da empresa. **Edição local:** o login
+delegado é opcional e permitido, com o client público de primeira parte da Microsoft (nenhum App
+Registration próprio na v1); login interativo com PKCE; device code só como fallback, se o tenant
+permitir; a alternativa garantida continua sendo a pasta sincronizada mais o export do Power
+Automate, lida sem login; nenhuma fase do v1.6 implementa o login local — ele é só permitido.
+**Edição corporativa (v2):** um registro Entra no tenant da empresa, criado e governado pela TI,
+com permissões delegadas mínimas e app roles; login interativo com PKCE, device code como
+fallback se a TI permitir. **Token (D-30):** nenhum token é persistido junto com dados,
+configuração, versões, snapshots, pacotes de release ou pacotes de captura. A validação do login
+delegado no tenant do dono do projeto, antes do tenant da PMO (SP-04), é item do portão v1→v2.
+A compatibilidade file-based continua: import/export de MSPDI, XER, PMXML, CSV, XLSX, ICS, e
 campos de deep link (URLs coladas manualmente). **Atual:** não existe módulo conector no código
-hoje — ele é criado nas Fases 17–18 e se torna o único ponto de extensão para chamadas
-autenticadas à Microsoft; nenhuma chamada de rede autenticada existe fora dele. Ver D-09 e
-`docs/context/avaliacao-evolucao.md` para a justificativa completa.
+hoje; o módulo conector, quando existir (hoje congelado, D-23), é o único ponto de extensão para
+chamadas autenticadas à Microsoft, e nenhuma chamada de rede autenticada existe fora dele. Ver
+D-29 e D-30 em `docs/context/adr-v1-captura.md`.
 
 ### G7 — Honestidade sobre `.mpp`
 `.mpp` é OLE/CFB binário proprietário. Não existe parser JS do conteúdo de cronograma.
