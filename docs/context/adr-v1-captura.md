@@ -228,3 +228,126 @@ que pode mudar quando a resposta chegar.
 (D-26)` (plano 19-02).
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+## Decisões da Fase 19 (D-27 a D-35)
+
+Estas decisões foram tomadas pelo dono do projeto na discussão da Fase 19, em 27/09/2026, e
+implementam a reabertura da D-24.
+
+### D-27 — Duas edições: a edição local não troca de runtime
+
+**Status:** Ratificada em 27/09/2026
+
+**Origem:** discussão da Fase 19 com o dono (27/09/2026).
+
+**Em linguagem simples:** a roupa de captura não troca o motor por baixo; o motor novo só entra
+quando um traje futuro precisar dele.
+
+**Decisão:** a G3 passa a falar de duas edições. Edição local: o servidor continua sendo o
+`serve.ps1` (Windows PowerShell 5.1), e o updater e os scripts de entrada (`pmo.ps1`,
+`atualizar.ps1`, `tools/pmo-instalar.ps1`) também ficam em PS 5.1; a edição local não troca de
+runtime. O Node 24 LTS vale em dev, no CI e no servidor corporativo (v2). O Node é permitido na
+máquina da PMO como `node.exe` oficial portátil em `versions/<semver>/` (versão e SHA-256
+declarados no `release.json` e na allowlist do ZIP, nada instalado globalmente, rollback troca o
+Node junto com o código), mas só entra no pacote quando uma fase precisar e justificar o uso por
+proposta ao Maestro; até lá, nenhum release leva `node.exe`. Caem da D-01/D-02: o servidor Node
+local, a fila offline local e o ensaio de troca de runtime local (FUND-02 na forma local). A
+migração vira "local → nuvem" pelo bundle JSON. Isso emenda a D-23 no ponto do `node.exe`. Revê:
+G3, D-01, D-02; D-03 e D-04 são reancoradas em consequência (D-35). O texto antigo do roadmap
+"caem node.exe portátil" fica assim resolvido, em duas frases sem contradição: o pacote de hoje
+cai o `node.exe` (o empacotamento automático da D-02 original não está em vigor); a decisão não o
+proíbe — ele continua permitido quando uma fase justificar.
+
+**Justificativa:** a edição local é o instrumento de captura; trocar o runtime dela acrescenta
+risco ao dado da PMO sem ensinar nada à v2; a evidência do Spike A do L1 da Fase 1 continua válida
+para quando uma fase precisar.
+
+**Efeito nas fases seguintes:** nenhuma fase do v1.6 troca o runtime local; em
+`docs/context/avaliacao-evolucao.md`, D-01 e D-02 terminam com "Revista por D-27 em 27/09/2026";
+**Atual**: a allowlist de runtime em `tools/portable-common.ps1` não tem `node.exe`.
+
+**Reversibilidade:** costly — reabrir a troca de runtime local exigiria novo ADR e reativar o
+FUND-02, os journals e os testes de falha simulada do updater.
+
+**Alternativas descartadas:** Node só em ferramental de dev (proibiria um uso futuro justificado);
+já colocar o `node.exe` no próximo release (custo de pacote sem nenhuma fase usando).
+
+### D-28 — A G4 vale só para a edição local
+
+**Status:** Ratificada em 27/09/2026
+
+**Origem:** discussão da Fase 19 com o dono (27/09/2026).
+
+**Em linguagem simples:** o endereço fixo só importa enquanto o dado mora na própria máquina.
+
+**Decisão:** a G4 (porta 8090, origem `http://localhost:8090/`, porta ocupada é erro bloqueante)
+vale só para a edição local; na v2 a origem é a corporativa (HTTPS) e a migração local → nuvem usa
+o bundle JSON com um ensaio no estilo FUND-02. Revê: G4.
+
+**Justificativa:** a origem só identifica IndexedDB e `localStorage` na edição local.
+
+**Efeito nas fases seguintes:** nada muda em `serve.ps1` ou `pmo.ps1` (**Atual**); o ensaio é parte
+da v2.
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-29 — G6: Microsoft só com acesso delegado, nas duas edições
+
+**Status:** Ratificada em 27/09/2026
+
+**Origem:** discussão da Fase 19 com o dono (27/09/2026).
+
+**Em linguagem simples:** o app nunca tem crachá próprio da empresa toda; usa o crachá de quem
+está logado, e quando não há login, ainda existe a porta dos fundos.
+
+**Decisão:**
+1. Nunca uma permissão de aplicação no Microsoft Graph, nem App Registration fora do tenant da
+   empresa.
+2. Edição local: o login delegado é opcional e permitido, com o client público de primeira parte
+   da Microsoft (nenhum App Registration próprio na v1); fluxo = login interativo com PKCE; o
+   device code só como fallback, se o tenant permitir; a alternativa garantida continua sendo a
+   pasta sincronizada mais o export do Power Automate, lidos sem login.
+3. Edição corporativa (v2): um registro Entra no tenant da empresa, criado e governado pela TI,
+   com permissões delegadas mínimas e app roles; login interativo com PKCE, device code como
+   fallback se a TI permitir; o device code deixa de ser o caminho principal (a Microsoft
+   recomenda bloqueá-lo).
+4. Nenhuma fase do v1.6 implementa o login local — ele é só permitido; o conector continua
+   congelado (D-23) e a ponte das Listas (Fase 23) lê só a pasta; o conector é o módulo conector,
+   quando existir (hoje congelado, D-23), e a exceção (2) da G2 passa a apontar para ele em vez de
+   fases retiradas.
+5. A validação no tenant do dono antes do tenant da PMO (SP-04) vira item do portão v1→v2.
+6. O D-09 do L1 da Fase 1 é reescrito no lugar com o mesmo conteúdo.
+
+Revê: G6, exceção (2) da G2, D-09.
+
+**Justificativa:** device code é o fluxo que a Microsoft recomenda bloquear; PKCE é o fluxo
+interativo recomendado; um client público de primeira parte não exige registro pela PMO.
+**Atual**: não existe módulo conector e nenhuma chamada de rede autenticada existe no código hoje.
+
+**Efeito nas fases seguintes:** o plano 19-03 reescreve a G6 e a exceção (2) da G2 no CLAUDE.md;
+D-09 termina com "Revista por D-29 em 27/09/2026".
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+**Alternativas descartadas:** edição local só com arquivos (rejeitada pelo dono: o login continua
+permitido); device code como caminho principal.
+
+### D-30 — Nenhum token persistido junto com dados
+
+**Status:** Ratificada em 27/09/2026
+
+**Origem:** discussão da Fase 19 com o dono (27/09/2026).
+
+**Em linguagem simples:** a chave nunca viaja dentro da mala; se a mala for copiada ou restaurada,
+a chave não vai junto.
+
+**Decisão:** regra genérica para a v1 e a v2 — nenhum token é persistido junto com dados,
+configuração, versões, snapshots, pacotes de release ou pacotes de captura.
+
+**Justificativa:** cada uma dessas árvores é copiada, restaurada ou exportada (snapshots, backups
+de update, ZIP, pacote de captura); um token dentro delas viajaria com elas.
+
+**Efeito nas fases seguintes:** a G6 carrega a regra (plano 19-03); D-09 e D-12 do L1 da Fase 1 a
+citam.
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
