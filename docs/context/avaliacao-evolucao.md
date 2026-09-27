@@ -686,29 +686,31 @@ Lista as decisões D-01 a D-13 (Node 24 LTS, distribuição do runtime, transpor
 Microsoft delegado), cada uma com data, justificativa, efeito nas fases seguintes e
 reversibilidade.
 
-### D-01 — Node.js 24 LTS em dev/CI e produção
+### D-01 — Node.js 24 LTS em dev/CI e no servidor corporativo
 
 **Status:** Ratificada em 27/09/2026
 
 **Em linguagem simples:** escolher o motor do carro antes de desenhar a carroceria: tudo o que
 vem depois é montado em volta dele.
 
-**Decisão:** Node.js 24 LTS é ratificado como runtime de **dev/CI e de produção**. Justificativa:
-MCP SDK oficial, `@azure/msal-node` e o servidor autoritativo (Fases 11–13) exigem Node; "só
-dev/CI" travaria MCP e SharePoint.
+**Decisão:** Node.js 24 LTS é o runtime de **dev/CI e do servidor da edição corporativa (v2)**; a
+edição local não troca de runtime (`serve.ps1` continua em PS 5.1, D-27). O MCP SDK oficial,
+`@azure/msal-node` e o servidor autoritativo exigem Node e por isso vivem na v2 (conector
+congelado até o ADR corporativo, D-23).
 
 **Justificativa:** O MCP SDK oficial (`@modelcontextprotocol/sdk`) e `@azure/msal-node` (fluxo
 device code, confirmado Node/desktop-only — não existe em `msal-browser`) só rodam em Node; o
-servidor autoritativo das Fases 11–13 também é Node. As medições desta fase (seção `## Medições
+servidor autoritativo (v2 corporativa) também é Node. As medições desta fase (seção `## Medições
 do protótipo`) já mostram que `tests/Run-Tests.ps1` **exige** Node de desenvolvimento hoje
 (linhas 22-28, lança erro sem `$NodePath`) — a premissa antiga da G2 ("não existe Node nesta
 máquina") já era falsa antes desta ratificação.
 
-**Efeito nas fases seguintes:** Fases 2 a 18 são construídas sobre Node (tooling, Vite, servidor
-autoritativo, MCP, conector Microsoft).
+**Efeito nas fases seguintes:** dev/CI usam Node 24 quando uma fase do v1.6 adotar tooling; o
+servidor corporativo, o MCP e o conector são construídos sobre Node na v2 (congelado até o ADR
+corporativo, D-23); nenhuma fase do v1.6 troca o runtime local (D-27).
 
-**Reversibilidade:** one-way — as Fases 2–18 são construídas sobre Node; desfazer exige
-reescrever servidor, MCP e conector.
+**Reversibilidade:** one-way para a v2 corporativa — servidor, MCP e conector são planejados
+sobre Node; desfazer exige reescrevê-los. Na edição local nada depende de Node em runtime (D-27).
 
 **Alternativas descartadas:** Bun (mais rápido, single-binary por padrão, mas `@azure/msal-node`
 e `@byteink/mppjs` têm binários nativos validados contra Node, não Bun — adicionaria risco de
@@ -717,21 +719,24 @@ com Bun for confirmada independentemente); .NET single-file executable em C# (em
 single-exe igualmente bom e MSAL.NET maduro, mas perde totalmente o caminho de reuso de
 `PMO.model`/`PMO.util` — são JS, não portáveis para C# sem reescrita — e não há SDK MCP oficial
 para .NET tão maduro/central quanto o TypeScript; só reconsiderar se uma fase futura de "repensar
-a UI" decidir abandonar o modelo de domínio JS por completo); "Node só em dev/CI" (travaria MCP e
-SharePoint, per CONTEXT).
+a UI" decidir abandonar o modelo de domínio JS por completo); "Node nunca fora de dev/CI" (travaria
+o MCP e o conector Microsoft da v2).
 
-### D-02 — node.exe oficial portátil dentro da release
+Revista por D-27 em 27/09/2026.
+
+### D-02 — node.exe oficial portátil: permitido, empacotado só quando uma fase justificar
 
 **Status:** Ratificada em 27/09/2026
 
-**Em linguagem simples:** o app viaja com a própria bateria dentro da caixa, então não depende
-da tomada da máquina e, ao voltar de versão, a bateria antiga volta junto.
+**Em linguagem simples:** a bateria portátil já foi testada e pode entrar na caixa, mas só entra
+quando uma viagem específica precisar dela.
 
-**Decisão:** Distribuição na máquina da PMO: **`node.exe` oficial portátil dentro do pacote da
-release** (`versions/<semver>/`), com versão e SHA-256 declarados no `release.json` e na
-allowlist do ZIP. Nada instalado globalmente; rollback troca Node junto com o código (coerente
-com G11/G12). Descartados: SEA (executável único — build/assinatura mais caros, atrito com
-antivírus) e Node instalado globalmente (versão fora do controle da release).
+**Decisão:** o Node é permitido na máquina da PMO como o `node.exe` oficial portátil em
+`versions/<semver>/`, com versão e SHA-256 declarados no `release.json` e na allowlist do ZIP,
+nada instalado globalmente e rollback trocando o Node junto com o código (coerente com G11/G12);
+mas só entra no pacote quando uma fase precisar e justificar o uso por proposta ao Maestro — até
+lá, nenhum release leva `node.exe` (o empacotamento automático desta ratificação original não
+está em vigor). SEA e Node instalado globalmente continuam descartados.
 
 **Justificativa:** Spike A comprovou o mecanismo ponta a ponta: hash local do
 `node-v24.21.0-win-x64.zip` idêntico ao `SHASUMS256.txt` publicado; `node.exe` copiado sozinho
@@ -742,18 +747,22 @@ ficou livre depois do processo parar. O mecanismo de verificação de hash é o 
 `Assert-PmoReleaseManifest` já aplica aos artefatos de release do PMO Tool
 (`tools/portable-common.ps1`).
 
-**Efeito nas fases seguintes:** empacotamento de release e `release.json`/allowlist do ZIP quando
-o runtime trocar (Fase 13); rollback do G11/G12 passa a trocar o Node junto com o código; o ZIP de
-release cresce ~36 MB por plataforma-alvo (footprint mínimo: um único `node.exe`, sem
-`npm`/`npx`/`corepack`).
+**Efeito nas fases seguintes:** quando uma fase justificar `node.exe`, ela acrescenta o arquivo ao
+`release.json` e à allowlist do ZIP, o rollback troca o Node junto com o código e o ZIP de release
+cresce ~36 MB por plataforma-alvo (footprint mínimo: um único `node.exe`, sem
+`npm`/`npx`/`corepack`); hoje a allowlist de runtime de `tools/portable-common.ps1` não tem
+`node.exe`.
 
-**Reversibilidade:** costly — muda o contrato do pacote e do manifesto de release.
+**Reversibilidade:** costly — muda o contrato do pacote e do manifesto de release quando for
+adotado.
 
 **Alternativas descartadas:** SEA / single executable application (build/assinatura mais caros,
 mais atrito com antivírus/SmartScreen por reputação — o Spike A mostrou que mesmo o `node.exe`
 assinado sofre um scan único do antivírus na primeira execução, e um SEA sem assinatura
 reconhecida tende a sofrer mais, não menos); Node instalado globalmente (versão fora do controle
 da release).
+
+Revista por D-27 em 27/09/2026.
 
 ### D-03 — PowerShell 5.1 só no bootstrap e no instalador
 
@@ -764,9 +773,10 @@ Windows; só o que está lá dentro muda.
 
 **Decisão:** Em PowerShell 5.1 ficam **apenas** o bootstrap e o instalador: `pmo.ps1`,
 `atualizar.ps1`, `pmo-instalar.ps1` (entrada sem pré-requisito em qualquer Windows; bootstrap
-estável pela G12). Servidor e updater migram para Node; o updater transacional atual (journals,
-fail-closed) permanece em PS até a troca de runtime da Fase 13 e só migra com os mesmos testes de
-falha simulada.
+estável pela G12). Na edição local, servidor e updater continuam em PowerShell 5.1 e não trocam de
+runtime (D-27); a migração de servidor e updater para Node só existe na edição corporativa (v2) e,
+se o updater transacional (journals, fail-closed) migrar, migra com os mesmos testes de falha
+simulada.
 
 **Justificativa:** G12 exige um bootstrap estável que resolve `active.json` sem pré-requisito —
 manter `pmo.ps1`, `atualizar.ps1` e `tools/pmo-instalar.ps1` em PS 5.1 preserva essa garantia em
@@ -774,33 +784,40 @@ qualquer Windows sem instalar nada primeiro. O updater transacional já tem jour
 falha simulada (`tests/Test-UpdaterRecovery.ps1`) provados em PowerShell; migrar sem repetir essa
 cobertura arriscaria regressão silenciosa no G8/G12.
 
-**Efeito nas fases seguintes:** servidor migra para Node na Fase 11; updater permanece em
-PowerShell até a Fase 13 e só migra com os mesmos testes de falha simulada que já existem hoje.
+**Efeito nas fases seguintes:** na edição local, `serve.ps1` e o updater ficam em PowerShell 5.1
+(D-27); a troca de runtime é da v2 corporativa e repete os mesmos testes de falha simulada que já
+existem hoje.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+Reancorada por D-35 em 27/09/2026.
 
 ### D-04 — G3 deixa de valer para o repositório
 
 **Status:** Ratificada em 27/09/2026
 
 **Em linguagem simples:** a regra antiga vale só para a porta de entrada; o resto da casa pode
-usar a ferramenta nova, mas ninguém se muda antes do ensaio da mudança.
+usar a ferramenta nova, mas ninguém se muda sem uma fase que justifique a mudança.
 
 **Decisão:** A G3 ("PS 5.1, sem Node") **deixa de valer imediatamente** ao ratificar. Node passa
-a ser permitido em qualquer parte do repositório. Observação para o planner: a ordem prática do
-roadmap continua — nenhuma instalação real recebe o runtime Node antes do ensaio de migração
-(FUND-02, Fase 13); a regra de PS 5.1 continua valendo para os três scripts de D-03.
+a ser permitido em qualquer parte do repositório. A G3 em vigor é a de duas edições (D-27): nenhuma
+instalação real recebe o runtime Node enquanto nenhuma fase justificar o empacotamento do
+`node.exe`, e a edição local não troca de runtime; a regra de PS 5.1 continua valendo para os três
+scripts de D-03 e, na edição local, também para o servidor e o updater.
 
 **Justificativa:** G12 (bootstrap estável) e os journals do updater exigem que a transição de
 runtime seja testada antes de qualquer instalação real receber o Node — o mesmo rigor que hoje
 protege trocas de versão de código.
 
 **Efeito nas fases seguintes:** Node passa a ser permitido em qualquer parte do repositório a
-partir de agora, mas nenhuma instalação real recebe o runtime Node antes do ensaio de migração
-(FUND-02, Fase 13); a regra de PS 5.1 continua valendo para `pmo.ps1`, `atualizar.ps1` e
-`tools/pmo-instalar.ps1`.
+partir de agora, mas a G3 em vigor é a de duas edições (D-27): nenhuma instalação real recebe o
+runtime Node enquanto nenhuma fase justificar o empacotamento do `node.exe`, e a edição local não
+troca de runtime; a regra de PS 5.1 continua valendo para `pmo.ps1`, `atualizar.ps1` e
+`tools/pmo-instalar.ps1` e, na edição local, também para o servidor e o updater.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+Reancorada por D-35 em 27/09/2026.
 
 ### D-05 — G1: HTML único até a Fase 13
 
