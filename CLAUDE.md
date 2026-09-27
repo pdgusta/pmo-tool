@@ -209,8 +209,9 @@ O runtime portátil recebe `-DataDir`, `-ConfigDir`, `-StateDir`, `-Porta`, `-Se
 `-SemBrowser`, `-HealthOnly` e `-AdminToken`. Rotas administrativas aceitam somente loopback e
 token efêmero da sessão:
 
-- `GET /api/health`, `/api/update/check` e `/api/update/status`;
-- `POST /api/update/prepare`, `/api/update/apply`, `/api/update/cancel` e `/api/app-ready`.
+- `GET /api/health`, `/api/update/check`, `/api/update/status` e `/api/restore-pending`;
+- `POST /api/update/prepare`, `/api/update/apply`, `/api/update/cancel`, `/api/rollback/apply`,
+  `/api/restore/apply`, `/api/restore-ack` e `/api/app-ready`.
 
 O preflight materializa o estado do IndexedDB no disco, verifica todos os anexos, cria snapshot
 com manifesto SHA-256 e entra em manutenção. O updater só então baixa para `staging/`, valida,
@@ -305,13 +306,20 @@ statusDisco                        -> {online:bool, ultimoSalvo, erro}
 detectar(fileName, texto|bytes)    -> 'mspdi'|'xer'|'pmxml'|'csv'|'xlsx'|'mpp'|'bundle'|null
 await lerArquivo(File)             -> {kind, fileName, projetosCandidatos:[ProjetoCandidato],
                                        avisos:[], meta:{}}
-reconciliar(candidatos, bundleAtual) -> {novos:[], atualizacoes:[{projetoId, campos:[
-                                       {campo, rotulo, de, para, escolhido:bool}]}],
-                                       semCorrespondencia:[]}
+reconciliar(candidatos, bundleAtual) -> {novos:[{candidato, motivo}],
+                                       atualizacoes:[{projetoId, codigo, nome, candidato,
+                                       motivoMatch, campos:[{campo, rotulo, formatador, de, para,
+                                       deTexto, paraTexto, relevancia, escolhido,
+                                       substituiColecao?}]}],
+                                       conflitos:[{candidato, projetoId, motivo}],
+                                       resumo:{novos, atualizados, camposAlterados, semMudanca, conflitos}}
 await aplicar(plano)               -> grava via Store.mutate
 ```
 `ProjetoCandidato` = objeto no formato de `PMO.model.projetoVazio()` mais
 `_origem:{kind,fileName,externalId}` e `_bruto:{...}` (dados crus para inspeção).
+Em `reconciliar()`: `novos` traz os candidatos sem correspondência (com `motivo`); `conflitos`
+traz casamentos por similaridade de nome, que nunca atualizam por conta própria e exigem
+confirmação manual; `resumo` traz as contagens exibidas no diff de reconciliação.
 
 ### `PMO.exportar` (40-49)
 ```js
