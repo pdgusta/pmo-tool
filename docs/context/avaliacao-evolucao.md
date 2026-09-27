@@ -1122,8 +1122,8 @@ reaproveitando o pipeline de transformação do Vite (primeiro alvo de porte:
 `tests/model-migration.test.mjs`), e Playwright contra o servidor real para automatizar a
 checklist "Antes de dizer pronto" do CLAUDE.md. As suítes PowerShell 5.1 (`Run-Tests.ps1`,
 `Test-UpdaterRecovery.ps1`, `Invoke-ServerIntegration.ps1`) continuam rodando em paralelo — nada
-disso é substituído nesta fase. Faseamento sugerido: Fase 2 (scaffold), Fase 3 (testes de
-caracterização antes de qualquer divisão de arquivo).
+disso é substituído nesta fase. Faseamento: o scaffold de tooling entra quando uma fase do v1.6
+precisar dele; a caracterização mínima do núcleo no CI é a Fase 21 (núcleo protegido).
 
 **Alternativas descartadas:**
 
@@ -1131,7 +1131,7 @@ caracterização antes de qualquer divisão de arquivo).
 |---|---|
 | Reescrever `src/js/` em sintaxe TypeScript | Contradiz o mandato "evoluir, não reescrever" do PROJECT.md; `checkJs` já dá o benefício de tipo sem tocar a sintaxe existente |
 | esbuild direto, sem Vite | Falta servidor de desenvolvimento com HMR e o ecossistema de plugins que Playwright/Vitest compartilham via config do Vite; o Vite 8 já usa esbuild internamente (via Oxc/Rolldown), então a velocidade não é perdida |
-| Jest | Pipeline de transformação separado do Vite; Vitest reaproveita a mesma config e é a escolha natural já que a Fase 4 adota Vite |
+| Jest | Pipeline de transformação separado do Vite; Vitest reaproveita a mesma config e é a escolha natural já que o Vite é o bundler aprovado (D-05, D-08) |
 
 ### Dependências
 
@@ -1160,11 +1160,13 @@ da verdade, com IndexedDB + réplica em disco. `10-model.js` (2.723 linhas) já 
 colateral — candidato natural à extração ESM.
 
 **Recomendação:** evoluir, não reescrever. Ordem de dependência: núcleo ESM compartilhado
-(`10-model.js` extraído primeiro, Fase 4), catálogo de ações nomeadas substituindo os closures ad
-hoc de `20-store.js` (Fase 6), servidor Node autoritativo em `localhost:8090` (Fases 11–13)
-hospedando `/api/*` e o endpoint MCP no mesmo processo (D-10), conector Microsoft dentro desse
-mesmo processo Node para o token nunca alcançar o navegador (D-09/D-12), `node.exe` portátil
-dentro da release (D-02). `GET /api/eventos` via SSE (não WebSocket) para notificar mudanças a
+(`10-model.js` extraído primeiro, na fase que extrair o núcleo para ESM), catálogo de ações
+nomeadas substituindo os closures ad hoc de `20-store.js` (as ações nomeadas mínimas entram com a
+autorização, Fase 24), servidor Node autoritativo — na v2, o servidor corporativo (D-27, D-28;
+congelado até o ADR corporativo, D-23) — hospedando `/api/*` e o endpoint MCP no mesmo processo
+(D-10, D-31), conector Microsoft dentro desse mesmo processo Node para o token nunca alcançar o
+navegador (D-09/D-12), `node.exe` portátil permitido, empacotado só quando uma fase justificar
+(D-02, D-27). `GET /api/eventos` via SSE (não WebSocket) para notificar mudanças a
 qualquer aba aberta — não há necessidade de push bidirecional de baixa latência nesta ferramenta.
 
 **Alternativas descartadas:**
@@ -1205,13 +1207,14 @@ imperativo atual).
 | Critério | O que avaliar |
 |---|---|
 | Adoção incremental | Encaixa dentro do contrato `montar()`/`desmontar()` de view existente, sem exigir migração de tudo de uma vez |
-| Peso no HTML único | Custo em KB embutido no bundle, enquanto G1 exige HTML autocontido (até a Fase 13) |
+| Peso no HTML único | Custo em KB embutido no bundle, enquanto G1 exige HTML autocontido (em toda a v1; revisão no ADR corporativo, D-35) |
 | Acessibilidade e RAG | Mantém AA e RAG com cor + rótulo/ícone (convenção do CLAUDE.md), sem regressão |
 | Encaixe com `el()` | Coexiste ou substitui o DOM helper imperativo atual sem exigir reescrever tudo de uma vez |
 | Curva de aprendizado | Custo de manutenção para quem só conhece o padrão vanilla atual |
 | Licença | Termos compatíveis com a lista permitida do D-06 (MIT/Apache-2.0/BSD/ISC) |
 
-Nenhum framework é escolhido nesta fase: a decisão é da Fase 8, com a PMO (UI-01).
+Nenhum framework é escolhido nesta fase: a decisão fica para a UI nova da v2 corporativa,
+desenhada a partir das visões por persona captadas na v1 (D-16, D-19).
 
 ## Dependências aprovadas (G2)
 
@@ -1225,35 +1228,36 @@ que a G2 reescrita do CLAUDE.md referencia como allow-list.
 `.planning/phases/01-avalia-o-t-cnica-e-decis-es-de-evolu-o/01-RESEARCH.md` (nenhuma divergência
 de licença ou repositório encontrada).
 
-| Pacote | Versão verificada | Licença | Uso | Ambiente | Fase de adoção | Situação |
+| Pacote | Versão verificada | Licença | Uso | Ambiente | Adoção | Situação |
 |---|---|---|---|---|---|---|
-| Node.js | 24.21.0 (LTS Krypton) | MIT | Runtime de dev/CI e produção | runtime (node.exe portátil na release, D-02) | Fase 2 (dev/CI); Fase 11–13 (servidor de produção) | aprovada |
-| `typescript` | 7.0.2 | Apache-2.0 | Checagem de tipo via JSDoc + `checkJs`, sem reescrever `src/js/` | dev/CI | Fase 2 | aprovada |
-| `vite` | 8.3.1 | MIT | Servidor de desenvolvimento (HMR) e bundler de produção | dev/CI | Fase 4 | aprovada |
-| `vite-plugin-singlefile` | 2.3.3 | MIT | Injeta JS/CSS construído em um único HTML (substitui a concatenação do `build.ps1`) | dev/CI | Fase 4 | aprovada |
-| `eslint` | 10.11.0 | MIT | Lint em flat config com ambientes separados de navegador e Node | dev/CI | Fase 2 | aprovada |
-| `vitest` | 5.0.2 | MIT | Testes unitários reaproveitando o pipeline de transformação do Vite | dev/CI | Fase 2 | aprovada |
-| `@playwright/test` | 1.63.0 | Apache-2.0 | Testes end-to-end contra `localhost:8090`, automatiza a checklist "Antes de dizer pronto" | dev/CI | Fase 3 | aprovada |
-| `@modelcontextprotocol/sdk` | 1.30.1 | MIT | SDK oficial do servidor MCP (Streamable HTTP + ponte stdio) | Node (servidor) | Fase 14–15 | aprovada |
-| `zod` | 4.6.5 | MIT | Validação de schema dos argumentos das ferramentas MCP | Node (servidor) | Fase 14–15 | aprovada |
-| `express` | 5.2.1 | MIT | Servidor HTTP hospedando `/`, `/api/*` e `/mcp` no mesmo processo | Node (servidor) | Fase 11+ | aprovada |
-| `@azure/msal-node` | 7.0.0 | MIT | Fluxo device code, autenticação delegada da PMO com a Microsoft | Node (servidor) | Fase 17–18 | aprovada |
-| `@microsoft/microsoft-graph-client` | 3.0.7 | MIT | Chamadas típadas ao Microsoft Graph (SharePoint/OneDrive) | Node (servidor) | Fase 17–18 | aprovada |
-| `@e965/xlsx` | 0.20.3 | Apache-2.0 | Leitura/escrita de `.xlsx` (mirror mantido do SheetJS Community Edition) | navegador (embutido no bundle, D-07) | Fase 7 | aprovada com ressalva — sem publicação desde 19/07/2024 (mais de 2 anos); reverificar atualidade na Fase 7 antes de instalar |
-| `@byteink/mppjs` | 0.1.8 | MIT (wrapper) / **LGPL-2.1-or-later** (binário nativo, embute o MPXJ compilado) | Conversão `.mpp` → MSPDI XML, sem JVM | Node (servidor) | Fase 17 | condicionada — não aprovada — flag `[SUS]` no audit de legitimidade (~4,5 meses, 5 versões publicadas); a licença do binário fica fora da lista MIT/Apache-2.0/BSD/ISC do D-06, então a adoção exige decisão explícita mais o spike com arquivos `.mpp` reais e o gate de legitimidade bloqueante da Fase 17 |
-| `lit` | 3.3.3 | BSD-3-Clause | Candidato de framework de UI (Web Components), avaliação D-16 | navegador (embutido no bundle, D-07) | Fase 8 | candidata — não aprovada — a escolha do framework de UI é da Fase 8, com a PMO |
+| Node.js | 24.21.0 (LTS Krypton) | MIT | Runtime de dev/CI e do servidor corporativo (v2) | runtime de dev/CI; `node.exe` portátil permitido na máquina da PMO, fora do pacote até uma fase justificar (D-27) | dev/CI (D-01); servidor corporativo, v2 (D-27) | aprovada |
+| `typescript` | 7.0.2 | Apache-2.0 | Checagem de tipo via JSDoc + `checkJs`, sem reescrever `src/js/` | dev/CI | quando uma fase do v1.6 adotar tooling de tipo, lint ou teste | aprovada |
+| `vite` | 8.3.1 | MIT | Servidor de desenvolvimento (HMR) e bundler de produção | dev/CI | quando uma fase precisar embutir dependência no bundle (hoje, a Fase 27) (D-35) | aprovada |
+| `vite-plugin-singlefile` | 2.3.3 | MIT | Injeta JS/CSS construído em um único HTML (substitui a concatenação do `build.ps1`) | dev/CI | quando uma fase precisar embutir dependência no bundle (hoje, a Fase 27) (D-35) | aprovada |
+| `eslint` | 10.11.0 | MIT | Lint em flat config com ambientes separados de navegador e Node | dev/CI | quando uma fase do v1.6 adotar tooling de tipo, lint ou teste | aprovada |
+| `vitest` | 5.0.2 | MIT | Testes unitários reaproveitando o pipeline de transformação do Vite | dev/CI | quando uma fase do v1.6 adotar tooling de tipo, lint ou teste | aprovada |
+| `@playwright/test` | 1.63.0 | Apache-2.0 | Testes end-to-end contra `localhost:8090`, automatiza a checklist "Antes de dizer pronto" | dev/CI | quando uma fase do v1.6 adotar suíte E2E | aprovada |
+| `@modelcontextprotocol/sdk` | 1.30.1 | MIT | SDK oficial do servidor MCP (Streamable HTTP + ponte stdio) | Node (servidor) | v2 corporativa (MCP congelado, D-23; sem MCP na v1, D-31) | aprovada |
+| `zod` | 4.6.5 | MIT | Validação de schema dos argumentos das ferramentas MCP | Node (servidor) | v2 corporativa (MCP congelado, D-23; sem MCP na v1, D-31) | aprovada |
+| `express` | 5.2.1 | MIT | Servidor HTTP hospedando `/`, `/api/*` e `/mcp` no mesmo processo | Node (servidor) | v2 corporativa (servidor Node congelado, D-23) | aprovada |
+| `@azure/msal-node` | 7.0.0 | MIT | Login delegado da PMO com a Microsoft (PKCE interativo; device code como fallback, D-29) | Node (servidor) | conector Microsoft, quando existir (hoje congelado, D-23); login local permitido e não implementado (D-29) | aprovada |
+| `@microsoft/microsoft-graph-client` | 3.0.7 | MIT | Chamadas típadas ao Microsoft Graph (SharePoint/OneDrive) | Node (servidor) | conector Microsoft, quando existir (hoje congelado, D-23); login local permitido e não implementado (D-29) | aprovada |
+| `@e965/xlsx` | 0.20.3 | Apache-2.0 | Leitura/escrita de `.xlsx` (mirror mantido do SheetJS Community Edition) | navegador (embutido no bundle, D-07) | quando uma fase do v1.6 precisar de parser XLSX (candidata: a ponte das Listas, Fase 23, se o export exigir) | aprovada com ressalva — sem publicação desde 19/07/2024 (mais de 2 anos); reverificar atualidade na fase que o adotar, antes de instalar |
+| `@byteink/mppjs` | 0.1.8 | MIT (wrapper) / **LGPL-2.1-or-later** (binário nativo, embute o MPXJ compilado) | Conversão `.mpp` → MSPDI XML, sem JVM | Node (servidor) | v2 corporativa — `.mpp` sem investimento na v1 | condicionada — não aprovada — flag `[SUS]` no audit de legitimidade (~4,5 meses, 5 versões publicadas); a licença do binário fica fora da lista MIT/Apache-2.0/BSD/ISC do D-06, então a adoção exige decisão explícita mais o spike com arquivos `.mpp` reais e o gate de legitimidade bloqueante da fase que o adotar |
+| `lit` | 3.3.3 | BSD-3-Clause | Candidato de framework de UI (Web Components), avaliação D-16 | navegador (embutido no bundle, D-07) | UI nova da v2 corporativa (D-19) | candidata — não aprovada — a escolha do framework de UI fica para a v2 corporativa |
 
 **Regras:**
 
 - Esta lista governa dependências diretas; dependências transitivas são fixadas pelo lockfile
-  commitado (`package-lock.json` a partir da Fase 2) — não precisam de linha própria aqui.
+  commitado (`package-lock.json` a partir do primeiro `package.json`) — não precisam de linha
+  própria aqui.
 - Dependência nova = proposta ao Maestro (regra 8 do time) antes de qualquer `npm install`; só
   depois disso ela ganha uma linha nesta lista.
 - Licença verificada item a item: só entram como `aprovada` pacotes com MIT, Apache-2.0, BSD ou
   ISC confirmados no registro nesta ou em verificação futura equivalente.
 - Pacote marcado `[ASSUMED]`/`[SUS]` no audit de legitimidade exige um `checkpoint:human-verify`
   bloqueante (`gate="blocking-human"`) antes de qualquer `npm install` — é o caso de
-  `@byteink/mppjs` na Fase 17.
+  `@byteink/mppjs`, quando uma fase o adotar.
 - Dependências usadas no navegador entram embutidas no HTML único pelo bundle (D-07); nunca CDN,
   nunca `<script src>` externo — mesma regra do G1.
 - Zero CDN e zero recurso externo em runtime, em qualquer ambiente (navegador ou servidor Node):
@@ -1267,10 +1271,11 @@ de licença ou repositório encontrada).
     `tools/update-runtime.ps1` (`Get-LatestRelease` e `Invoke-UpdateOperation`) e instalação em
     `tools/pmo-instalar.ps1` (`Get-Release` e `Receber-Asset`); todo download é conferido por
     tamanho e SHA-256 contra o digest publicado pelo GitHub.
-  - **Alvo:** login delegado da PMO na Microsoft e Microsoft Graph, só pelo módulo conector das
-    Fases 17–18 (G6, D-09); nenhuma chamada autenticada à Microsoft existe no código hoje.
-- `build.ps1` e Vite coexistem até o Vite provar paridade no CI (Fase 4); só então `build.ps1` é
-  removido (D-08).
+  - **Alvo:** login delegado da PMO na Microsoft e Microsoft Graph, só pelo módulo conector,
+    quando existir (hoje congelado, D-23) (G6, D-29); nenhuma chamada autenticada à Microsoft
+    existe no código hoje.
+- `build.ps1` e Vite coexistem até o Vite provar paridade no CI, na fase que adotar o Vite (hoje,
+  a Fase 27) (D-08, D-35); só então `build.ps1` é removido.
 
 ## Divergências código × documentação
 
