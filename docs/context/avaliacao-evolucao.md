@@ -969,7 +969,7 @@ sistema operacional (DPAPI, por usuário Windows), fora de `data/`, `config/`, `
 segredo dentro.
 A decisão em si é do usuário, tomada em 26/09/2026 no new-project (substituindo a de
 30/07/2026); esta fase a ratificou como D-09 em 27/09/2026, e o cabeçalho da G6 no CLAUDE.md
-registra as duas datas. Revista no mesmo dia pela D-29 — PKCE primeiro porque a Microsoft
+registrava as duas datas. Revista no mesmo dia pela D-29, que reescreveu a G6 com a data dela — PKCE primeiro porque a Microsoft
 recomenda bloquear o device code.
 
 **Efeito nas fases seguintes:** nenhuma fase do v1.6 implementa o login local (só permitido); a

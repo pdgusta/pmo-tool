@@ -499,7 +499,7 @@ Depois deste ADR, o CLAUDE.md deve dizer o mesmo que esta tabela sobre cada guar
 | Guardrail | O que muda | Decisão |
 |---|---|---|
 | G1 | sentido mantido; só as citações de fase trocam; revisão no ADR corporativo | D-35 |
-| G2 | sentido mantido; a exceção (2) aponta o módulo conector, quando existir (hoje congelado, D-23); build e servidor reancorados | D-29, D-35 |
+| G2 | sentido mantido; a exceção (2) aponta o módulo conector, quando existir (hoje congelado, D-23); build reancorado (D-35); servidor local fica no `serve.ps1` (G3, D-27) | D-27, D-29, D-35 |
 | G3 | duas edições | D-27 |
 | G4 | vale só para a edição local | D-28 |
 | G5 | sem mudança | — |
