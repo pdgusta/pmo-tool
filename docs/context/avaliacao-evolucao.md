@@ -1294,45 +1294,48 @@ divergência conhecida está listada abaixo como **Corrigida** (com o plano que 
 | A subseção D-09 deste L1 repetia, no presente, o caminho do conector inexistente da G6 antiga como se o arquivo existisse hoje | `docs/context/avaliacao-evolucao.md`, D-09 | Corrigida (01-09) | Fase 1 | a subseção D-09 não cita mais nenhum arquivo de conector e diz que não existe módulo conector no código hoje; a busca por nome de arquivo de conector entre os arquivos versionados continua sem resultado |
 | "Interfaces operacionais" dizia que `GET /api/health`, `/api/update/check` e `/api/update/status` exigiam o token efêmero da sessão; em `serve.ps1` só `GET /api/restore-pending` e as rotas `POST` listadas chamam `ExigirAdministracao` | CLAUDE.md, "Interfaces operacionais" | Corrigida (01-09) | Fase 1 | as três consultas aparecem como "somente loopback, sem token"; a divergência é anterior à Fase 1 (já existia em `main`) |
 | A G2 do CLAUDE.md e as Regras de `## Dependências aprovadas (G2)` deste L1 proibiam qualquer busca externa em runtime, "em qualquer ambiente (navegador ou servidor Node)", mas `serve.ps1`, `tools/update-runtime.ps1` e `tools/pmo-instalar.ps1` já consultam e baixam do GitHub Releases, e a D-09 autoriza o Microsoft Graph pelo conector delegado | CLAUDE.md, G2; `docs/context/avaliacao-evolucao.md`, D-06 e Regras da G2 | Corrigida (01-10) | Fase 1 | a proibição vale para recursos e dependências buscados em runtime; a G2 e as Regras listam as duas chamadas autorizadas; a D-06 manteve o texto ratificado e ganhou um Esclarecimento (01-10); `Invoke-WebRequest` e `Invoke-RestMethod` aparecem só em `serve.ps1` (1), `tools/update-runtime.ps1` (4, uma delas o health em `localhost`) e `tools/pmo-instalar.ps1` (2) |
-| A D-08 deste L1 ("Efeito nas fases seguintes") só liberava `npm install` para desenvolvimento depois da paridade do Vite (Fase 4), contra a G2 do CLAUDE.md (`npm install` para desenvolvimento é permitido, D-01, D-04) e a própria Decisão da D-08, que tira a proibição já na reescrita da G2 | `docs/context/avaliacao-evolucao.md`, D-08 | Corrigida (01-10) | Fase 1 | a paridade condiciona só a remoção do `build.ps1`; o Efeito da D-08 diz que `npm install` para desenvolvimento já é permitido, restrito à lista aprovada (G2, D-06); Decisão e Status da D-08 ficaram intactos |
-| `.claude/skills/pmo-app/SKILL.md` diz "Sem Node, sem npm, sem dependências" | `.claude/skills/pmo-app/SKILL.md` (linha 12) | Registrada — **Alvo** | Fase 2 | atualizar o SKILL.md na mesma PR que introduz `package.json` |
-| CI fixa `node-version: '22.22.0'` e o contrato `workflow-gates-release` de `docs/context/index.json` exige esse valor exato | `.github/workflows/release.yml` (linha 66) | Registrada — **Alvo** | Fase 2 | bumpar o workflow para Node 24 e o `requiredPatterns` do contrato na mesma PR, ou `validar-contexto.ps1` falha por descompasso |
-| "Convenções de código" do CLAUDE.md proíbe módulos ES ("nada de módulos ES") | CLAUDE.md, "Convenções de código" | Registrada — **Alvo** | Fase 4 (MOD-02) | revisar junto com a extração ESM real de `10-model.js` |
-| "Estrutura" e a descrição de build do CLAUDE.md citam `build.ps1` como o build único | CLAUDE.md, "Estrutura" | Registrada — **Alvo** | Fase 4 (D-08: removido depois da paridade do Vite) | `build.ps1` sai do CLAUDE.md quando a Fase 4 provar paridade no CI |
-| README.md diz "Nenhum runtime adicional — sem Node, npm, Python ou .NET SDK" | `README.md` (linha 49) | Registrada — **Alvo** | Fase 13 | continua verdadeiro para quem instala hoje (o `node.exe` viaja dentro do pacote), mas o texto precisa mencionar o runtime embutido quando a Fase 13 trocar o runtime do servidor |
+| A D-08 deste L1 ("Efeito nas fases seguintes") só liberava `npm install` para desenvolvimento depois da paridade do Vite (fase que adotar o Vite), contra a G2 do CLAUDE.md (`npm install` para desenvolvimento é permitido, D-01, D-04) e a própria Decisão da D-08, que tira a proibição já na reescrita da G2 | `docs/context/avaliacao-evolucao.md`, D-08 | Corrigida (01-10) | Fase 1 | a paridade condiciona só a remoção do `build.ps1`; o Efeito da D-08 diz que `npm install` para desenvolvimento já é permitido, restrito à lista aprovada (G2, D-06); Decisão e Status da D-08 ficaram intactos |
+| `.claude/skills/pmo-app/SKILL.md` diz "Sem Node, sem npm, sem dependências" | `.claude/skills/pmo-app/SKILL.md` (linha 12) | Registrada — **Alvo** | fase que introduzir `package.json` | atualizar o SKILL.md na mesma PR que introduz `package.json` |
+| CI fixa `node-version: '22.22.0'` e o contrato `workflow-gates-release` de `docs/context/index.json` exige esse valor exato | `.github/workflows/release.yml` (linha 66) | Registrada — **Alvo** | fase do v1.6 que adotar Node 24 no CI | bumpar o workflow para Node 24 e o `requiredPatterns` do contrato na mesma PR, ou `validar-contexto.ps1` falha por descompasso |
+| "Convenções de código" do CLAUDE.md proíbe módulos ES ("nada de módulos ES") | CLAUDE.md, "Convenções de código" | Registrada — **Alvo** | fase que extrair `10-model.js` para ESM | revisar junto com a extração ESM real de `10-model.js` |
+| "Estrutura" e a descrição de build do CLAUDE.md citam `build.ps1` como o build único | CLAUDE.md, "Estrutura" | Registrada — **Alvo** | fase que adotar o Vite (hoje, a Fase 27; D-08: removido depois da paridade) | `build.ps1` sai do CLAUDE.md quando essa fase provar paridade no CI |
+| README.md diz "Nenhum runtime adicional — sem Node, npm, Python ou .NET SDK" | `README.md` (linha 49) | Registrada — **Alvo** | fase que empacotar o `node.exe` (D-27) | continua verdadeiro: nenhum release leva `node.exe` hoje (D-27); o texto muda na fase que empacotar o `node.exe` |
 
 ## Adiado para fases seguintes
 
-Registra o que foi propositalmente deixado para depois: revisão da G1 (Fase 13), escolha do
-framework de UI (Fase 8), formato do token MCP (Fase 14) e migração do updater para Node
-(Fase 13).
+Registra o que foi propositalmente deixado para depois: revisão da G1 (ADR corporativo), escolha
+do framework de UI (v2 corporativa), autenticação do MCP (v2, D-31) e o destino do updater (fica
+em PowerShell na edição local, D-27).
 
-- **Revisão da G1** (HTML único vs. arquivos servidos pelo Node) — Fase 13, quando o servidor
-  Node vira fonte da verdade (D-05).
-- **Escolha do framework de UI** — Fase 8, com a PMO, entre os candidatos e critérios listados em
-  `### Framework de UI` acima (D-16).
-- **Formato do token MCP, nome da rota e UX de configuração do cliente** — Fase 14; `/mcp`
-  sugerido como nome de rota (D-12, Claude's Discretion do CONTEXT).
-- **Migração do updater para Node** — Fase 13, junto com a troca de runtime do servidor; o
-  updater transacional atual (journals, fail-closed) permanece em PowerShell até lá e só migra
-  repetindo os mesmos testes de falha simulada (D-03).
+- **Revisão da G1** (HTML único vs. arquivos servidos pelo Node) — ADR corporativo (v2), quando
+  o servidor corporativo vira fonte da verdade (D-05, D-35).
+- **Escolha do framework de UI** — v2 corporativa, a partir das visões por persona captadas na
+  v1, entre os candidatos e critérios de `### Framework de UI` acima (D-16).
+- **Autenticação do MCP, nome da rota e UX de configuração do cliente** — v2 corporativa: OAuth
+  Entra com metadados de recurso protegido (D-31); `/mcp` continua sugerido como nome de rota
+  (D-12, Claude's Discretion do CONTEXT).
+- **Migração do updater para Node** — não acontece na edição local: o updater transacional
+  (journals, fail-closed) fica em PowerShell (D-27); na v2 corporativa, qualquer migração repete
+  os mesmos testes de falha simulada (D-03).
 - **Pino de Node do CI (`.github/workflows/release.yml`, hoje `22.22.0`) e o contrato
-  `workflow-gates-release`** — Fase 2, na mesma PR (bump para 24 e atualização do regex do
-  contrato em `index.json`, ou `validar-contexto.ps1` falha por descompasso).
+  `workflow-gates-release`** — fase do v1.6 que adotar Node 24 no CI, na mesma PR (bump para 24 e
+  atualização do regex do contrato em `index.json`, ou `validar-contexto.ps1` falha por
+  descompasso).
 - **Reverificação do default de `enableDnsRebindingProtection` contra a versão do SDK MCP
-  efetivamente fixada** — Fase 14; o Spike C encontrou `false` como padrão e as três opções
-  (`allowedHosts`, `allowedOrigins`, `enableDnsRebindingProtection`) marcadas `@deprecated` no
-  `1.30.1` — a Fase 14 precisa de middleware próprio de Host/Origin, não só das opções internas
-  do transporte (D-12).
-- **Validação de `@byteink/mppjs` com arquivos `.mpp` reais e gate de legitimidade** — Fase 17
-  (IMP-04); pacote `[SUS]`, com binário nativo LGPL-2.1-or-later fora da lista de licenças do
-  D-06 — ver linha `condicionada — não aprovada` em `## Dependências aprovadas (G2)`.
-- **Reverificação de atualidade de `@e965/xlsx`** — Fase 7, no momento da adoção; sem publicação
-  desde 19/07/2024 (mais de dois anos), conforme a linha `aprovada com ressalva` em `##
-  Dependências aprovadas (G2)`.
-- **Proibição de ESM em "Convenções de código" do CLAUDE.md** — Fase 4, quando `10-model.js` for
-  extraído para ESM real (MOD-02); a proibição atual ("nada de módulos ES") precisa ser revista
-  junto com essa extração, não antes.
+  efetivamente fixada** — MCP da v2 corporativa (congelado, D-23); o Spike C encontrou `false`
+  como padrão e as três opções (`allowedHosts`, `allowedOrigins`,
+  `enableDnsRebindingProtection`) marcadas `@deprecated` no `1.30.1` — o MCP da v2 corporativa
+  precisa de middleware próprio de Host/Origin, não só das opções internas do transporte (D-12).
+- **Validação de `@byteink/mppjs` com arquivos `.mpp` reais e gate de legitimidade** — v2
+  corporativa — `.mpp` sem investimento na v1; pacote `[SUS]`, com binário nativo
+  LGPL-2.1-or-later fora da lista de licenças do D-06 — ver linha `condicionada — não aprovada`
+  em `## Dependências aprovadas (G2)`.
+- **Reverificação de atualidade de `@e965/xlsx`** — na fase que o adotar, no momento da adoção;
+  sem publicação desde 19/07/2024 (mais de dois anos), conforme a linha `aprovada com ressalva`
+  em `## Dependências aprovadas (G2)`.
+- **Proibição de ESM em "Convenções de código" do CLAUDE.md** — fase que extrair `10-model.js`
+  para ESM real; a proibição atual ("nada de módulos ES") precisa ser revista junto com essa
+  extração, não antes.
 
 ## Gate de validação
 
@@ -1342,8 +1345,8 @@ O gate mecânico desta fase é `tools/validar-contexto.ps1`:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/validar-contexto.ps1 -Detalhado
 ```
 
-Resultado esperado depois desta entrada: `Entradas: 16  Contratos: 30` e, na última linha,
-`Contexto valido.` — código de saída `0`.
+Resultado esperado hoje: `Entradas: 17  Contratos: 30` (as 16 entradas da Fase 1 mais o ADR
+D-19+, `adr-v1-captura`) e, na última linha, `Contexto valido.` — código de saída `0`.
 
 Todo spike de verificação (D-15) roda exclusivamente em `%TEMP%\pmo-spikes-f1`, fora da árvore do
 repositório; `git status --short` nunca pode listar artefato de spike — se listar, é falha
