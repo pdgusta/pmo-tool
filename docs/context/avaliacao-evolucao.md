@@ -915,6 +915,9 @@ existe em `msal-browser`) contra um client público de primeira parte da Microso
 sistema operacional (DPAPI, por usuário Windows), fora de `data/`, `config/`, `state/` ou
 `versions/` — nenhuma dessas árvores entra em snapshot, update-backup ou ZIP de release com o
 segredo dentro.
+A decisão em si é do usuário, tomada em 26/09/2026 no new-project (substituindo a de
+30/07/2026); esta fase a ratificou como D-09 em 27/09/2026, e o cabeçalho da G6 no CLAUDE.md
+registra as duas datas.
 
 **Efeito nas fases seguintes:** o conector é criado nas Fases 17–18; não existe código dele hoje.
 Nome e local do arquivo do conector são definidos nessas fases; até lá, nenhuma chamada
@@ -1210,6 +1213,7 @@ divergência conhecida está listada abaixo como **Corrigida** (com o plano que 
 | G6 citava `js/38-connectors.js` como caminho real do conector, mas o arquivo nunca existiu | CLAUDE.md, G6 | Corrigida (01-07) | Fase 1 | `git ls-files \| grep -i connector` sem resultado, registrado em 01-07-SUMMARY.md |
 | G2/G3 afirmavam "não existe Node... nesta máquina" enquanto `tests/Run-Tests.ps1` já exigia Node de desenvolvimento | CLAUDE.md, G2/G3 | Corrigida (01-07) | Fase 1 | `grep -c 'Não existe Node' CLAUDE.md` = 0; `tests/Run-Tests.ps1` linhas 22-28 já lançavam erro sem `$NodePath` |
 | A subseção D-09 deste L1 repetia, no presente, o caminho do conector inexistente da G6 antiga como se o arquivo existisse hoje | `docs/context/avaliacao-evolucao.md`, D-09 | Corrigida (01-09) | Fase 1 | a subseção D-09 não cita mais nenhum arquivo de conector e diz que não existe módulo conector no código hoje; a busca por nome de arquivo de conector entre os arquivos versionados continua sem resultado |
+| "Interfaces operacionais" dizia que `GET /api/health`, `/api/update/check` e `/api/update/status` exigiam o token efêmero da sessão; em `serve.ps1` só `GET /api/restore-pending` e as rotas `POST` listadas chamam `ExigirAdministracao` | CLAUDE.md, "Interfaces operacionais" | Corrigida (01-09) | Fase 1 | as três consultas aparecem como "somente loopback, sem token"; a divergência é anterior à Fase 1 (já existia em `main`) |
 | `.claude/skills/pmo-app/SKILL.md` diz "Sem Node, sem npm, sem dependências" | `.claude/skills/pmo-app/SKILL.md` (linha 12) | Registrada — **Alvo** | Fase 2 | atualizar o SKILL.md na mesma PR que introduz `package.json` |
 | CI fixa `node-version: '22.22.0'` e o contrato `workflow-gates-release` de `docs/context/index.json` exige esse valor exato | `.github/workflows/release.yml` (linha 66) | Registrada — **Alvo** | Fase 2 | bumpar o workflow para Node 24 e o `requiredPatterns` do contrato na mesma PR, ou `validar-contexto.ps1` falha por descompasso |
 | "Convenções de código" do CLAUDE.md proíbe módulos ES ("nada de módulos ES") | CLAUDE.md, "Convenções de código" | Registrada — **Alvo** | Fase 4 (MOD-02) | revisar junto com a extração ESM real de `10-model.js` |

@@ -70,7 +70,7 @@ em sua forma de mercado: EVM, PV, EV, AC, SPI, CPI, EAC, ETC, VAC, TCPI, BAC, RA
 stage-gate, kanban, CAPEX, OPEX, stakeholder, sponsor, steering committee, backlog, WBS.
 Datas em `dd/mm/aaaa`. Moeda em `R$ 1.234.567` (pt-BR). Sem acentuação quebrada — UTF-8 sempre.
 
-### G6 — Microsoft só com login delegado da PMO (decisão do usuário, 26/09/2026)
+### G6 — Microsoft só com login delegado da PMO (decisão do usuário em 26/09/2026, ratificada como D-09 em 27/09/2026)
 Integração com SharePoint/OneDrive é permitida **apenas** com o login delegado da própria PMO.
 **Nunca** criar App Registration própria nem usar permissão de aplicação no Microsoft Graph.
 Caminho candidato = client público de primeira parte da Microsoft com device code. Fallback
@@ -240,12 +240,14 @@ materializa com `Install-PmoPortableFromPackages` — a mesma função de `New-P
 Existem exatamente duas origens de instalação, e as duas passam por essa função.
 
 O runtime portátil recebe `-DataDir`, `-ConfigDir`, `-StateDir`, `-Porta`, `-SemBuild`,
-`-SemBrowser`, `-HealthOnly` e `-AdminToken`. Rotas administrativas aceitam somente loopback e
-token efêmero da sessão:
+`-SemBrowser`, `-HealthOnly` e `-AdminToken`. Toda rota aceita somente requisição loopback com
+cabeçalho `Host` igual a `localhost:<porta>`. Nas rotas operacionais abaixo, o token efêmero da
+sessão (cabeçalho `X-PMO-Admin-Token`) é exigido assim:
 
-- `GET /api/health`, `/api/update/check`, `/api/update/status` e `/api/restore-pending`;
+- `GET /api/health`, `/api/update/check` e `/api/update/status`: somente loopback, sem token;
+- `GET /api/restore-pending`: loopback e token;
 - `POST /api/update/prepare`, `/api/update/apply`, `/api/update/cancel`, `/api/rollback/apply`,
-  `/api/restore/apply`, `/api/restore-ack` e `/api/app-ready`.
+  `/api/restore/apply`, `/api/restore-ack` e `/api/app-ready`: loopback e token.
 
 O preflight materializa o estado do IndexedDB no disco, verifica todos os anexos, cria snapshot
 com manifesto SHA-256 e entra em manutenção. O updater só então baixa para `staging/`, valida,
