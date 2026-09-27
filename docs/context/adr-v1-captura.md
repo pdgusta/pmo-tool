@@ -351,3 +351,143 @@ de update, ZIP, pacote de captura); um token dentro delas viajaria com elas.
 citam.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-31 — MCP: o transporte fica, OAuth Entra na v2, sem MCP na v1
+
+**Status:** Ratificada em 27/09/2026
+
+**Origem:** discussão da Fase 19 com o dono (27/09/2026).
+
+**Em linguagem simples:** o balcão e o ramal telefônico continuam desenhados do mesmo jeito; só
+que na v1 o balcão fica com a porta fechada.
+
+**Decisão:** o transporte fica (Streamable HTTP como endpoint principal mais uma ponte stdio fina
+que só repassa, com Host/Origin sempre validados); na v2 a autenticação vira OAuth Entra
+(metadados de recurso protegido). Sem MCP na v1. Consequências para as decisões do L1 da Fase 1,
+uma frase cada: D-10 — o transporte é o mesmo que a v2 do MCP vai usar; D-11 — sem MCP na v1
+nenhuma ponte stdio sobe um servidor local; o comportamento do Spike C (auto-start aguardando o
+health, porta ocupada como erro bloqueante) fica como evidência para o desenho da v2; D-12 — o
+token local por instalação em `state/` é substituído na v2 por OAuth Entra; a validação de
+Host/Origin fica, como middleware do próprio servidor (o Spike C achou a proteção do SDK
+desligada por padrão e `@deprecated`); "MCP remoto com OAuth" sai do "fora do escopo" e vai para a
+v2 (D-34). Revê: D-10, D-11, D-12.
+
+**Justificativa:** sem MCP na v1, a superfície de rede autenticada fica menor exatamente na
+edição que a PMO usa sem TI por perto; a v2 já tem o registro Entra da TI (D-29) para dar a OAuth
+Entra a identidade que o MCP remoto exige.
+
+**Efeito nas fases seguintes:** D-10, D-11 e D-12 terminam com "Revista por D-31 em 27/09/2026"; o
+MCP continua congelado (D-23).
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-32 — G8 reforçada
+
+**Status:** Ratificada em 27/09/2026
+
+**Origem:** discussão da Fase 19 com o dono (27/09/2026).
+
+**Em linguagem simples:** apagar deixa de ser rasgar a página; passa a ser cobrir com um adesivo
+que dá para descolar, e a cópia de segurança guarda um período fixo de tempo, não só uma
+quantidade de fotos.
+
+**Decisão:** princípio mais mínimos verificáveis, sem números de configuração:
+1. exclusão lógica (tombstone), com o payload no audit e restauração;
+2. "Limpar" e "substituir" só depois de um snapshot verificado, sem perder entradas de `auditLog`
+   e `imports`;
+3. retenção de backup por janela de tempo, nunca só por contagem;
+4. cópia verificável (manifesto SHA-256) exportável para um destino que a PMO escolhe fora da
+   máquina — um artefato de backup, não sincronização de instalação (a G11 continua valendo);
+5. removidos na origem detectados e sinalizados, nunca apagados em silêncio.
+
+**Alvo** só deste L1: janelas concretas como horário por 48 h mais diário por 90 dias,
+implementadas pela Fase 20 (itens 1–4) e pela Fase 23 (item 5). Extensão v2, só como consequência
+(nunca no texto da G8): outbox, eTag/412 e projeção one-way.
+
+**Justificativa:** **Atual** (fatos do código) — `store.limparTudo` em `src/js/20-store.js`
+substitui todas as chaves do bundle, inclusive `auditLog` e `imports`; `importarBundle` no modo
+"substituir" troca o `auditLog` local pelo do arquivo; a exclusão de projeto e de item é física e o
+audit guarda só o resumo; `RotacionarBackup` em `serve.ps1` mantém os backups mais recentes por
+contagem; toda cópia mora na mesma máquina; o import não aponta itens que desapareceram da
+origem.
+
+**Efeito nas fases seguintes:** o plano 19-03 reescreve a G8 no CLAUDE.md; a Fase 20 implementa; o
+L1 de persistência é atualizado lá (G13).
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-33 — G14 nova: uso local (S5)
+
+**Status:** Ratificada em 27/09/2026
+
+**Origem:** discussão da Fase 19 com o dono (27/09/2026).
+
+**Em linguagem simples:** um diário de bordo que só sai de casa dentro da mala que a própria PMO
+faz.
+
+**Decisão:** o registro de uso (telas abertas, filtros, exportações, documentos gerados, correções
+de dado importado) é local, visível para a PMO, desligável, e só sai da máquina dentro do pacote
+de captura que ela exporta; nenhuma chamada de rede para telemetria. Padrão: ligado, com aviso
+visível e botão de desligar (decisão do dono, contra a recomendação "desligado por padrão").
+Pendência (D-26): o consentimento da PMO para o registro de uso continua aberto; se a PMO
+recusar, a G14 volta a "desligado por padrão" por ADR.
+
+**Justificativa:** a captura precisa saber como a PMO usa o app para desenhar a v2, e local mais
+desligável evita qualquer chamada de rede de telemetria que a G1/G2 já proíbem.
+
+**Efeito nas fases seguintes:** o plano 19-03 acrescenta a G14 ao CLAUDE.md; a fase de sensores
+(Fase 25) implementa.
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-34 — Fora do escopo e local-first
+
+**Status:** Ratificada em 27/09/2026
+
+**Origem:** discussão da Fase 19 com o dono (27/09/2026).
+
+**Em linguagem simples:** o que era proibido para sempre agora é só cedo demais; e a régua de
+"local primeiro" muda de casa quando o app mudar de casa.
+
+**Decisão:** colaboração multiusuário e MCP remoto com OAuth vão para a v2; sincronização
+bidirecional contínua e o app escrever nas Listas continuam fora (D-20); o local-first vira "local
+na v1 (captura); servidor primeiro, com tolerância offline, na v2".
+
+**Justificativa:** a v1 é a roupa de captura, sem o volume de uso simultâneo nem a identidade
+corporativa que a colaboração multiusuário e o OAuth do MCP remoto exigem; a régua "local
+primeiro" deixa de descrever onde o dado mora quando a v2 move esse lugar para o servidor.
+
+**Efeito nas fases seguintes:** o CLAUDE.md recebe uma seção curta "Fora do escopo da v1" (plano
+19-03).
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-35 — Reancoragem das decisões da Fase 1 como consequência da D-23
+
+**Status:** Ratificada em 27/09/2026
+
+**Origem:** discussão da Fase 19 com o dono (27/09/2026).
+
+**Em linguagem simples:** os quadros continuam pendurados na mesma parede; só a legenda embaixo de
+cada um é reescrita para apontar para o corredor certo.
+
+**Decisão:** sem mudar o sentido de nenhuma delas: D-04 — o marco de "G3 fora do repositório" que
+dependia da antiga Fase 13 é reescrito conforme a D-27 (nenhuma instalação real recebe o runtime
+Node antes de uma fase justificar o empacotamento do `node.exe`; a edição local não troca de
+runtime); D-03 é reancorada junto com a D-04 pelo mesmo motivo (servidor e updater ficam em PS 5.1
+na edição local; a troca de runtime só existe na edição corporativa); D-05 — a revisão da G1 passa
+para o ADR corporativo (v2); D-08 — o Vite + `vite-plugin-singlefile` entra quando uma fase
+precisar embutir dependência (hoje, a Fase 27, documentos e e-mails) e o `build.ps1` continua
+oficial até a paridade. D-07 e D-13 só têm a referência de fase trocada (D-39), e nos spikes e
+medições do L1 da Fase 1 só as referências de fase mudam — saídas, números, comandos e evidências
+ficam intactos. Cada decisão reancorada (D-03, D-04, D-05, D-08) termina com "Reancorada por D-35
+em 27/09/2026" em `docs/context/avaliacao-evolucao.md`.
+
+**Justificativa:** a D-24 já reabriu G3/G4/G6/D-01/D-02/D-10..D-12 e o fora do escopo por um ADR
+novo; D-03, D-04, D-05 e D-08 nunca fizeram parte dessa lista e continuam válidas — só o corredor
+que a legenda aponta muda, do runtime local para a edição corporativa ou para quando uma fase
+justificar.
+
+**Efeito nas fases seguintes:** planos 19-04 e 19-05.
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
