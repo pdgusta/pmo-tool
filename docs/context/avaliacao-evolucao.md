@@ -775,6 +775,236 @@ partir de agora, mas nenhuma instalação real recebe o runtime Node antes do en
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
+### D-05 — G1: HTML único até a Fase 13
+
+**Status:** Ratificada em 27/09/2026
+
+**Em linguagem simples:** a casa continua com uma porta de entrada só até o dia em que o servidor
+passar a morar dentro dela; aí a planta é revista.
+
+**Decisão:** G1 reescrita: a interface continua **um único HTML autocontido até a Fase 13** (Vite
++ `vite-plugin-singlefile` na Fase 4, com paridade contra `build.ps1`); a G1 é **revisada na Fase
+13**, quando o servidor Node vira fonte da verdade. Registrar isso explicitamente como gatilho de
+revisão.
+
+**Justificativa:** Spike B provou que Vite + `vite-plugin-singlefile` gera um único HTML
+autocontido (1 `<script>`, zero referências externas `src=`/`href=` para `http(s)://`/`//`, zero
+`@import` remoto) a partir de uma cópia de `src/`, menor que a saída de `build.ps1` (~581 KB vs
+957,4 KB) — a migração de tooling da Fase 4 não perde a autocontenção do G1.
+
+**Efeito nas fases seguintes:** Fase 4 (Vite + singlefile; o gate de paridade real de
+comportamento no navegador, não só estrutura do HTML, fica para MOD-01 e a suíte Playwright da
+Fase 3); Fase 13 (revisão explícita da G1 quando o servidor Node vira fonte da verdade).
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-06 — G2: dependências por lista permitida
+
+**Status:** Ratificada em 27/09/2026
+
+**Em linguagem simples:** nada entra pela porta dos fundos — toda peça nova passa pela portaria
+(a lista aprovada) antes de entrar na casa.
+
+**Decisão:** G2 reescrita — política de dependências por **lista permitida + regras**: só entram
+dependências aprovadas na avaliação (lista no documento); dependência nova = proposta ao Maestro
+(regra 8 do time); lockfile commitado; licença compatível com open source (MIT/Apache-2.0/BSD/ISC
+— verificar cada item); zero CDN e zero fetch externo em runtime. A lista inicial sai da
+avaliação (base: `.planning/research/STACK.md`).
+
+**Justificativa:** o gate de legitimidade de pacotes já executado nesta fase (`npm view`
+somente leitura para vite, vite-plugin-singlefile, zod e `@modelcontextprotocol/sdk`, com
+aprovação humana verbatim "aprovado" antes de qualquer `npm install`) é o modelo operacional
+desta regra: toda dependência nova passa pelo mesmo tipo de verificação antes de instalar.
+
+**Efeito nas fases seguintes:** `## Dependências aprovadas (G2)` deste L1 passa a ser a
+allow-list referenciada pela G2 reescrita; cada dependência nova é proposta ao Maestro (regra 8)
+antes de instalar, com licença verificada (MIT/Apache-2.0/BSD/ISC).
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-07 — Dependências do navegador embutidas no bundle
+
+**Status:** Ratificada em 27/09/2026
+
+**Em linguagem simples:** as peças que a interface usa vêm coladas dentro da caixa, não pedidas
+por telefone a outra loja toda vez que a casa abre.
+
+**Decisão:** Dependências usadas no navegador (ex.: xlsx, eventual lib de componentes) entram
+**embutidas no HTML pelo bundle**; nunca CDN, nunca `<script src>` externo (mesma regra da G1).
+
+**Justificativa:** mesma disciplina de origem única do G1/G4 — nenhuma referência externa em
+`src=`/`href=` nem `@import` remoto no HTML final.
+
+**Efeito nas fases seguintes:** quando `@e965/xlsx` ou qualquer lib de componentes de fato for
+adicionada (ex.: Fase 7), a prova de que o bundler embute a dependência no HTML (e não a serve
+via CDN) precisa ser verificada nesse momento — Spike B só bundlou código próprio de `src/`, sem
+nenhuma dependência de terceiros no navegador ainda.
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-08 — build.ps1 sai depois da paridade do Vite
+
+**Status:** Ratificada em 27/09/2026
+
+**Em linguagem simples:** as duas ferramentas de montagem trabalham lado a lado até a nova provar
+que faz o mesmo trabalho; só então a antiga se aposenta.
+
+**Decisão:** `build.ps1` é **removido depois que o Vite provar paridade no CI** (Fase 4). Até lá
+coexistem. A G2 reescrita deve dizer isso (e o CLAUDE.md deixa de proibir `npm install` para
+desenvolvimento).
+
+**Justificativa:** Spike B mediu que o tempo interno do Vite ("built in", sem o custo de iniciar
+o processo `npx`/Node) cai para 182 ms na terceira rodada — mesma ordem de grandeza da mediana de
+`build.ps1` (176 ms, seção `## Medições do protótipo`); a maior parte da diferença de wall-clock
+(2.443 ms) vem do custo de processo, não da transformação em si. Isso dá confiança de que a Fase
+4 pode alcançar paridade sem perder a autocontenção do G1 (D-05).
+
+**Efeito nas fases seguintes:** Fase 4 mede paridade real de `build.ps1` vs Vite (tempo e
+comportamento no navegador); só depois `build.ps1` é removido e o CLAUDE.md deixa de proibir
+`npm install` para desenvolvimento.
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-09 — G6: Microsoft com login delegado
+
+**Status:** Ratificada em 27/09/2026
+
+**Em linguagem simples:** a PMO usa o próprio crachá para entrar no prédio da Microsoft; o app
+nunca tem uma chave-mestra própria — e se o crachá não funcionar, ainda existe a porta dos
+fundos (a pasta sincronizada do OneDrive).
+
+**Decisão:** (já decidido no new-project, só aplicar) G6 reescrita: integração com
+SharePoint/OneDrive **com login delegado da PMO**, sem App Registration própria nem permissão de
+aplicação no Graph; caminho candidato = client público Microsoft com device code; fallback
+garantido = pasta sincronizada pelo OneDrive. Token fora de `data/`, `config/` e `versions/`.
+Ponto de extensão continua sendo o conector (hoje `js/38-connectors.js`).
+
+**Justificativa:** `@azure/msal-node` confirma que o fluxo device code é Node/desktop-only (não
+existe em `msal-browser`) contra um client público de primeira parte da Microsoft (candidato:
+"Microsoft Graph Command Line Tools"); o token do MSAL Node fica no cache persistente do próprio
+sistema operacional (DPAPI, por usuário Windows), fora de `data/`, `config/`, `state/` ou
+`versions/` — nenhuma dessas árvores entra em snapshot, update-backup ou ZIP de release com o
+segredo dentro.
+
+**Efeito nas fases seguintes:** o conector é criado nas Fases 17–18; não existe código dele hoje.
+`js/38-connectors.js` continua sendo o ponto de extensão inerte até lá.
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+**Alternativas descartadas:** PnP PowerShell (exige App Registration própria desde 09/2024 — não
+é mais uma opção delegada-sem-registro).
+
+### D-10 — Transporte MCP: Streamable HTTP + ponte stdio
+
+**Status:** Ratificada em 27/09/2026
+
+**Em linguagem simples:** um balcão único de atendimento (o servidor) e um ramal telefônico (a
+ponte stdio) que só transfere a ligação, sem atender ninguém por conta própria.
+
+**Decisão:** Ratificado: **Streamable HTTP como endpoint principal** no servidor em
+`http://localhost:8090/` (ex.: `/mcp`) **+ ponte stdio fina** que apenas repassa as chamadas ao
+endpoint HTTP, sem acessar dados. Preserva a instância única e a fonte da verdade única;
+compatível com clientes que só falam stdio. Descartados: só stdio (conflita com a instância
+única) e só HTTP (exige adaptador de terceiros para clientes stdio).
+
+**Justificativa:** Spike C provou o caminho feliz ponta a ponta — um cliente que só fala stdio
+(spawna a ponte como subprocesso) listou as duas ferramentas registradas no servidor Streamable
+HTTP e recebeu os resultados esperados (`pong`, `olá`). A ponte tem 43 linhas e zero ocorrências
+da classe `McpServer` — não carrega lógica de ferramenta nem acesso a dados, só relay nos dois
+sentidos. Isso resolve o bloqueador do STATE.md "Transporte MCP em aberto" e a divergência entre
+STACK.md (recomendava stdio + HTTP como duas portas de entrada separadas) e ARCHITECTURE.md
+(recomendava Streamable HTTP único, por causa do mutex de instância única do runtime) — D-10
+assenta a divergência com a ponte relay-only: um único processo servidor (mutex preservado),
+acessível por HTTP direto e por qualquer cliente stdio via ponte.
+
+**Efeito nas fases seguintes:** Fase 11 (servidor Node hospeda `/mcp` no mesmo processo/porta
+8090); Fases 14–15 (implementação real da ponte e das ferramentas MCP).
+
+**Reversibilidade:** costly — clientes MCP configurados e a superfície de segurança dependem do
+transporte.
+
+**Alternativas descartadas:** só stdio (cada cliente MCP spawnaria seu próprio processo servidor
+— N processos disputando o mesmo mutex de instância única do runtime,
+`docs/context/runtime-portatil.md`, conflita com a instância única); só HTTP (exige adaptador de
+terceiros para os clientes que só falam stdio, como Claude Desktop/Claude Code por padrão).
+
+### D-11 — A ponte stdio sobe o servidor
+
+**Status:** Ratificada em 27/09/2026
+
+**Em linguagem simples:** se a loja estiver fechada quando o telefone tocar, o próprio ramal liga
+as luzes e espera o balcão abrir antes de transferir a ligação.
+
+**Decisão:** Se o servidor não estiver rodando, a **ponte stdio sobe o servidor** (via `pmo.ps1`
+sem browser, aguardando o health). Porta 8090 ocupada por outro processo = erro claro e
+bloqueante (G4).
+
+**Justificativa:** Spike C estendeu a ponte para checar `/health` antes de conectar: com o
+servidor parado, a ponte detectou a ausência de resposta, subiu o processo (`spawn` detached,
+equivalente ao `pmo.ps1` sem browser) e sondou `/health` a cada 250 ms — 527 ms depois, o relay
+seguiu normalmente. Com a porta ocupada por outro processo, a ponte identificou pela primeira
+resposta de `/health` (corpo diferente do esperado) que a porta pertence a outro processo e saiu
+com código 1 sem nunca tentar subir um segundo servidor.
+
+**Efeito nas fases seguintes:** Fases 14–15 orçam ~527 ms de espera de auto-start na UX da ponte
+real; o erro de porta ocupada segue o mesmo padrão bloqueante do G4.
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-12 — Token local por instalação em state/
+
+**Status:** Ratificada em 27/09/2026
+
+**Em linguagem simples:** um crachá guardado na portaria da própria casa, que não viaja na
+mudança nem na cópia de segurança.
+
+**Decisão:** Autenticação do endpoint HTTP: **token local por instalação em `state/`** (fora de
+`data/`, dos snapshots e do ZIP); a ponte stdio lê automaticamente; clientes HTTP diretos usam o
+token na configuração. Host/Origin sempre validados (anti DNS rebinding).
+
+**Justificativa:** Spike C confirmou o token: `/mcp` sem `Authorization` ou com token errado
+retorna `401`. Achado importante para a Fase 14: o SDK `@modelcontextprotocol/sdk@1.30.1` mantém
+`enableDnsRebindingProtection` (e `allowedHosts`/`allowedOrigins`) em
+`WebStandardStreamableHTTPServerTransportOptions`, mas **o valor padrão é `false`** — a proteção
+contra DNS rebinding fica **desligada por padrão** (confirma o alerta do GHSA-w48q-cv73-mx4w
+citado em `.planning/research/PITFALLS.md`; a Assumption A3 do RESEARCH, que supunha proteção
+ligada por padrão, está **reprovada** pela evidência direta do pacote instalado). Além disso, o
+`.d.ts` do próprio pacote marca as três opções como `@deprecated`, recomendando "middleware
+externo" para validação de Host/Origin/DNS rebinding. Com as opções explicitamente ligadas
+(`allowedHosts`, `allowedOrigins`, `enableDnsRebindingProtection: true`), `Host`/`Origin`
+forjados foram recusados com `403`, e um controle positivo com `Host`/`Origin` corretos confirmou
+que a rejeição não é efeito colateral de outra coisa quebrada.
+
+**Efeito nas fases seguintes:** a Fase 14 precisa habilitar Host/Origin explicitamente no
+`StreamableHTTPServerTransport` **e**, por essas opções estarem `@deprecated` no SDK `1.30.1`,
+implementar a validação de Host/Origin como middleware do próprio servidor Node do produto
+(checagem antes de repassar ao SDK) — não confiar apenas nas opções internas do transporte, que
+podem ser removidas em versão futura do SDK; a Fase 14 deve reverificar esse comportamento contra
+a versão do SDK de fato fixada no momento da implementação.
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+### D-13 — Autoria de agente no audit log
+
+**Status:** Ratificada em 27/09/2026
+
+**Em linguagem simples:** o livro de ocorrências passa a anotar se quem mexeu foi uma pessoa ou
+um assistente, e qual assistente.
+
+**Decisão:** Autoria no audit log: `tipo=agente` + `clientInfo` do MCP (ex.: "Claude Desktop") +
+rótulo opcional configurado pelo usuário.
+
+**Justificativa:** Spike C confirmou que o servidor recebe `clientInfo.name`/`version`
+exatamente como o cliente os declara na chamada `initialize` do handshake MCP (observado
+`{"name":"pmo-spike-client","version":"0.0.0-spike"}`) — a autoria é extraível diretamente da
+mensagem JSON-RPC de handshake, sem instrumentação adicional no SDK. Este achado é consistente
+com ARCHITECTURE.md: "came via MCP" é o fato confiável (qual token local chamou), e o nome de
+cliente fornecido é tratado como anotação, não como fronteira de segurança.
+
+**Efeito nas fases seguintes:** Fase 11 (autoria no audit log, SRV-04) e Fase 15 (MCP-04).
+
+**Reversibilidade:** não classificada na discussão; tratada como reversível.
+
 ## Avaliação por eixo
 
 Avalia tooling, dependências, arquitetura e framework de UI, com as alternativas descartadas e o
