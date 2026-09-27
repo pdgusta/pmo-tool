@@ -2,7 +2,8 @@
 
 Este L1 registra a avaliação técnica medida do protótipo v1.5.0 (commit base `571d058`,
 27/09/2026), os spikes de verificação descartáveis e as decisões ratificadas na Fase 1 (D-01 a
-D-13). Usa os marcadores **Atual**, **Alvo**, **Invariante** e **Gate** definidos em
+D-13) — parte delas revista pelo ADR D-19+ (`docs/context/adr-v1-captura.md`). Usa os marcadores
+**Atual**, **Alvo**, **Invariante** e **Gate** definidos em
 `docs/context/README.md`; tudo marcado como **Alvo** ainda não está implementado — só foi
 aprovado como direção.
 
@@ -22,11 +23,11 @@ Authenticode conferidos; o Spike B mostrou que Vite com `vite-plugin-singlefile`
 HTML autocontido, menor que o `build.ps1` de hoje; e o Spike C mostrou uma ponte stdio fina
 repassando corretamente chamadas para um servidor MCP Streamable HTTP, com token e validação de
 Host/Origin funcionando — e um achado importante: a proteção contra DNS rebinding do SDK vem
-desligada por padrão, então a Fase 14 precisa de um middleware próprio. Com essa evidência em
+desligada por padrão, então o MCP da v2 corporativa precisa de um middleware próprio. Com essa evidência em
 mãos, o dono do projeto ratificou em 27/09/2026 (D-14, este L1 novo é o registro oficial) o Node
 24 LTS como motor de desenvolvimento, CI e produção, e o transporte MCP (Streamable HTTP mais a
 ponte stdio). As guardrails do CLAUDE.md foram reescritas de acordo: a G1 (HTML único) continua
-valendo até a Fase 13, quando o servidor Node assume a fonte da verdade; a G2 passa de "zero
+valendo em toda a v1, com revisão no ADR corporativo (D-35); a G2 passa de "zero
 dependências" para uma lista permitida com licença verificada item a item; a G3 troca "sem Node"
 por Node 24 LTS portátil dentro da release, com PowerShell 5.1 restrito aos três scripts de
 entrada; e a G6 troca a antiga proibição de integração Microsoft por login delegado da PMO, sem
@@ -35,9 +36,18 @@ já nesta fase quando o custo era baixo — o contrato real de `reconciliar()` e
 rotas administrativas — e as demais (pino de Node do CI, o SKILL.md do app, a proibição de ESM, a
 menção a `build.ps1` na Estrutura e a frase do README sobre runtime) ficaram registradas na tabela
 abaixo com a fase certa para corrigi-las. Fica propositalmente para depois (D-16) a escolha do
-framework de UI — a Fase 8 decide isso junto com a PMO, a partir dos candidatos e critérios listados
+framework de UI — a v2 corporativa decide isso, a partir do que a captura mostrar, a partir dos candidatos e
+critérios listados
 em `### Framework de UI`. Por fim, toda a reescrita de guardrails e as correções do D-17 aconteceram
 na execução desta fase, na branch e via PR (D-18), não durante a conversa que produziu as decisões.
+
+**Revisão de 27/09/2026 (ADR D-19+):** no mesmo dia, o ADR `docs/context/adr-v1-captura.md`
+revisou parte destas decisões — a edição local não troca de runtime e o `node.exe` portátil
+continua permitido, mas só entra no pacote quando uma fase justificar o empacotamento (D-27); a G4
+(porta 8090 fixa) vale só para a edição local (D-28); a G6 passa a ter duas edições, local e
+corporativa (D-29); o MCP fica para a v2 corporativa, sem MCP na v1 (D-31). D-01, D-02, D-09,
+D-10, D-11 e D-12 foram reescritas no lugar e terminam com "Revista por D-xx"; D-03, D-04, D-05 e
+D-08 foram reancoradas (D-35).
 
 ## Medições do protótipo
 
@@ -85,7 +95,7 @@ Comando: `du -sh src/` → **1016K**.
 
 Comando: `grep -cE 'function\s*\(|function [a-zA-Z_]+\(|=>\s*\{|=\s*function' src/js/*.js` — proxy
 grosseiro de contagem de declarações função-símile; não é uma ferramenta real de complexidade
-ciclomática (nenhum linter de complexidade está instalado antes da Fase 2).
+ciclomática (nenhum linter de complexidade está instalado antes de uma fase do v1.6 adotar lint).
 
 | Arquivo | Declarações função-símile (aprox.) |
 |---|---|
@@ -156,7 +166,8 @@ estão **sem teste comportamental**.
 
 Comando: `grep -n "node-version" .github/workflows/release.yml` → linha 66: `node-version:
 '22.22.0'`. O CI ainda está fixado no Node 22, não no Node 24 (D-01); bumpar esse pino é escopo da
-Fase 2 (junto com o contrato `workflow-gates-release` em `index.json`), não desta fase.
+fase do v1.6 que adotar Node 24 no CI (junto com o contrato `workflow-gates-release` em
+`index.json`), não desta fase.
 
 `tests/Run-Tests.ps1` (linhas 22-28) já resolve e **exige** um Node.js de desenvolvimento —
 `throw 'Node.js de desenvolvimento e obrigatorio para validar migracoes e o JavaScript do
@@ -411,7 +422,7 @@ Um único `<script>`, zero referências externas `src=`/`href=` para `http(s)://
 `@import` remoto — mesmo critério que `build.ps1` já aplica. O script inline extraído
 (`inline.mjs`, 527.202 caracteres) passa `node --check` sem erro de parse.
 
-**8. Sinal de modo estrito ESM para a Fase 4 (cada `src/js/*.js` como `.mjs`):**
+**8. Sinal de modo estrito ESM para a extração ESM (cada `src/js/*.js` como `.mjs`):**
 
 ```text
 $ for f in src/js/*.js; do node --check "strict/$(basename "$f" .js).mjs"; done
@@ -419,25 +430,25 @@ TOTAL_FAILURES=0 of 15
 ```
 
 Nenhum dos 15 arquivos de `src/js/` falhou `node --check` quando tratado como módulo ESM estrito
-(0 é resultado válido) — sinal de que a conversão da Fase 4 não deve encontrar incompatibilidade
+(0 é resultado válido) — sinal de que a conversão para ESM não deve encontrar incompatibilidade
 sintática de nível ESM nesses arquivos, embora isso não teste `import`/`export` real nem execução
 em navegador.
 
 **9. Limite explícito deste spike:** a equivalência de comportamento em runtime de navegador **não
-é provada aqui** (não há navegador nesta execução) — isso é o gate de paridade da Fase 4 (MOD-01)
-contra `build.ps1`, mais a suíte Playwright da Fase 3.
+é provada aqui** (não há navegador nesta execução) — isso é o gate de paridade da fase que
+adotar o Vite (hoje, a Fase 27) contra `build.ps1`, mais uma suíte E2E quando uma fase a adotar.
 
 **Resultado:** aprovado — Vite + `vite-plugin-singlefile` gera um único HTML autocontido a partir
 de uma cópia de `src/`, sem referência externa, menor que a saída de `build.ps1` (~581 KB vs 957,4
 KB), com todos os módulos passando checagem sintática ESM.
 
-**Implicação:** para D-05/D-08, a Fase 4 pode migrar para Vite mantendo o contrato de HTML único
-sem regressão de autocontenção; o gate de paridade real (comportamento no navegador, não só
-estrutura do HTML) fica para a Fase 4 (MOD-01) e a suíte Playwright da Fase 3 — este spike só
+**Implicação:** para D-05/D-08, a fase que adotar o Vite pode migrar mantendo o contrato de HTML
+único sem regressão de autocontenção; o gate de paridade real (comportamento no navegador, não só
+estrutura do HTML) fica para essa fase e para uma suíte E2E — este spike só
 prova a mecânica de bundling e a saída estática. Para D-07, este spike só bundlou código próprio
 de `src/`; não incluiu nenhuma dependência de terceiros no navegador (ex.: `@e965/xlsx`) — a
 prova de que uma dependência npm real fica embutida no HTML pelo bundler (e não como CDN) ainda
-precisa ser verificada quando essa dependência for de fato adicionada (Fase 7).
+precisa ser verificada quando essa dependência for de fato adicionada (hoje, a Fase 27).
 
 ### Spike C — transporte MCP: Streamable HTTP + ponte stdio (D-10, D-11, D-12)
 
@@ -533,7 +544,8 @@ Node (undici) trata `Host` como cabeçalho proibido e o sobrescreve silenciosame
 cabeçalho forjado abaixo usam `node:http` diretamente (`probe.mjs`, script do spike, não citado
 aqui em código-fonte) para garantir que o cabeçalho realmente chega ao servidor.
 
-**Achado central para a Fase 14 (resolve a premissa A3 do RESEARCH):** o SDK `1.30.1` mantém
+**Achado central para o MCP da v2 corporativa (congelado, D-23; resolve a premissa A3 do
+RESEARCH):** o SDK `1.30.1` mantém
 `enableDnsRebindingProtection` (e as listas `allowedHosts`/`allowedOrigins` que o acompanham) em
 `WebStandardStreamableHTTPServerTransportOptions`, mas o **valor padrão é `false`** — a proteção
 fica **desligada por padrão**, exatamente como a citação do GHSA-w48q-cv73-mx4w em
@@ -542,7 +554,8 @@ ligada por padrão) está **reprovada** pela evidência direta do pacote instala
 `.d.ts` do próprio pacote marca as três opções (`allowedHosts`, `allowedOrigins`,
 `enableDnsRebindingProtection`) como `@deprecated`, com a nota "Use external middleware for
 [host/origin validation / DNS rebinding protection] instead" — ou seja, o SDK não promete manter
-esse mecanismo interno; a Fase 14 deve tratar a validação de Host/Origin como responsabilidade de
+esse mecanismo interno; o MCP da v2 corporativa deve tratar a validação de Host/Origin como
+responsabilidade de
 um middleware do próprio servidor Node do produto, não como algo que basta "ligar" no SDK.
 
 | Cenário | Esperado | Obtido |
@@ -662,7 +675,7 @@ observado no Spike A) — nenhuma entrada `LISTENING` na porta 18090 ou 18091.
 
 **Resultado:** aprovado — os quatro mecanismos (token, Host/Origin, auto-start, porta ocupada)
 comportaram-se como o D-10/D-11/D-12/G4 exigem, com uma ressalva importante sobre o padrão do SDK
-registrada como achado para a Fase 14.
+registrada como achado para o MCP da v2 corporativa (congelado, D-23).
 
 **Implicação:**
 - **D-10** (ponte relay-only): viável — a ponte de 43/111 linhas (Task 1/Task 2) nunca importou
@@ -671,10 +684,12 @@ registrada como achado para a Fase 14.
   primeiro `/health` — nem instantâneo nem lento a ponto de preocupar uma PMO abrindo um cliente
   MCP; o produto deve orçar essa espera na UX da ponte real.
 - **D-12** (token + Host/Origin): o token local funciona como projetado (401 sem ele/com ele
-  errado); **a Fase 14 precisa habilitar Host/Origin explicitamente** — `allowedHosts`,
+  errado); **o MCP da v2 corporativa (congelado, D-23) precisa habilitar Host/Origin
+  explicitamente** — `allowedHosts`,
   `allowedOrigins` e `enableDnsRebindingProtection: true` no `StreamableHTTPServerTransport` — e,
   por essas três opções estarem marcadas `@deprecated` no SDK `1.30.1` a favor de "middleware
-  externo", **a Fase 14 deve implementar a validação de Host/Origin como middleware do próprio
+  externo", **o MCP da v2 corporativa deve implementar a validação de Host/Origin como middleware
+  do próprio
   servidor Node do produto** (checagem antes de repassar ao SDK), não confiar apenas nas opções
   internas do transporte, que podem ser removidas em versão futura do SDK.
 - **D-13** (autoria): `clientInfo` do handshake MCP é suficiente para popular
