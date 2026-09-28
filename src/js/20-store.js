@@ -32,6 +32,7 @@
     restauracaoAplicada: null,
     ultimaMigracao: null,
     statusAtualizacao: { fase: 'ocioso', erro: null },
+    statusProtecao: { operacao: null, fase: 'ocioso', erro: null, snapshotId: null },
     statusDisco: { online: false, ultimoSalvo: null, erro: null, salvando: false, pendente: false },
     statusIdb: { online: false, erro: null },
     on: emissor.on,
@@ -571,7 +572,7 @@
 
   function registrarAudit(acao, meta) {
     const m = meta || {};
-    store.state.auditLog.push({
+    const entrada = {
       id: U.uid('aud'),
       em: U.agoraIso(),
       ator: _atorAtual,
@@ -580,7 +581,15 @@
       entidadeId: m.entidadeId || null,
       resumo: m.resumo || '',
       campos: m.campos || null
-    });
+    };
+    // Campos opcionais (20-01, 20-05, 20-06): só gravados quando presentes em
+    // meta, para entradas antigas e novas sem esses campos manterem o formato
+    // atual byte a byte.
+    if (m.snapshotId !== undefined) { entrada.snapshotId = m.snapshotId; }
+    if (m.payload !== undefined) { entrada.payload = U.clonar(m.payload); }
+    if (m.restauraDe !== undefined) { entrada.restauraDe = m.restauraDe; }
+    if (m.copia !== undefined) { entrada.copia = U.clonar(m.copia); }
+    store.state.auditLog.push(entrada);
   }
 
   /**
@@ -720,17 +729,125 @@
     }, { entidade: 'bundle', resumo: 'substituição total' });
   };
 
+  /* ===================================================== proteção (PROT-01) */
+
+  function emitirProtecao(operacao, fase, extra) {
+    const e = extra || {};
+    store.statusProtecao = {
+      operacao: operacao,
+      fase: fase,
+      erro: e.erro || null,
+      snapshotId: e.snapshotId || null
+    };
+    emissor.emitir('protecao-status', store.statusProtecao);
+  }
+
+  /**
+   * Força a gravação em disco e a materialização dos anexos, confirmando que
+   * o selo `meta.salvoEm` não mudou no meio do caminho. Espelha a sequência
+   * de `prepararAtualizacao`, mas não mexe em `store.manutencao` nem no
+   * fluxo do updater.
+   */
+  async function materializarEstadoVerificado() {
+    const selo = String((store.state.meta || {}).salvoEm || '');
+    const salvo = await store.salvarAgora({ forcarDisco: true });
+    if (!salvo.disco || (_db && !salvo.indexeddb)) {
+      throw new Error('Não foi possível confirmar o portfólio no navegador e no disco; nada foi alterado.');
+    }
+    const inventario = await store.inventariarAnexos({ materializar: true });
+    if (!inventario.ok) {
+      throw new Error('Inventário de anexos inválido: ' + inventario.erros.join(' '));
+    }
+    if (String((store.state.meta || {}).salvoEm || '') !== selo) {
+      throw new Error('Os dados foram alterados durante a proteção; tente de novo com o aplicativo ocioso.');
+    }
+    return { selo: selo, inventario: inventario };
+  }
+
+  /**
+   * Cria (ou dispensa) o snapshot de proteção pré-Limpar/Substituir no
+   * servidor local. Sem servidor: dispensa quando não há dado a proteger
+   * (P-05), senão recusa a operação inteira.
+   */
+  async function snapshotProtecao(operacao) {
+    exigirEscrita();
+    if (!temServidor()) {
+      if (!M.temDadoAProteger(store.state)) {
+        emitirProtecao(operacao, 'dispensado');
+        return { dispensado: true, snapshotId: null };
+      }
+      throw new Error('Esta operação exige o servidor local (abra pelo pmo.ps1) para criar antes um snapshot verificado; nada foi alterado.');
+    }
+    emitirProtecao(operacao, 'salvando');
+    const estado = await materializarEstadoVerificado();
+    emitirProtecao(operacao, 'materializando-anexos');
+    emitirProtecao(operacao, 'selando-snapshot');
+    const pedido = {
+      operation: operacao,
+      appVersion: M.APP_VERSION,
+      schemaVersion: M.SCHEMA_VERSION,
+      salvoEm: estado.selo || null,
+      anexos: estado.inventario.itens.map(function (x) {
+        return { id: x.id, tamanho: x.tamanho, sha256: String(x.sha256 || '').toLowerCase() };
+      })
+    };
+    const r = await apiFetch('/api/protecao/snapshot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(pedido),
+      timeout: 120000
+    });
+    if (!r.ok) {
+      let mensagemServidor = '';
+      try {
+        const corpo = await r.json();
+        mensagemServidor = corpo && corpo.erro ? String(corpo.erro) : '';
+      } catch (e) { /* corpo sem JSON legível */ }
+      throw new Error('O servidor recusou o snapshot de proteção (' + r.status + '): ' +
+        mensagemServidor + '. Nada foi alterado.');
+    }
+    const resposta = await r.json();
+    if (!resposta || resposta.ok === false ||
+        !/^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$/.test(String(resposta.snapshotId || ''))) {
+      throw new Error('O servidor recusou o snapshot de proteção: resposta inválida. Nada foi alterado.');
+    }
+    if (String((store.state.meta || {}).salvoEm || '') !== estado.selo) {
+      throw new Error('Os dados mudaram enquanto o snapshot era selado; nada foi alterado.');
+    }
+    emitirProtecao(operacao, 'verificado', { snapshotId: resposta.snapshotId });
+    return { dispensado: false, snapshotId: resposta.snapshotId, manifest: resposta.manifest };
+  }
+
   store.limparTudo = async function () {
     exigirEscrita();
-    const r = await store.mutate('Limpar portfólio', function (d) {
-      const vazio = M.portfolioVazio();
-      Object.keys(vazio).forEach(function (k) { d[k] = vazio[k]; });
-    }, { entidade: 'bundle', resumo: 'portfólio zerado' });
-    if (!r.ok) { return false; }
-    if (_db) {
-      try { await idbOp('anexos', 'readwrite', function (os) { os.clear(); }); } catch (e) { /* segue */ }
+    try {
+      const snap = await snapshotProtecao('limpar');
+      const meta = { entidade: 'bundle', resumo: snap.dispensado
+        ? 'portfólio zerado; sem servidor e sem dado a proteger'
+        : 'portfólio zerado; snapshot verificado ' + snap.snapshotId };
+      if (snap.snapshotId) { meta.snapshotId = snap.snapshotId; }
+      const r = await store.mutate('Limpar portfólio', function (d) {
+        const vazio = M.bundleAposLimpeza(d);
+        Object.keys(vazio).forEach(function (k) { d[k] = vazio[k]; });
+      }, meta);
+      if (!r.ok) {
+        const erro = new Error(r.erro || 'Não foi possível limpar o portfólio.');
+        erro.jaNotificado = true;
+        throw erro;
+      }
+      if (_db) {
+        try { await idbOp('anexos', 'readwrite', function (os) { os.clear(); }); } catch (e) { /* segue */ }
+      }
+      emitirProtecao('limpar', 'concluido', { snapshotId: snap.snapshotId });
+      return { ok: true, snapshotId: snap.snapshotId, dispensado: snap.dispensado };
+    } catch (e) {
+      emitirProtecao('limpar', 'falhou', { erro: String(e.message || e) });
+      emissor.emitir('erro', { onde: 'protecao', erro: String(e.message || e) });
+      if (!e.jaNotificado) {
+        U.toast('Limpeza cancelada: ' + (e.message || e), 'erro');
+      }
+      throw e;
     }
-    return true;
   };
 
   store.estaVazio = function () {

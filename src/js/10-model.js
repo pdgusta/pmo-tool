@@ -725,6 +725,36 @@
     };
   };
 
+  /**
+   * Bundle após "Limpar portfólio" (PROT-01, D-32 item 2): zera tudo, exceto
+   * auditLog e imports, que são preservados byte a byte (clone profundo, sem
+   * mutar o argumento). A própria entrada de "Limpar portfólio" é acrescentada
+   * pelo Store depois, via mutate/registrarAudit — não aqui.
+   */
+  model.bundleAposLimpeza = function (bundleAtual) {
+    const b = bundleAtual || {};
+    const vazio = model.portfolioVazio();
+    vazio.auditLog = U.clonar(Array.isArray(b.auditLog) ? b.auditLog : []);
+    vazio.imports = U.clonar(Array.isArray(b.imports) ? b.imports : []);
+    return vazio;
+  };
+
+  /**
+   * Verdadeiro se o bundle tem algo além de auditLog/imports (que são sempre
+   * preservados). Usado para decidir se Limpar/Substituir podem rodar sem
+   * servidor (P-05): sem dado a proteger, o snapshot é dispensável.
+   */
+  model.temDadoAProteger = function (bundle) {
+    const b = bundle || {};
+    return !!(
+      (b.projetos && b.projetos.length) ||
+      (b.programas && b.programas.length) ||
+      (b.pessoas && b.pessoas.length) ||
+      (b.anexos && b.anexos.length) ||
+      (b.visoesSalvas && b.visoesSalvas.length)
+    );
+  };
+
   /* ==================================================== campos editáveis
      Descreve, por tipo de registro, o que o editor genérico deve renderizar.
      É a única fonte de verdade do formulário: acrescentar um campo aqui o faz

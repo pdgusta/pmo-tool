@@ -342,6 +342,63 @@ try {
     }
     $null = Invoke-LocalApi '/api/update/cancel' 'POST' '{}' -Admin
 
+    # ------------------------------------------- PROT-01: snapshot de protecao
+    $protecaoSnapshotsDir = Join-Path $data 'backups\snapshots'
+    $protecaoAnexos = @([ordered]@{ id=$attachmentId; tamanho=$attachmentBytes.Length; sha256=[string]$index.itens[0].sha256 })
+
+    $portfolio.auditLog = @(
+        [ordered]@{ id='aud-prot-1'; em='2026-08-02T00:05:00Z'; ator='PMO Lead'; acao='fixture'
+            entidade=$null; entidadeId=$null; resumo='evento ficticio 1'; campos=$null }
+        [ordered]@{ id='aud-prot-2'; em='2026-08-02T00:06:00Z'; ator='PMO Lead'; acao='fixture'
+            entidade=$null; entidadeId=$null; resumo='evento ficticio 2'; campos=$null }
+    )
+    $portfolio.imports = @(
+        [ordered]@{ id='imp-prot-1'; em='2026-08-02T00:05:00Z'; kind='fixture'; fileName='fixture.json'; resumo='import ficticio' }
+    )
+    $portfolio.meta.salvoEm = '2026-08-02T00:05:00Z'
+    $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+
+    $protecaoBodyLimpar = [ordered]@{
+        operation='limpar'; appVersion=$appVersionFixture; schemaVersion=4
+        salvoEm=$portfolio.meta.salvoEm; anexos=$protecaoAnexos
+    } | ConvertTo-Json -Depth 10
+    $protecaoRespLimpar = Invoke-LocalApi '/api/protecao/snapshot' 'POST' $protecaoBodyLimpar -Admin
+    if ($protecaoRespLimpar.StatusCode -ne 200) { throw 'Snapshot de protecao (limpar) nao respondeu 200.' }
+    $protecaoLimpar = $protecaoRespLimpar.Content | ConvertFrom-Json
+    if (-not $protecaoLimpar.ok -or -not $protecaoLimpar.snapshotId -or [string]$protecaoLimpar.kind -ne 'pre-limpar') {
+        throw 'Snapshot de protecao (limpar) nao respondeu como esperado.'
+    }
+    $protecaoLimparDir = Join-Path $protecaoSnapshotsDir ([string]$protecaoLimpar.snapshotId)
+    if (-not (Test-Path -LiteralPath $protecaoLimparDir -PathType Container)) { throw 'Pasta do snapshot de protecao (limpar) nao foi criada.' }
+    $protecaoLimparManifest = Read-PmoJson (Join-Path $protecaoLimparDir 'manifest.json') $null
+    $protecaoErros = @()
+    foreach ($grupo in @(Test-PmoInventory $protecaoLimparDir $protecaoLimparManifest.files @('manifest.json'))) {
+        foreach ($erroProtecao in @($grupo)) { $protecaoErros += [string]$erroProtecao }
+    }
+    if ($protecaoErros.Count -gt 0) { throw ('Snapshot de protecao (limpar) invalido: ' + ($protecaoErros -join '; ')) }
+    if ([int]$protecaoLimparManifest.contagens.auditLog -ne 2 -or [int]$protecaoLimparManifest.contagens.imports -ne 1) {
+        throw 'Contagens do manifesto de protecao (limpar) nao batem com o portfolio gravado.'
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $protecaoLimparDir ('attachments\' + $attachmentId)) -PathType Leaf)) {
+        throw 'Snapshot de protecao (limpar) nao materializou o anexo.'
+    }
+    if (Test-Path -LiteralPath (Join-Path $protecaoLimparDir 'config')) { throw 'Snapshot de protecao nao pode conter config/ (D-30).' }
+
+    $portfolio.meta.salvoEm = '2026-08-02T00:07:00Z'
+    $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+    $protecaoBodySubstituir = [ordered]@{
+        operation='substituir'; appVersion=$appVersionFixture; schemaVersion=4
+        salvoEm=$portfolio.meta.salvoEm; anexos=$protecaoAnexos
+    } | ConvertTo-Json -Depth 10
+    $protecaoRespSubstituir = Invoke-LocalApi '/api/protecao/snapshot' 'POST' $protecaoBodySubstituir -Admin
+    if ($protecaoRespSubstituir.StatusCode -ne 200) { throw 'Snapshot de protecao (substituir) nao respondeu 200.' }
+    $protecaoSubstituir = $protecaoRespSubstituir.Content | ConvertFrom-Json
+    if (-not $protecaoSubstituir.ok -or -not $protecaoSubstituir.snapshotId -or [string]$protecaoSubstituir.kind -ne 'pre-substituir') {
+        throw 'Snapshot de protecao (substituir) nao respondeu como esperado.'
+    }
+
+    Write-Host 'PROT-01 snapshot de protecao: OK' -ForegroundColor Green
+
     Write-Host 'Integracao do servidor, auth, snapshot, restore, rollback e app-ready: OK' -ForegroundColor Green
 } finally {
     if ($healthProcess -and -not $healthProcess.HasExited) { $healthProcess.Kill(); $healthProcess.WaitForExit(5000) | Out-Null }

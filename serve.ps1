@@ -22,6 +22,7 @@
       GET    /samples/<arquivo>             -> arquivo de exemplo
       GET    /api/templates                 -> lista de cronogramas-modelo (MSPDI)
       GET    /templates/<arquivo>           -> cronograma-modelo
+      POST   /api/protecao/snapshot         <- snapshot de protecao antes de Limpar/Substituir (token)
     Ctrl+C encerra.
 #>
 [CmdletBinding()]
@@ -125,6 +126,7 @@ $appHtml  = Join-Path $dist 'pmo-tool.html'
 $anexoDir = Join-Path $dataDir 'attachments'
 $bkpDir   = Join-Path $dataDir 'backups'
 $updateBkpDir = Join-Path $dataDir 'update-backups'
+$protecaoSnapDir = Join-Path $bkpDir 'snapshots'
 $userTmplDir = Join-Path $dataDir 'user-templates'
 $sampDir  = Join-Path $raiz 'samples'
 $factoryTmplDir = if (Test-Path -LiteralPath (Join-Path $raiz 'templates\factory')) { Join-Path $raiz 'templates\factory' } else { Join-Path $raiz 'templates' }
@@ -646,6 +648,98 @@ function LimparSnapshotsAntigos() {
     }
 }
 
+function ContarColecao($valor) {
+    if ($null -eq $valor) { return 0 }
+    return @($valor).Count
+}
+
+# Snapshot de protecao (D-32 item 2, PROT-01/02): arvore propria em
+# data/backups/snapshots/<id>/, isolada do fluxo do updater (update.json,
+# update.lock, $script:maintenance nunca sao lidos ou escritos aqui).
+function CriarSnapshotProtecao($pedido) {
+    if (-not (Test-Path -LiteralPath $portJson -PathType Leaf)) { throw 'portfolio.json nao foi materializado em disco' }
+    $bundleRaw = [System.IO.File]::ReadAllText($portJson, [System.Text.Encoding]::UTF8)
+    try { $bundle = $bundleRaw | ConvertFrom-Json } catch { throw 'portfolio.json invalido: JSON nao pode ser lido' }
+    if (-not $pedido) { throw (NovaExcecaoHttp 400 'pedido de snapshot obrigatorio') }
+    $operationProp = $pedido.PSObject.Properties['operation']
+    $operation = if ($null -ne $operationProp) { ([string]$operationProp.Value).ToLowerInvariant() } else { '' }
+    if (@('limpar','substituir') -notcontains $operation) { throw (NovaExcecaoHttp 400 'operacao de protecao invalida') }
+    $snapshotKind = if ($operation -eq 'substituir') { 'pre-substituir' } else { 'pre-limpar' }
+
+    if ([string]$pedido.appVersion -ne $appVersion -or [int]$pedido.schemaVersion -ne $schemaVersion) {
+        throw (NovaExcecaoHttp 409 'versao ou schema do pedido diverge do runtime atual')
+    }
+    if ([string]$pedido.salvoEm -ne [string]$bundle.meta.salvoEm) {
+        throw (NovaExcecaoHttp 409 'selo temporal do pedido diverge do bundle em disco')
+    }
+    if (-not ($pedido.PSObject.Properties.Name -contains 'anexos')) { throw (NovaExcecaoHttp 400 'pedido sem inventario de anexos') }
+    $anexosConfirmados = @(ValidarInventarioAnexos $bundle @($pedido.anexos))
+
+    [Int64]$bytesNecessarios = (Get-Item -LiteralPath $portJson).Length
+    foreach ($f in (Get-AnexosCanonicos)) { $bytesNecessarios += $f.Length }
+    $bytesNecessarios = [Math]::Max(10485760, [Int64]($bytesNecessarios * 1.25))
+    if ((EspacoLivre $bkpDir) -lt $bytesNecessarios) { throw (NovaExcecaoHttp 507 'espaco livre insuficiente para snapshot de protecao') }
+
+    $null = Assert-PmoPathWithoutReparse $protecaoSnapDir
+    if (-not (Test-Path -LiteralPath $protecaoSnapDir)) { New-Item -ItemType Directory -Path $protecaoSnapDir -Force | Out-Null }
+    $null = Assert-PmoPathWithoutReparse $protecaoSnapDir
+
+    $snapshotId = NovaIdSnapshot
+    $snapshotDir = Join-Path $protecaoSnapDir $snapshotId
+    if (-not (Test-PmoSubPath $protecaoSnapDir $snapshotDir)) { throw 'destino de snapshot de protecao invalido' }
+    $null = Assert-PmoPathWithoutReparse $snapshotDir
+    New-Item -ItemType Directory -Path $snapshotDir -Force | Out-Null
+    $null = Assert-PmoPathWithoutReparse $snapshotDir
+    try {
+        Copy-PmoFileDurable -Source $portJson -Destination (Join-Path $snapshotDir 'portfolio.json')
+        # Evidencia byte a byte do bundle escolhido antes da limpeza/substituicao.
+        Copy-PmoFileDurable -Source $portJson -Destination (Join-Path $snapshotDir 'raw-bundle.json')
+        $snapshotAnexos = Join-Path $snapshotDir 'attachments'
+        New-Item -ItemType Directory -Path $snapshotAnexos -Force | Out-Null
+        $null = Assert-PmoPathWithoutReparse $snapshotAnexos
+        foreach ($entrada in $anexosConfirmados) {
+            Copy-PmoFileDurable -Source (Join-Path $anexoDir ([string]$entrada.id)) -Destination (Join-Path $snapshotAnexos ([string]$entrada.id))
+        }
+        Copy-PmoDirectoryDurable -Source $userTmplDir -Destination (Join-Path $snapshotDir 'user-templates')
+        # D-30: nunca copiar config/ nem state/ para o snapshot de protecao.
+        $files = @(Get-PmoDirectoryInventory $snapshotDir)
+        $manifest = [ordered]@{
+            formatVersion = 1
+            snapshotId = $snapshotId
+            kind = $snapshotKind
+            operation = $operation
+            sealed = $true
+            createdAt = (Get-Date).ToUniversalTime().ToString('o')
+            sourceAppVersion = if ($bundle.meta.appVersion) { [string]$bundle.meta.appVersion } else { $appVersion }
+            sourceSchemaVersion = if ($bundle.meta.schemaVersion) { [int]$bundle.meta.schemaVersion } else { $schemaVersion }
+            sourceSavedAt = if ($bundle.meta.salvoEm) { [string]$bundle.meta.salvoEm } else { $null }
+            attachmentCount = $anexosConfirmados.Count
+            attachments = $anexosConfirmados
+            contagens = [ordered]@{
+                projetos = ContarColecao $bundle.projetos
+                programas = ContarColecao $bundle.programas
+                pessoas = ContarColecao $bundle.pessoas
+                anexos = ContarColecao $bundle.anexos
+                auditLog = ContarColecao $bundle.auditLog
+                imports = ContarColecao $bundle.imports
+                visoesSalvas = ContarColecao $bundle.visoesSalvas
+            }
+            files = $files
+        }
+        Write-PmoJsonAtomic (Join-Path $snapshotDir 'manifest.json') $manifest
+        $manifestReload = Read-PmoJson (Join-Path $snapshotDir 'manifest.json') $null
+        $erros = @()
+        foreach ($grupo in @(Test-PmoInventory $snapshotDir $manifestReload.files @('manifest.json'))) {
+            foreach ($erroInventario in @($grupo)) { $erros += [string]$erroInventario }
+        }
+        if ($erros.Count -gt 0) { throw ('snapshot de protecao nao passou na verificacao: ' + ($erros -join '; ')) }
+        return [pscustomobject]@{ snapshotId=$snapshotId; kind=$snapshotKind; manifest=$manifest }
+    } catch {
+        Remove-PmoManagedTree $protecaoSnapDir $snapshotDir
+        throw
+    }
+}
+
 function ConsultarAtualizacao() {
     $cfg = Read-PmoJson $installJson $null
     if (-not $cfg -or [string]::IsNullOrWhiteSpace([string]$cfg.repository)) {
@@ -1003,6 +1097,18 @@ try {
                     if (Test-Path -LiteralPath $updateLock) { Remove-Item -LiteralPath $updateLock -Force }
                     Write-PmoJsonAtomic $updateJson ([ordered]@{ formatVersion=1; phase='cancelled'; updatedAt=(Get-Date).ToUniversalTime().ToString('o') })
                     ResponderJson $resp 200 '{"ok":true}'
+                }
+            }
+            elseif ($rota -eq '/api/protecao/snapshot' -and $metodo -eq 'POST') {
+                if (ExigirAdministracao $req $resp) {
+                    if ($script:maintenance) { ResponderErro $resp 423 'persistencia bloqueada durante atualizacao' }
+                    else {
+                        $txt = LerCorpoTexto $req $maxAdminJsonBytes
+                        if ([string]::IsNullOrWhiteSpace($txt)) { throw (NovaExcecaoHttp 400 'pedido de snapshot de protecao vazio') }
+                        try { $pedido = $txt | ConvertFrom-Json } catch { throw (NovaExcecaoHttp 400 'pedido de snapshot de protecao invalido: JSON nao pode ser lido') }
+                        $snapshot = CriarSnapshotProtecao $pedido
+                        ResponderJson $resp 200 ([ordered]@{ ok=$true; snapshotId=$snapshot.snapshotId; kind=$snapshot.kind; manifest=$snapshot.manifest } | ConvertTo-Json -Depth 100 -Compress)
+                    }
                 }
             }
             elseif ($rota -eq '/api/restore-pending' -and $metodo -eq 'GET') {
