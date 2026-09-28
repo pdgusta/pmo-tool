@@ -18,6 +18,8 @@ $process = $null
 $secondProcess = $null
 $healthProcess = $null
 $healthRoot = $null
+$processOutputSub = $null
+$processErrorSub = $null
 
 if ([string]::IsNullOrWhiteSpace($NodePath)) {
     $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
@@ -77,6 +79,22 @@ try {
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $psi
     if (-not $process.Start()) { throw 'Nao foi possivel iniciar o servidor de teste.' }
+    # PROT-01..05 fazem centenas de chamadas contra esta instancia; cada uma
+    # imprime uma linha em StandardOutput. Sem drenar continuamente, o pipe
+    # redirecionado enche e o processo trava no proximo Write-Host — travando
+    # o servidor inteiro (nenhuma resposta HTTP sai ate o buffer esvaziar), o
+    # que aparece do lado do cliente como timeout. Drena de forma assincrona
+    # via eventos, guardando as ultimas linhas so para diagnostico de falha.
+    $processOutputLog = [System.Collections.ArrayList]::Synchronized((New-Object System.Collections.ArrayList))
+    $processErrorLog = [System.Collections.ArrayList]::Synchronized((New-Object System.Collections.ArrayList))
+    $processOutputSub = Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -Action {
+        if ($null -ne $EventArgs.Data) { [void]$Event.MessageData.Add($EventArgs.Data) }
+    } -MessageData $processOutputLog
+    $processErrorSub = Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -Action {
+        if ($null -ne $EventArgs.Data) { [void]$Event.MessageData.Add($EventArgs.Data) }
+    } -MessageData $processErrorLog
+    $process.BeginOutputReadLine()
+    $process.BeginErrorReadLine()
 
     $health = $null
     $healthError = $null
@@ -86,7 +104,7 @@ try {
         catch { $healthError = $_.Exception.Message; if ($process.HasExited) { break } }
     }
     if (-not $health -or -not $health.ok -or [int]$health.schemaVersion -ne 4) {
-        $stderr = if ($process.HasExited) { $process.StandardError.ReadToEnd() } else { '' }
+        $stderr = ($processErrorLog -join [Environment]::NewLine)
         throw "Health check de integracao falhou. $healthError $stderr"
     }
 
@@ -670,11 +688,154 @@ try {
 
     Write-Host 'PROT-04 retencao por janela: OK' -ForegroundColor Green
 
+    # ------------------------------------------- PROT-05: exportar copia verificavel
+    $copiasDestino = Join-Path $temp 'copias'
+    New-Item -ItemType Directory -Path $copiasDestino -Force | Out-Null
+    $naoMexerPath = Join-Path $copiasDestino 'nao-mexer.txt'
+    [System.IO.File]::WriteAllText($naoMexerPath, 'nao mexer', (New-Object System.Text.UTF8Encoding($false)))
+    $naoMexerShaAntes = Get-PmoSha256 $naoMexerPath
+
+    function Get-ProtSubpastasCopia([string]$Pasta) {
+        return @(Get-ChildItem -LiteralPath $Pasta -Directory -Filter 'pmo-copia-*' -ErrorAction SilentlyContinue)
+    }
+
+    $portfolio.meta.salvoEm = (Get-Date).ToUniversalTime().ToString('o')
+    $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+    $copiaAnexos = @([ordered]@{ id=$attachmentId; tamanho=$attachmentBytes.Length; sha256=[string]$index.itens[0].sha256 })
+    $copiaBodyFeliz = [ordered]@{
+        destino=$copiasDestino; appVersion=$appVersionFixture; schemaVersion=4
+        salvoEm=$portfolio.meta.salvoEm; anexos=$copiaAnexos
+    } | ConvertTo-Json -Depth 10
+    $copiaRespFeliz = Invoke-LocalApi '/api/copia-verificavel/exportar' 'POST' $copiaBodyFeliz -Admin
+    if ($copiaRespFeliz.StatusCode -ne 200) { throw 'Exportacao da copia verificavel (caminho feliz) nao respondeu 200.' }
+    $copiaFeliz = $copiaRespFeliz.Content | ConvertFrom-Json
+    if (-not $copiaFeliz.ok -or -not $copiaFeliz.copyId -or -not $copiaFeliz.pasta) {
+        throw 'Exportacao da copia verificavel nao respondeu como esperado.'
+    }
+    if ($copiaFeliz.copyId -notmatch '^pmo-copia-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$') { throw 'copyId da copia verificavel fora do formato esperado.' }
+    $copiaFelizDir = Join-Path $copiasDestino ([string]$copiaFeliz.copyId)
+    if (-not (Test-Path -LiteralPath $copiaFelizDir -PathType Container)) { throw 'Subpasta da copia verificavel nao foi criada.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $copiaFelizDir 'portfolio.json') -PathType Leaf)) { throw 'Copia verificavel sem portfolio.json.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $copiaFelizDir ('attachments\' + $attachmentId)) -PathType Leaf)) { throw 'Copia verificavel nao materializou o anexo.' }
+    $copiaFelizManifest = Read-PmoJson (Join-Path $copiaFelizDir 'manifest.json') $null
+    if (-not $copiaFelizManifest -or [int]$copiaFelizManifest.formatVersion -ne 1 -or [string]$copiaFelizManifest.kind -ne 'copia-verificavel') {
+        throw 'Manifesto da copia verificavel invalido.'
+    }
+    $copiaErros = @(Test-PmoInventory $copiaFelizDir $copiaFelizManifest.files @('manifest.json'))
+    if ($copiaErros.Count -gt 0) { throw ('Copia verificavel invalida: ' + ($copiaErros -join '; ')) }
+    if ((Get-PmoSha256 (Join-Path $copiaFelizDir 'manifest.json')) -ne [string]$copiaFeliz.manifestSha256) {
+        throw 'manifestSha256 devolvido nao bate com o manifest.json gravado.'
+    }
+    if ((Get-PmoSha256 $naoMexerPath) -ne $naoMexerShaAntes) { throw 'Exportacao alterou arquivo preexistente na pasta escolhida (P-19).' }
+
+    # D-30: token nunca vai junto; nenhum path proibido no manifesto
+    $achouTokenCopia = Get-ChildItem -LiteralPath $copiaFelizDir -Recurse -File -Force |
+        Select-String -SimpleMatch -Pattern $token -ErrorAction SilentlyContinue
+    if ($achouTokenCopia) { throw 'Token administrativo vazou para dentro da copia verificavel.' }
+    foreach ($entradaArquivoCopia in @($copiaFelizManifest.files)) {
+        $caminhoRelCopia = [string]$entradaArquivoCopia.path
+        if ($caminhoRelCopia -match '^(config|state|versions|logs|backups|update-backups)/') {
+            throw ('Manifesto da copia verificavel referencia caminho proibido: ' + $caminhoRelCopia)
+        }
+    }
+
+    # Onze recusas de destino, sem criar subpasta nova
+    function Test-ProtCopiaRecusada([string]$Destino, [int]$StatusEsperado, [string]$Descricao) {
+        $antes = @(Get-ProtSubpastasCopia $copiasDestino).Count
+        $bodyRecusa = [ordered]@{
+            destino=$Destino; appVersion=$appVersionFixture; schemaVersion=4
+            salvoEm=$portfolio.meta.salvoEm; anexos=$copiaAnexos
+        } | ConvertTo-Json -Depth 10
+        try {
+            $null = Invoke-LocalApi '/api/copia-verificavel/exportar' 'POST' $bodyRecusa -Admin
+            throw ($Descricao + ' deveria ter sido recusado.')
+        } catch {
+            if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne $StatusEsperado) { throw }
+        }
+        $depois = @(Get-ProtSubpastasCopia $copiasDestino).Count
+        if ($depois -ne $antes) { throw ($Descricao + ' criou subpasta de copia verificavel.') }
+    }
+
+    Test-ProtCopiaRecusada 'copias\relativo' 400 'Caminho relativo'
+    Test-ProtCopiaRecusada ($copiasDestino + '\..\copias') 400 'Caminho com segmento ..'
+    Test-ProtCopiaRecusada '\\localhost\c$\pmo-copia-teste' 400 'Caminho UNC'
+    Test-ProtCopiaRecusada (Join-Path $temp 'inexistente-copia') 400 'Pasta inexistente'
+    Test-ProtCopiaRecusada $data 400 'Pasta $data'
+    Test-ProtCopiaRecusada (Join-Path $data 'attachments') 400 'Pasta $data\attachments'
+    Test-ProtCopiaRecusada $config 400 'Pasta $config'
+    Test-ProtCopiaRecusada $state 400 'Pasta $state'
+    Test-ProtCopiaRecusada $root 400 'Raiz do repositorio'
+    Test-ProtCopiaRecusada (Join-Path $root 'docs') 400 'Raiz do repositorio\docs'
+
+    # Sem token: 403. salvoEm divergente: 409, sem subpasta nova.
+    try {
+        $null = Invoke-LocalApi '/api/copia-verificavel/exportar' 'POST' $copiaBodyFeliz
+        throw 'Exportacao sem token deveria ser bloqueada.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 403) { throw }
+    }
+    $antesSalvoErrado = @(Get-ProtSubpastasCopia $copiasDestino).Count
+    $bodySalvoErrado = [ordered]@{
+        destino=$copiasDestino; appVersion=$appVersionFixture; schemaVersion=4
+        salvoEm='2026-01-01T00:00:00Z'; anexos=$copiaAnexos
+    } | ConvertTo-Json -Depth 10
+    try {
+        $null = Invoke-LocalApi '/api/copia-verificavel/exportar' 'POST' $bodySalvoErrado -Admin
+        throw 'salvoEm divergente deveria ser recusado.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 409) { throw }
+    }
+    if ((@(Get-ProtSubpastasCopia $copiasDestino).Count) -ne $antesSalvoErrado) { throw 'salvoEm divergente criou subpasta de copia verificavel.' }
+
+    # P-18 situacao 1: link recusado (junction e symlink)
+    $junctionAlvo = Join-Path $temp 'junction-alvo'
+    New-Item -ItemType Directory -Path $junctionAlvo -Force | Out-Null
+    $junctionLink = Join-Path $temp 'junction-copia'
+    New-Item -ItemType Junction -Path $junctionLink -Target $junctionAlvo | Out-Null
+    if (-not (Test-Path -LiteralPath $junctionLink)) { throw 'Nao foi possivel criar a junction de teste.' }
+    Test-ProtCopiaRecusada $junctionLink 400 'Pasta que e junction'
+    New-Item -ItemType Directory -Path (Join-Path $junctionAlvo 'sub') -Force | Out-Null
+    $subDentroDaJunction = Join-Path $junctionLink 'sub'
+    Test-ProtCopiaRecusada $subDentroDaJunction 400 'Pasta comum dentro de uma junction'
+
+    $symlinkAlvo = Join-Path $temp 'symlink-alvo'
+    New-Item -ItemType Directory -Path $symlinkAlvo -Force | Out-Null
+    $symlinkLink = Join-Path $temp 'symlink-copia'
+    $symlinkCriado = $false
+    try {
+        New-Item -ItemType SymbolicLink -Path $symlinkLink -Target $symlinkAlvo -ErrorAction Stop | Out-Null
+        $symlinkCriado = $true
+    } catch { Write-Host 'symlink real pulado (sem privilegio)' -ForegroundColor Yellow }
+    if ($symlinkCriado) { Test-ProtCopiaRecusada $symlinkLink 400 'Pasta que e link simbolico' }
+
+    # P-18 situacao 2: classificacao por tag via AST (sem depender de reparse point real de nuvem)
+    $tokensAst = $null
+    $errosAst = $null
+    $arvoreAst = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path (Join-Path $root 'serve.ps1')).Path, [ref]$tokensAst, [ref]$errosAst)
+    $funcaoAst = $arvoreAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Test-ReparseEhLink' }, $true) | Select-Object -First 1
+    if (-not $funcaoAst) { throw 'Test-ReparseEhLink nao encontrada em serve.ps1 pelo AST.' }
+    $blocoFuncao = [scriptblock]::Create($funcaoAst.Extent.Text)
+    . $blocoFuncao
+    $tagsNuvem = @('9000001A','9000101A','9000601A','9000701A','9000F01A')
+    foreach ($tagHex in $tagsNuvem) {
+        $tagValor = [Convert]::ToUInt32($tagHex, 16)
+        if (Test-ReparseEhLink $tagValor) { throw ('Tag de nuvem deveria ser aceita (nao e link): ' + $tagHex) }
+    }
+    $tagsLink = @('A000000C','A0000003','A000001D')
+    foreach ($tagHex in $tagsLink) {
+        $tagValor = [Convert]::ToUInt32($tagHex, 16)
+        if (-not (Test-ReparseEhLink $tagValor)) { throw ('Tag deveria ser classificada como link: ' + $tagHex) }
+    }
+
+    Write-Host 'PROT-05 exportar: OK' -ForegroundColor Green
+
     Write-Host 'Integracao do servidor, auth, snapshot, restore, rollback e app-ready: OK' -ForegroundColor Green
 } finally {
     if ($healthProcess -and -not $healthProcess.HasExited) { $healthProcess.Kill(); $healthProcess.WaitForExit(5000) | Out-Null }
     if ($secondProcess -and -not $secondProcess.HasExited) { $secondProcess.Kill(); $secondProcess.WaitForExit(5000) | Out-Null }
     if ($process -and -not $process.HasExited) { $process.Kill(); $process.WaitForExit(5000) | Out-Null }
+    if ($processOutputSub) { Unregister-Event -SourceIdentifier $processOutputSub.Name -ErrorAction SilentlyContinue; Remove-Job -Id $processOutputSub.Id -Force -ErrorAction SilentlyContinue }
+    if ($processErrorSub) { Unregister-Event -SourceIdentifier $processErrorSub.Name -ErrorAction SilentlyContinue; Remove-Job -Id $processErrorSub.Id -Force -ErrorAction SilentlyContinue }
     if ((Test-Path -LiteralPath $temp) -and $temp.StartsWith($tempBase,[StringComparison]::OrdinalIgnoreCase)) {
         Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
     }

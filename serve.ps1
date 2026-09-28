@@ -23,6 +23,7 @@
       GET    /api/templates                 -> lista de cronogramas-modelo (MSPDI)
       GET    /templates/<arquivo>           -> cronograma-modelo
       POST   /api/protecao/snapshot         <- snapshot de protecao antes de Limpar/Substituir (token)
+      POST   /api/copia-verificavel/exportar <- copia verificavel para pasta escolhida pela PMO (token)
     Ctrl+C encerra.
 #>
 [CmdletBinding()]
@@ -809,6 +810,363 @@ function CriarSnapshotProtecao($pedido) {
     }
 }
 
+# -------------------------------------------------- copia verificavel (PROT-05)
+# Regra de link da P-18 (decisao do dono, T-024): so o caminho externo (destino
+# da copia verificavel, escolhido pela PMO) aceita reparse point de nuvem do
+# OneDrive Files On-Demand. Recusa apenas reparse point de redirecionamento
+# (symlink, junction/mount point e outros name-surrogate). tools/portable-common.ps1
+# nao muda: continua com a regra estrita (recusa qualquer reparse point) para
+# tudo o que e da instalacao.
+
+# Funcao pura, sem acesso a disco: devolve $true quando a tag de reparse tem o
+# bit name-surrogate (0x20000000) ligado — cobre symlink (0xA000000C), juncao/
+# mount point (0xA0000003) e outros redirecionamentos (ex.: 0xA000001D). Tags
+# de nuvem do OneDrive (0x9000001A e variantes) nao tem esse bit ligado.
+function Test-ReparseEhLink([uint32]$Tag) {
+    $bitNomeSurrogado = [Convert]::ToUInt32('20000000', 16)
+    return (($Tag -band $bitNomeSurrogado) -ne 0)
+}
+
+$script:pmoReparseTagTypeCarregado = $false
+function Get-TagReparse([string]$Caminho) {
+    if (-not $script:pmoReparseTagTypeCarregado) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class PmoReparseTagReader {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct WIN32_FIND_DATAW {
+        public uint dwFileAttributes;
+        public uint ftCreationTime_dwLowDateTime;
+        public uint ftCreationTime_dwHighDateTime;
+        public uint ftLastAccessTime_dwLowDateTime;
+        public uint ftLastAccessTime_dwHighDateTime;
+        public uint ftLastWriteTime_dwLowDateTime;
+        public uint ftLastWriteTime_dwHighDateTime;
+        public uint nFileSizeHigh;
+        public uint nFileSizeLow;
+        public uint dwReserved0;
+        public uint dwReserved1;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string cFileName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)]
+        public string cAlternateFileName;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr FindFirstFileW(string lpFileName, out WIN32_FIND_DATAW lpFindFileData);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool FindClose(IntPtr hFindFile);
+}
+'@
+        $script:pmoReparseTagTypeCarregado = $true
+    }
+    $dadosReparse = New-Object PmoReparseTagReader+WIN32_FIND_DATAW
+    $alcaReparse = [PmoReparseTagReader]::FindFirstFileW($Caminho, [ref]$dadosReparse)
+    $alcaInvalida = New-Object IntPtr(-1)
+    if ($alcaReparse.ToInt64() -eq $alcaInvalida.ToInt64()) {
+        throw "nao foi possivel ler a tag de reparse point: $Caminho"
+    }
+    try { return [uint32]$dadosReparse.dwReserved0 }
+    finally { [void][PmoReparseTagReader]::FindClose($alcaReparse) }
+}
+
+# Mesma caminhada de Assert-PmoPathWithoutReparse (o proprio caminho e todos os
+# ancestrais existentes), mas so recusa reparse point de redirecionamento
+# (Test-ReparseEhLink). Tag ilegivel recusa (falha fechada).
+function Assert-CaminhoExternoSemLink([string]$Caminho) {
+    $resolvido = Get-PmoNormalizedFullPath $Caminho
+    $atual = $resolvido
+    while (-not [string]::IsNullOrWhiteSpace($atual)) {
+        if (Test-Path -LiteralPath $atual) {
+            $item = Get-Item -LiteralPath $atual -Force
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                $tagAtual = $null
+                try { $tagAtual = Get-TagReparse $atual }
+                catch { throw (NovaExcecaoHttp 400 'a pasta escolhida contem link simbolico ou juncao') }
+                if (Test-ReparseEhLink $tagAtual) {
+                    throw (NovaExcecaoHttp 400 'a pasta escolhida contem link simbolico ou juncao')
+                }
+            }
+        }
+        $pai = [System.IO.Path]::GetDirectoryName($atual)
+        if ([string]::IsNullOrWhiteSpace($pai) -or $pai.Equals($atual,[StringComparison]::OrdinalIgnoreCase)) { break }
+        $atual = Get-PmoNormalizedFullPath $pai
+    }
+    return $resolvido
+}
+
+# Cópia durável por arquivo temporário + Flush + Move, sem sobrescrever — igual
+# a Copy-PmoFileDurable, mas o destino (pasta externa escolhida pela PMO) usa a
+# regra de link da P-18 em vez da checagem estrita. A fonte continua sendo da
+# instalacao e usa a checagem estrita (Assert-PmoPathWithoutReparse).
+function Copy-ArquivoCopiaExterna([string]$Source, [string]$Destination) {
+    $sourceFull = Assert-PmoPathWithoutReparse $Source
+    if (-not (Test-Path -LiteralPath $sourceFull -PathType Leaf)) { throw "Arquivo fonte ausente: $Source" }
+    $destinationFull = [System.IO.Path]::GetFullPath($Destination)
+    $destinationDir = Split-Path -Parent $destinationFull
+    $null = Assert-CaminhoExternoSemLink $destinationDir
+    if (-not (Test-Path -LiteralPath $destinationDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null
+        $null = Assert-CaminhoExternoSemLink $destinationDir
+    }
+    if (Test-Path -LiteralPath $destinationFull) { throw "Destino de copia externa ja existe: $Destination" }
+    $tmp = Join-Path $destinationDir ('.durable-copy-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        $entradaCopia = New-Object System.IO.FileStream($sourceFull,[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::Read)
+        try {
+            $saidaCopia = New-Object System.IO.FileStream($tmp,[System.IO.FileMode]::CreateNew,[System.IO.FileAccess]::Write,[System.IO.FileShare]::None)
+            try { $entradaCopia.CopyTo($saidaCopia); $saidaCopia.Flush($true) } finally { $saidaCopia.Dispose() }
+        } finally { $entradaCopia.Dispose() }
+        [System.IO.File]::Move($tmp,$destinationFull)
+        $null = Assert-CaminhoExternoSemLink $destinationFull
+    } finally {
+        if (Test-Path -LiteralPath $tmp -PathType Leaf) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+# Igual a Copy-PmoDirectoryDurable, mas o destino usa a regra de link da P-18.
+# A fonte (user-templates, sempre da instalacao) continua conferida pela
+# checagem estrita.
+function Copy-DiretorioCopiaExterna([string]$Source, [string]$Destination) {
+    if (-not (Test-Path -LiteralPath $Source)) { return }
+    $sourceFull = Assert-PmoPathWithoutReparse $Source
+    if (-not (Test-Path -LiteralPath $sourceFull -PathType Container)) { throw "Fonte nao e diretorio: $Source" }
+    $destinationFull = [System.IO.Path]::GetFullPath($Destination)
+    $null = Assert-CaminhoExternoSemLink $destinationFull
+    if (-not (Test-Path -LiteralPath $destinationFull -PathType Container)) {
+        New-Item -ItemType Directory -Path $destinationFull -Force | Out-Null
+        $null = Assert-CaminhoExternoSemLink $destinationFull
+    }
+    $itensCopiaExterna = @(Get-ChildItem -LiteralPath $sourceFull -Force -Recurse)
+    foreach ($itemCopiaExterna in $itensCopiaExterna) {
+        if (($itemCopiaExterna.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Diretorio fonte contem link, junction ou reparse point: $($itemCopiaExterna.FullName)"
+        }
+    }
+    foreach ($diretorioCopiaExterna in @($itensCopiaExterna | Where-Object { $_.PSIsContainer } | Sort-Object FullName)) {
+        $relativoCopiaExterna = $diretorioCopiaExterna.FullName.Substring($sourceFull.Length).TrimStart('\')
+        $alvoDiretorioCopiaExterna = Join-Path $destinationFull $relativoCopiaExterna
+        if (-not (Test-Path -LiteralPath $alvoDiretorioCopiaExterna -PathType Container)) { New-Item -ItemType Directory -Path $alvoDiretorioCopiaExterna | Out-Null }
+        $null = Assert-CaminhoExternoSemLink $alvoDiretorioCopiaExterna
+    }
+    foreach ($arquivoCopiaExterna in @($itensCopiaExterna | Where-Object { -not $_.PSIsContainer } | Sort-Object FullName)) {
+        $relativoArquivoCopiaExterna = $arquivoCopiaExterna.FullName.Substring($sourceFull.Length).TrimStart('\')
+        Copy-ArquivoCopiaExterna -Source $arquivoCopiaExterna.FullName -Destination (Join-Path $destinationFull $relativoArquivoCopiaExterna)
+    }
+}
+
+# Grava o manifest.json da copia externa por temporario + Flush + Move. A
+# subpasta e sempre nova (nao sobrescreve).
+function Write-JsonCopiaExterna([string]$Path, $Value) {
+    $dirJsonExterno = Split-Path -Parent $Path
+    $null = Assert-CaminhoExternoSemLink $dirJsonExterno
+    if (-not (Test-Path -LiteralPath $dirJsonExterno)) { New-Item -ItemType Directory -Path $dirJsonExterno -Force | Out-Null }
+    $null = Assert-CaminhoExternoSemLink $dirJsonExterno
+    if (Test-Path -LiteralPath $Path) { throw "Destino do manifesto da copia externa ja existe: $Path" }
+    $tmpJsonExterno = $Path + '.tmp-' + [Guid]::NewGuid().ToString('N')
+    $utf8JsonExterno = New-Object System.Text.UTF8Encoding($false)
+    try {
+        $jsonExterno = $Value | ConvertTo-Json -Depth 100
+        $bytesJsonExterno = $utf8JsonExterno.GetBytes($jsonExterno)
+        $streamJsonExterno = New-Object System.IO.FileStream($tmpJsonExterno,[System.IO.FileMode]::CreateNew,[System.IO.FileAccess]::Write,[System.IO.FileShare]::None)
+        try { $streamJsonExterno.Write($bytesJsonExterno,0,$bytesJsonExterno.Length); $streamJsonExterno.Flush($true) } finally { $streamJsonExterno.Dispose() }
+        [System.IO.File]::Move($tmpJsonExterno, $Path)
+    } finally {
+        if (Test-Path -LiteralPath $tmpJsonExterno) { Remove-Item -LiteralPath $tmpJsonExterno -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+# Igual a Get-PmoDirectoryInventory, mas recusa so link (reparse de nuvem passa).
+function Get-InventarioCopiaExterna([string]$Root) {
+    $rootFullCopiaExterna = Get-PmoNormalizedFullPath $Root
+    $itensInventarioExterno = @()
+    if (-not (Test-Path -LiteralPath $rootFullCopiaExterna)) { return @() }
+    $null = Assert-CaminhoExternoSemLink $rootFullCopiaExterna
+    $todosItensCopiaExterna = @(Get-ChildItem -LiteralPath $rootFullCopiaExterna -Recurse -Force)
+    foreach ($itemInventarioExterno in $todosItensCopiaExterna) {
+        if (($itemInventarioExterno.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            $tagInventarioExterno = $null
+            try { $tagInventarioExterno = Get-TagReparse $itemInventarioExterno.FullName }
+            catch { throw (NovaExcecaoHttp 400 'a pasta escolhida contem link simbolico ou juncao') }
+            if (Test-ReparseEhLink $tagInventarioExterno) {
+                throw (NovaExcecaoHttp 400 'a pasta escolhida contem link simbolico ou juncao')
+            }
+        }
+    }
+    foreach ($arquivoInventarioExterno in @($todosItensCopiaExterna | Where-Object { -not $_.PSIsContainer } | Sort-Object FullName)) {
+        $relativoInventarioExterno = $arquivoInventarioExterno.FullName.Substring($rootFullCopiaExterna.Length).TrimStart('\').Replace('\','/')
+        $itensInventarioExterno += [ordered]@{
+            path = $relativoInventarioExterno
+            size = [Int64]$arquivoInventarioExterno.Length
+            sha256 = Get-PmoSha256 $arquivoInventarioExterno.FullName
+        }
+    }
+    return $itensInventarioExterno
+}
+
+# Mesmas quatro mensagens de Test-PmoInventory, usando Get-InventarioCopiaExterna
+# para os arquivos a mais (assim a pasta do OneDrive pode ser conferida mesmo
+# com os arquivos ja como placeholders de nuvem).
+function Test-InventarioCopiaExterna([string]$Root, $Files, [string[]]$AllowedExtra=@()) {
+    $errosInventarioExterno = @()
+    $esperadoInventarioExterno = @{}
+    foreach ($entradaInventarioExterno in $Files) {
+        $chaveInventarioExterno = ([string]$entradaInventarioExterno.path).Replace('\','/').ToLowerInvariant()
+        if ($esperadoInventarioExterno.ContainsKey($chaveInventarioExterno)) { $errosInventarioExterno += "entrada duplicada no inventario: $($entradaInventarioExterno.path)"; continue }
+        $esperadoInventarioExterno[$chaveInventarioExterno] = $true
+        $caminhoInventarioExterno = Resolve-PmoPath $Root ([string]$entradaInventarioExterno.path)
+        if (-not (Test-PmoSubPath $Root $caminhoInventarioExterno)) { $errosInventarioExterno += "caminho fora da raiz: $($entradaInventarioExterno.path)"; continue }
+        if (-not (Test-Path -LiteralPath $caminhoInventarioExterno -PathType Leaf)) { $errosInventarioExterno += "arquivo ausente: $($entradaInventarioExterno.path)"; continue }
+        $itemInventarioExternoAtual = Get-Item -LiteralPath $caminhoInventarioExterno
+        if ([Int64]$itemInventarioExternoAtual.Length -ne [Int64]$entradaInventarioExterno.size) { $errosInventarioExterno += "tamanho divergente: $($entradaInventarioExterno.path)"; continue }
+        if ((Get-PmoSha256 $caminhoInventarioExterno) -ne ([string]$entradaInventarioExterno.sha256).ToLowerInvariant()) { $errosInventarioExterno += "hash divergente: $($entradaInventarioExterno.path)" }
+    }
+    $permitidoInventarioExterno = @{}
+    foreach ($extraInventarioExterno in $AllowedExtra) { $permitidoInventarioExterno[$extraInventarioExterno.Replace('\','/').ToLowerInvariant()] = $true }
+    foreach ($atualInventarioExterno in @(Get-InventarioCopiaExterna $Root)) {
+        $chaveAtualInventarioExterno = ([string]$atualInventarioExterno.path).ToLowerInvariant()
+        if (-not $esperadoInventarioExterno.ContainsKey($chaveAtualInventarioExterno) -and -not $permitidoInventarioExterno.ContainsKey($chaveAtualInventarioExterno)) { $errosInventarioExterno += "arquivo fisico nao declarado: $($atualInventarioExterno.path)" }
+    }
+    return $errosInventarioExterno
+}
+
+# Remove so a subpasta criada por uma exportacao com falha; exige que ela fique
+# dentro do destino escolhido e que a arvore nao tenha link em nenhum ponto.
+function Remove-SubpastaCopiaExterna([string]$Destino, [string]$Subpasta) {
+    $destinoRemocaoExterna = Assert-CaminhoExternoSemLink $Destino
+    $subpastaRemocaoExterna = Assert-CaminhoExternoSemLink $Subpasta
+    if (-not (Test-PmoSubPath $destinoRemocaoExterna $subpastaRemocaoExterna)) { throw "Recusa ao remover pasta fora do destino escolhido: $subpastaRemocaoExterna" }
+    if (Test-Path -LiteralPath $subpastaRemocaoExterna) {
+        foreach ($itemRemocaoExterna in @(Get-ChildItem -LiteralPath $subpastaRemocaoExterna -Recurse -Force -ErrorAction SilentlyContinue)) {
+            if (($itemRemocaoExterna.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                $tagRemocaoExterna = $null
+                try { $tagRemocaoExterna = Get-TagReparse $itemRemocaoExterna.FullName }
+                catch { throw (NovaExcecaoHttp 400 'a pasta escolhida contem link simbolico ou juncao') }
+                if (Test-ReparseEhLink $tagRemocaoExterna) {
+                    throw (NovaExcecaoHttp 400 'a pasta escolhida contem link simbolico ou juncao')
+                }
+            }
+        }
+        Remove-Item -LiteralPath $subpastaRemocaoExterna -Recurse -Force
+    }
+}
+
+# Valida o destino escolhido pela PMO (pasta externa a instalacao) para a copia
+# verificavel: caminho absoluto de unidade local existente, sem '..'/'.',
+# sem reparse point de redirecionamento (P-18) e fora das raizes da instalacao.
+function Test-PastaExternaPermitida([string]$Caminho) {
+    $brutoPastaExterna = [string]$Caminho
+    if ([string]::IsNullOrWhiteSpace($brutoPastaExterna) -or $brutoPastaExterna.Length -gt 200) {
+        throw (NovaExcecaoHttp 400 'a pasta escolhida e invalida')
+    }
+    if ($brutoPastaExterna -notmatch '^[A-Za-z]:\\') {
+        throw (NovaExcecaoHttp 400 'a pasta escolhida precisa ser um caminho absoluto de unidade local (letra:\)')
+    }
+    foreach ($segmentoPastaExterna in $brutoPastaExterna.Split([char[]]@('\','/'))) {
+        if ($segmentoPastaExterna -eq '..' -or $segmentoPastaExterna -eq '.') {
+            throw (NovaExcecaoHttp 400 'o caminho da pasta escolhida nao pode conter . ou ..')
+        }
+    }
+    $invalidosPastaExterna = [System.IO.Path]::GetInvalidPathChars()
+    foreach ($caractere in $brutoPastaExterna.ToCharArray()) {
+        if ($invalidosPastaExterna -contains $caractere) { throw (NovaExcecaoHttp 400 'o caminho da pasta escolhida contem caractere invalido') }
+    }
+    $normalizadoPastaExterna = $null
+    try { $normalizadoPastaExterna = Get-PmoNormalizedFullPath $brutoPastaExterna }
+    catch { throw (NovaExcecaoHttp 400 'a pasta escolhida e invalida') }
+    if (-not (Test-Path -LiteralPath $normalizadoPastaExterna -PathType Container)) {
+        throw (NovaExcecaoHttp 400 'a pasta escolhida nao existe')
+    }
+    $null = Assert-CaminhoExternoSemLink $normalizadoPastaExterna
+    foreach ($raizProibidaPastaExterna in @($installRoot,$raiz,$dataDir,$configDir,$stateDir,$versionsDir,$stagingDir,$logsDir)) {
+        if (Test-CaminhosIguaisOuAninhados $raizProibidaPastaExterna $normalizadoPastaExterna) {
+            throw (NovaExcecaoHttp 400 'a copia nao pode ficar dentro da instalacao (G11)')
+        }
+    }
+    return $normalizadoPastaExterna
+}
+
+# Exportar copia verificavel (PROT-05, D-32 item 4): so portfolio.json, os
+# anexos referenciados e user-templates/ (D-30, P-19). Cada exportacao cria uma
+# subpasta nova; em falha, so ela e removida.
+function ExportarCopiaVerificavel($pedido) {
+    if (-not (Test-Path -LiteralPath $portJson -PathType Leaf)) { throw 'portfolio.json nao foi materializado em disco' }
+    $bundleRaw = [System.IO.File]::ReadAllText($portJson, [System.Text.Encoding]::UTF8)
+    try { $bundle = $bundleRaw | ConvertFrom-Json } catch { throw 'portfolio.json invalido: JSON nao pode ser lido' }
+    if (-not $pedido) { throw (NovaExcecaoHttp 400 'pedido de copia verificavel obrigatorio') }
+    $destino = Test-PastaExternaPermitida ([string]$pedido.destino)
+
+    if ([string]$pedido.appVersion -ne $appVersion -or [int]$pedido.schemaVersion -ne $schemaVersion) {
+        throw (NovaExcecaoHttp 409 'versao ou schema do pedido diverge do runtime atual')
+    }
+    if ([string]$pedido.salvoEm -ne [string]$bundle.meta.salvoEm) {
+        throw (NovaExcecaoHttp 409 'selo temporal do pedido diverge do bundle em disco')
+    }
+    if (-not ($pedido.PSObject.Properties.Name -contains 'anexos')) { throw (NovaExcecaoHttp 400 'pedido sem inventario de anexos') }
+    $anexosConfirmadosCopia = @(ValidarInventarioAnexos $bundle @($pedido.anexos))
+
+    [Int64]$bytesNecessariosCopia = (Get-Item -LiteralPath $portJson).Length
+    foreach ($fCopia in (Get-AnexosCanonicos)) { $bytesNecessariosCopia += $fCopia.Length }
+    $bytesNecessariosCopia = [Math]::Max(10485760, [Int64]($bytesNecessariosCopia * 1.25))
+    if ((EspacoLivre $destino) -lt $bytesNecessariosCopia) { throw (NovaExcecaoHttp 507 'espaco livre insuficiente na pasta escolhida') }
+
+    $copyId = 'pmo-copia-' + (NovaIdSnapshot)
+    $subpastaCopia = Join-Path $destino $copyId
+    if (Test-Path -LiteralPath $subpastaCopia) { throw (NovaExcecaoHttp 409 'a subpasta da copia ja existe') }
+    New-Item -ItemType Directory -Path $subpastaCopia -Force | Out-Null
+    $null = Assert-CaminhoExternoSemLink $subpastaCopia
+    try {
+        Copy-ArquivoCopiaExterna -Source $portJson -Destination (Join-Path $subpastaCopia 'portfolio.json')
+        $subpastaAnexosCopia = Join-Path $subpastaCopia 'attachments'
+        New-Item -ItemType Directory -Path $subpastaAnexosCopia -Force | Out-Null
+        $null = Assert-CaminhoExternoSemLink $subpastaAnexosCopia
+        foreach ($entradaAnexoCopia in $anexosConfirmadosCopia) {
+            Copy-ArquivoCopiaExterna -Source (Join-Path $anexoDir ([string]$entradaAnexoCopia.id)) -Destination (Join-Path $subpastaAnexosCopia ([string]$entradaAnexoCopia.id))
+        }
+        Copy-DiretorioCopiaExterna -Source $userTmplDir -Destination (Join-Path $subpastaCopia 'user-templates')
+        # D-30: nunca copiar config/, state/, versions/, logs/, backups nem snapshots.
+        $arquivosCopia = @(Get-InventarioCopiaExterna $subpastaCopia)
+        $manifestoCopia = [ordered]@{
+            formatVersion = 1
+            kind = 'copia-verificavel'
+            copyId = $copyId
+            createdAt = (Get-Date).ToUniversalTime().ToString('o')
+            sourceAppVersion = if ($bundle.meta.appVersion) { [string]$bundle.meta.appVersion } else { $appVersion }
+            sourceSchemaVersion = if ($bundle.meta.schemaVersion) { [int]$bundle.meta.schemaVersion } else { $schemaVersion }
+            sourceSavedAt = if ($bundle.meta.salvoEm) { [string]$bundle.meta.salvoEm } else { $null }
+            attachmentCount = $anexosConfirmadosCopia.Count
+            contagens = [ordered]@{
+                projetos = ContarColecao $bundle.projetos
+                programas = ContarColecao $bundle.programas
+                pessoas = ContarColecao $bundle.pessoas
+                anexos = ContarColecao $bundle.anexos
+                auditLog = ContarColecao $bundle.auditLog
+                imports = ContarColecao $bundle.imports
+                visoesSalvas = ContarColecao $bundle.visoesSalvas
+            }
+            files = $arquivosCopia
+        }
+        Write-JsonCopiaExterna (Join-Path $subpastaCopia 'manifest.json') $manifestoCopia
+        $manifestoCopiaRelido = Read-PmoJson (Join-Path $subpastaCopia 'manifest.json') $null
+        $errosCopia = @(Test-InventarioCopiaExterna $subpastaCopia $manifestoCopiaRelido.files @('manifest.json'))
+        if ($errosCopia.Count -gt 0) { throw ('copia verificavel nao passou na verificacao: ' + ($errosCopia -join '; ')) }
+        [Int64]$bytesTotalCopia = 0
+        foreach ($entradaArquivoCopia in $arquivosCopia) { $bytesTotalCopia += [Int64]$entradaArquivoCopia.size }
+        $manifestSha256Copia = Get-PmoSha256 (Join-Path $subpastaCopia 'manifest.json')
+        return [pscustomobject]@{
+            copyId = $copyId; pasta = $subpastaCopia; arquivos = $arquivosCopia.Count
+            bytes = $bytesTotalCopia; manifestSha256 = $manifestSha256Copia
+        }
+    } catch {
+        Remove-SubpastaCopiaExterna $destino $subpastaCopia
+        throw
+    }
+}
+
 function ConsultarAtualizacao() {
     $cfg = Read-PmoJson $installJson $null
     if (-not $cfg -or [string]::IsNullOrWhiteSpace([string]$cfg.repository)) {
@@ -1177,6 +1535,19 @@ try {
                         try { $pedido = $txt | ConvertFrom-Json } catch { throw (NovaExcecaoHttp 400 'pedido de snapshot de protecao invalido: JSON nao pode ser lido') }
                         $snapshot = CriarSnapshotProtecao $pedido
                         ResponderJson $resp 200 ([ordered]@{ ok=$true; snapshotId=$snapshot.snapshotId; kind=$snapshot.kind; manifest=$snapshot.manifest } | ConvertTo-Json -Depth 100 -Compress)
+                    }
+                }
+            }
+            # ------------------------------------------ copia verificavel (PROT-05)
+            elseif ($rota -eq '/api/copia-verificavel/exportar' -and $metodo -eq 'POST') {
+                if (ExigirAdministracao $req $resp) {
+                    if ($script:maintenance) { ResponderErro $resp 423 'persistencia bloqueada durante atualizacao' }
+                    else {
+                        $txt = LerCorpoTexto $req $maxAdminJsonBytes
+                        if ([string]::IsNullOrWhiteSpace($txt)) { throw (NovaExcecaoHttp 400 'pedido de copia verificavel vazio') }
+                        try { $pedido = $txt | ConvertFrom-Json } catch { throw (NovaExcecaoHttp 400 'pedido de copia verificavel invalido: JSON nao pode ser lido') }
+                        $copia = ExportarCopiaVerificavel $pedido
+                        ResponderJson $resp 200 ([ordered]@{ ok=$true; copyId=$copia.copyId; pasta=$copia.pasta; arquivos=$copia.arquivos; bytes=$copia.bytes; manifestSha256=$copia.manifestSha256 } | ConvertTo-Json -Depth 20 -Compress)
                     }
                 }
             }

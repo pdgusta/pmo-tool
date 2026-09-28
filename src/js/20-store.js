@@ -887,6 +887,72 @@
     return !store.state.projetos.length && !store.state.programas.length;
   };
 
+  /* ============================================== cópia verificável (PROT-05) */
+
+  /**
+   * Exporta uma cópia verificável (manifesto SHA-256) para uma pasta que a PMO
+   * escolhe, fora da instalação (D-32 item 4, G11). Exige servidor e modo de
+   * escrita (P-21); o token administrativo nunca vai junto (D-30).
+   */
+  store.exportarCopiaVerificavel = async function (destino) {
+    exigirEscrita();
+    if (!temServidor()) {
+      throw new Error('A cópia verificável exige o servidor local (abra pelo pmo.ps1).');
+    }
+    if (typeof destino !== 'string' || !destino.trim()) {
+      throw new Error('Escolha uma pasta de destino para a cópia verificável.');
+    }
+    try {
+      emitirProtecao('copia', 'salvando');
+      const estado = await materializarEstadoVerificado();
+      emitirProtecao('copia', 'materializando-anexos');
+      emitirProtecao('copia', 'selando-snapshot');
+      const pedido = {
+        destino: destino,
+        appVersion: M.APP_VERSION,
+        schemaVersion: M.SCHEMA_VERSION,
+        salvoEm: estado.selo || null,
+        anexos: estado.inventario.itens.map(function (x) {
+          return { id: x.id, tamanho: x.tamanho, sha256: String(x.sha256 || '').toLowerCase() };
+        })
+      };
+      const r = await apiFetch('/api/copia-verificavel/exportar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify(pedido),
+        timeout: 300000
+      });
+      if (!r.ok) {
+        let mensagemServidor = '';
+        try {
+          const corpo = await r.json();
+          mensagemServidor = corpo && corpo.erro ? String(corpo.erro) : '';
+        } catch (e) { /* corpo sem JSON legível */ }
+        throw new Error('A cópia não foi criada (' + r.status + '): ' + mensagemServidor);
+      }
+      const resposta = await r.json();
+      emitirProtecao('copia', 'verificado', { snapshotId: resposta.copyId });
+      await store.mutate('Exportar cópia verificável', function () { /* sem mudança de dado (P-20) */ }, {
+        entidade: 'copia', entidadeId: resposta.copyId,
+        resumo: resposta.arquivos + ' arquivos em ' + resposta.pasta,
+        copia: {
+          copyId: resposta.copyId, destino: destino, pasta: resposta.pasta,
+          manifestSha256: resposta.manifestSha256, arquivos: resposta.arquivos, bytes: resposta.bytes
+        }
+      });
+      emitirProtecao('copia', 'concluido', { snapshotId: resposta.copyId });
+      return {
+        ok: true, copyId: resposta.copyId, pasta: resposta.pasta,
+        arquivos: resposta.arquivos, bytes: resposta.bytes, manifestSha256: resposta.manifestSha256
+      };
+    } catch (e) {
+      emitirProtecao('copia', 'falhou', { erro: String(e.message || e) });
+      emissor.emitir('erro', { onde: 'protecao', erro: String(e.message || e) });
+      U.toast('Cópia verificável não criada: ' + (e.message || e), 'erro');
+      throw e;
+    }
+  };
+
   /* ============================================================== anexos */
 
   async function enviarAnexoDisco(id, meta, bytes) {
