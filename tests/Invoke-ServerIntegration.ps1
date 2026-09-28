@@ -397,6 +397,139 @@ try {
         throw 'Snapshot de protecao (substituir) nao respondeu como esperado.'
     }
 
+    # ------------------------------------------- PROT-01: falha fechada, D-30
+    $protecaoCountAntesAuth = @(Get-ChildItem -Path $protecaoSnapshotsDir -Directory -ErrorAction SilentlyContinue).Count
+    try {
+        $null = Invoke-LocalApi '/api/protecao/snapshot' 'POST' $protecaoBodyLimpar
+        throw 'Snapshot de protecao sem token deveria ser bloqueado.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 403) { throw }
+    }
+    try {
+        $null = Invoke-LocalApi '/api/protecao/snapshot' 'POST' $protecaoBodyLimpar -Admin -Origin 'https://evil.example'
+        throw 'Snapshot de protecao com Origin externo deveria ser bloqueado.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 403) { throw }
+    }
+    if ((@(Get-ChildItem -Path $protecaoSnapshotsDir -Directory -ErrorAction SilentlyContinue).Count) -ne $protecaoCountAntesAuth) {
+        throw 'Falha de autenticacao no snapshot de protecao criou pasta.'
+    }
+
+    $protecaoBodyOperacaoInvalida = [ordered]@{
+        operation='apagar'; appVersion=$appVersionFixture; schemaVersion=4
+        salvoEm=$portfolio.meta.salvoEm; anexos=$protecaoAnexos
+    } | ConvertTo-Json -Depth 10
+    $protecaoCountAntesOperacao = @(Get-ChildItem -Path $protecaoSnapshotsDir -Directory -ErrorAction SilentlyContinue).Count
+    try {
+        $null = Invoke-LocalApi '/api/protecao/snapshot' 'POST' $protecaoBodyOperacaoInvalida -Admin
+        throw 'Operacao de protecao invalida deveria ser recusada.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 400) { throw }
+    }
+    try {
+        $null = Invoke-LocalApi '/api/protecao/snapshot' 'POST' $null -Admin
+        throw 'Corpo vazio deveria ser recusado.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 400) { throw }
+    }
+    if ((@(Get-ChildItem -Path $protecaoSnapshotsDir -Directory -ErrorAction SilentlyContinue).Count) -ne $protecaoCountAntesOperacao) {
+        throw 'Operacao invalida ou corpo vazio criou pasta de snapshot de protecao.'
+    }
+
+    $protecaoBodySalvoErrado = [ordered]@{
+        operation='limpar'; appVersion=$appVersionFixture; schemaVersion=4
+        salvoEm='2026-01-01T00:00:00Z'; anexos=$protecaoAnexos
+    } | ConvertTo-Json -Depth 10
+    $protecaoCountAntesSalvo = @(Get-ChildItem -Path $protecaoSnapshotsDir -Directory -ErrorAction SilentlyContinue).Count
+    try {
+        $null = Invoke-LocalApi '/api/protecao/snapshot' 'POST' $protecaoBodySalvoErrado -Admin
+        throw 'Selo salvoEm divergente deveria ser recusado.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 409) { throw }
+    }
+    if ((@(Get-ChildItem -Path $protecaoSnapshotsDir -Directory -ErrorAction SilentlyContinue).Count) -ne $protecaoCountAntesSalvo) {
+        throw 'Selo salvoEm divergente criou pasta de snapshot de protecao.'
+    }
+
+    $protecaoAnexosErrados = @([ordered]@{ id=$attachmentId; tamanho=$attachmentBytes.Length; sha256=('0' * 64) })
+    $protecaoBodyShaErrado = [ordered]@{
+        operation='limpar'; appVersion=$appVersionFixture; schemaVersion=4
+        salvoEm=$portfolio.meta.salvoEm; anexos=$protecaoAnexosErrados
+    } | ConvertTo-Json -Depth 10
+    $protecaoCountAntesSha = @(Get-ChildItem -Path $protecaoSnapshotsDir -Directory -ErrorAction SilentlyContinue).Count
+    try {
+        $null = Invoke-LocalApi '/api/protecao/snapshot' 'POST' $protecaoBodyShaErrado -Admin
+        throw 'SHA-256 de anexo divergente deveria ser recusado.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 409) { throw }
+    }
+    if ((@(Get-ChildItem -Path $protecaoSnapshotsDir -Directory -ErrorAction SilentlyContinue).Count) -ne $protecaoCountAntesSha) {
+        throw 'SHA-256 de anexo divergente criou pasta de snapshot de protecao.'
+    }
+
+    $protecaoUpdatePrepareBody = [ordered]@{
+        appVersion=$appVersionFixture; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm
+        anexos=$protecaoAnexos
+    } | ConvertTo-Json -Depth 10
+    $protecaoUpdatePrepared = (Invoke-LocalApi '/api/update/prepare' 'POST' $protecaoUpdatePrepareBody -Admin).Content | ConvertFrom-Json
+    if (-not $protecaoUpdatePrepared.ok) { throw 'Preflight de update para o teste de manutencao do snapshot de protecao falhou.' }
+    try {
+        $null = Invoke-LocalApi '/api/protecao/snapshot' 'POST' $protecaoBodyLimpar -Admin
+        throw 'Snapshot de protecao durante manutencao deveria ser bloqueado.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 423) { throw }
+    }
+    $null = Invoke-LocalApi '/api/update/cancel' 'POST' '{}' -Admin
+    $healthDepoisCancelamento = (Invoke-LocalApi '/api/health').Content | ConvertFrom-Json
+    if ($healthDepoisCancelamento.maintenance) { throw 'Manutencao nao voltou ao normal apos /api/update/cancel.' }
+
+    # -------------------------- isolamento do estado do updater apos sucesso
+    $updateJsonPath = Join-Path $state 'update.json'
+    $updateLockPath = Join-Path $state 'update.lock'
+    $updateJsonHashAntes = if (Test-Path -LiteralPath $updateJsonPath) { Get-PmoSha256 $updateJsonPath } else { $null }
+
+    $protecaoBodyFinal = [ordered]@{
+        operation='limpar'; appVersion=$appVersionFixture; schemaVersion=4
+        salvoEm=$portfolio.meta.salvoEm; anexos=$protecaoAnexos
+    } | ConvertTo-Json -Depth 10
+    $protecaoFinal = (Invoke-LocalApi '/api/protecao/snapshot' 'POST' $protecaoBodyFinal -Admin).Content | ConvertFrom-Json
+    if (-not $protecaoFinal.ok -or -not $protecaoFinal.snapshotId) {
+        throw 'Snapshot de protecao final (isolamento do updater) nao respondeu como esperado.'
+    }
+    $protecaoFinalDir = Join-Path $protecaoSnapshotsDir ([string]$protecaoFinal.snapshotId)
+
+    $updateJsonHashDepois = if (Test-Path -LiteralPath $updateJsonPath) { Get-PmoSha256 $updateJsonPath } else { $null }
+    if ($updateJsonHashAntes -ne $updateJsonHashDepois) { throw 'Snapshot de protecao alterou state\update.json.' }
+    if (Test-Path -LiteralPath $updateLockPath) { throw 'Snapshot de protecao criou state\update.lock.' }
+    $healthDepoisProtecao = (Invoke-LocalApi '/api/health').Content | ConvertFrom-Json
+    if ($healthDepoisProtecao.maintenance) { throw 'Snapshot de protecao deixou maintenance ligado.' }
+
+    # ------------------------------------------------------------- D-30
+    $protecaoFinalManifest = Read-PmoJson (Join-Path $protecaoFinalDir 'manifest.json') $null
+    foreach ($entradaArquivo in @($protecaoFinalManifest.files)) {
+        $caminhoRelativo = ([string]$entradaArquivo.path)
+        if ($caminhoRelativo -match '^(config|state)/') {
+            throw ('Manifesto do snapshot de protecao referencia caminho proibido: ' + $caminhoRelativo)
+        }
+    }
+    if (Test-Path -LiteralPath (Join-Path $protecaoFinalDir 'state')) { throw 'Snapshot de protecao nao pode conter state/ (D-30).' }
+    if (Test-Path -LiteralPath (Join-Path $protecaoFinalDir 'config')) { throw 'Snapshot de protecao nao pode conter config/ (D-30).' }
+    $achouToken = Get-ChildItem -LiteralPath $protecaoFinalDir -Recurse -File -Force |
+        Select-String -SimpleMatch -Pattern $token -ErrorAction SilentlyContinue
+    if ($achouToken) { throw 'Token administrativo vazou para dentro do snapshot de protecao.' }
+
+    # --------------------------- sobrevive a um ciclo update/prepare+cancel
+    $protecaoUpdatePrepareBody2 = [ordered]@{
+        appVersion=$appVersionFixture; schemaVersion=4; salvoEm=$portfolio.meta.salvoEm
+        anexos=$protecaoAnexos
+    } | ConvertTo-Json -Depth 10
+    $protecaoUpdatePrepared2 = (Invoke-LocalApi '/api/update/prepare' 'POST' $protecaoUpdatePrepareBody2 -Admin).Content | ConvertFrom-Json
+    if (-not $protecaoUpdatePrepared2.ok) { throw 'Segundo preflight de update (teste de isolamento) falhou.' }
+    $null = Invoke-LocalApi '/api/update/cancel' 'POST' '{}' -Admin
+    if (-not (Test-Path -LiteralPath $protecaoFinalDir -PathType Container)) {
+        throw 'Snapshot de protecao foi removido apos um ciclo de update/prepare+cancel (isolamento violado).'
+    }
+
     Write-Host 'PROT-01 snapshot de protecao: OK' -ForegroundColor Green
 
     Write-Host 'Integracao do servidor, auth, snapshot, restore, rollback e app-ready: OK' -ForegroundColor Green

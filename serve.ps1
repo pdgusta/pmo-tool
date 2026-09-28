@@ -306,7 +306,10 @@ function LerCorpoBytes($req, [Int64]$limite = 4194304) {
             if ($total -gt $limite) { throw (NovaExcecaoHttp 413 "corpo excede $limite bytes") }
             $ms.Write($buffer, 0, $lidos)
         }
-        return $ms.ToArray()
+        # O operador unario ',' evita que o PowerShell "explode" um byte[] vazio
+        # no pipeline e o achate para $null na atribuicao do chamador (corpo
+        # vazio, ex.: POST sem body); com conteudo, preserva o array intacto.
+        return ,$ms.ToArray()
     } finally { $ms.Dispose() }
 }
 

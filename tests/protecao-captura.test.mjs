@@ -72,6 +72,21 @@ verificar('M.migrar do resultado de bundleAposLimpeza não lança exceção', fu
   assert.doesNotThrow(function () { M.migrar(resultado); });
 });
 
+verificar('bundleAposLimpeza de bundle sem auditLog/imports devolve arrays vazios sem exceção', function () {
+  const semColecoes = clone(fixture(4));
+  delete semColecoes.auditLog;
+  delete semColecoes.imports;
+  let vazio;
+  assert.doesNotThrow(function () { vazio = M.bundleAposLimpeza(semColecoes); });
+  assert.deepStrictEqual(vazio.auditLog, [], 'auditLog deveria virar array vazio quando ausente na origem');
+  assert.deepStrictEqual(vazio.imports, [], 'imports deveria virar array vazio quando ausente na origem');
+});
+
+verificar('bundle vazio (portfolioVazio) passa em M.migrar depois da limpeza', function () {
+  const vazio = M.bundleAposLimpeza(M.portfolioVazio());
+  assert.doesNotThrow(function () { M.migrar(vazio); });
+});
+
 /* ======================================================== temDadoAProteger */
 
 verificar('temDadoAProteger: bundle vazio -> falso', function () {
