@@ -1014,6 +1014,168 @@
     }
   };
 
+  /* ================================================== exclusão lógica (lixeira)
+     PROT-03 (D-32 item 1, P-01, P-09, P-10, P-12, P-13, P-24): a lixeira NÃO é
+     uma coleção de topo nova — é derivada das entradas de auditLog que carregam
+     um `payload` (gravado pelo Store em 20-06). Excluir guarda tudo o que a
+     mutação muda; restaurar lê o payload e devolve exatamente o que foi
+     guardado, refazendo os vínculos possíveis e avisando o que não foi
+     possível refazer. Nenhuma restauração edita ou apaga a entrada de
+     exclusão original — a trilha só cresce (auditoria append-only).
+     ==================================================================== */
+
+  model.TIPOS_LIXEIRA = ['projeto'].concat(Object.keys(model.CAMPOS_EDICAO));
+
+  /**
+   * Exclusão lógica de um projeto inteiro (PROT-03, P-09, P-10). Muta o
+   * rascunho (chamada dentro de store.mutate) e devolve o payload versão 1:
+   * o projeto inteiro, a posição dele, as dependências de outros projetos
+   * que apontavam para ele e os vínculos de anexo desfeitos. Corrige o
+   * achado A-1: antes, excluir um projeto deixava `anexos[].projetoId`
+   * apontando para um projeto inexistente e quebrava M.migrar no próximo boot.
+   */
+  model.excluirProjeto = function (draft, projetoId) {
+    const projetos = Array.isArray(draft.projetos) ? draft.projetos : [];
+    const indice = projetos.findIndex(function (p) { return p && p.id === projetoId; });
+    if (indice === -1) { throw new Error('projeto não encontrado'); }
+
+    const projetoClone = U.clonar(projetos[indice]);
+
+    const dependenciasRemovidas = [];
+    projetos.forEach(function (p) {
+      if (!p || p.id === projetoId) { return; }
+      const deps = Array.isArray(p.dependencias) ? p.dependencias : [];
+      const posicoes = [];
+      deps.forEach(function (dep, i) {
+        if (dep && dep.projetoDestinoId === projetoId) { posicoes.push(i); }
+      });
+      posicoes.forEach(function (i) {
+        dependenciasRemovidas.push({ projetoId: p.id, indice: i, dependencia: U.clonar(deps[i]) });
+      });
+      for (let k = posicoes.length - 1; k >= 0; k -= 1) { deps.splice(posicoes[k], 1); }
+    });
+
+    const anexosDesvinculados = [];
+    const anexos = Array.isArray(draft.anexos) ? draft.anexos : [];
+    anexos.forEach(function (a) {
+      if (a && a.projetoId === projetoId) {
+        anexosDesvinculados.push({
+          anexoId: a.id, projetoId: projetoId,
+          entidadeRef: a.entidadeRef ? U.clonar(a.entidadeRef) : null
+        });
+        a.projetoId = null;
+        a.entidadeRef = null;
+      }
+    });
+
+    projetos.splice(indice, 1);
+
+    return {
+      versao: 1, tipo: 'projeto', projetoId: projetoId, indice: indice,
+      projeto: projetoClone,
+      dependenciasRemovidas: dependenciasRemovidas,
+      anexosDesvinculados: anexosDesvinculados
+    };
+  };
+
+  function restaurarProjetoDaLixeira(draft, payload) {
+    if (!Array.isArray(draft.projetos)) { draft.projetos = []; }
+    const projetos = draft.projetos;
+    const existe = projetos.some(function (p) { return p && p.id === payload.projetoId; });
+    if (existe) { throw new Error('já existe um projeto com este id'); }
+
+    const avisos = [];
+    const projeto = U.clonar(payload.projeto);
+
+    if (projeto.programaId) {
+      const programas = Array.isArray(draft.programas) ? draft.programas : [];
+      const existePrograma = programas.some(function (pr) { return pr && pr.id === projeto.programaId; });
+      if (!existePrograma) {
+        avisos.push('O programa deste projeto não existe mais; o projeto voltou sem programa.');
+        projeto.programaId = null;
+      }
+    }
+
+    if (Array.isArray(projeto.anexos)) {
+      const anexosTopo = Array.isArray(draft.anexos) ? draft.anexos : [];
+      const indiceAnexos = Object.create(null);
+      anexosTopo.forEach(function (a) { if (a && a.id) { indiceAnexos[a.id] = a; } });
+      projeto.anexos = projeto.anexos.filter(function (anexoId) {
+        const a = indiceAnexos[anexoId];
+        if (!a) {
+          avisos.push('O anexo ' + anexoId + ' não existe mais no cofre; a referência foi removida.');
+          return false;
+        }
+        if (a.projetoId && a.projetoId !== projeto.id) {
+          avisos.push('O anexo ' + anexoId + ' já está vinculado a outro projeto; a referência foi removida.');
+          return false;
+        }
+        return true;
+      });
+    }
+
+    const indiceInsercao = Math.min(payload.indice, projetos.length);
+    projetos.splice(indiceInsercao, 0, projeto);
+
+    (payload.dependenciasRemovidas || []).forEach(function (item) {
+      const dono = projetos.find(function (p) { return p && p.id === item.projetoId; });
+      if (!dono) {
+        avisos.push('O projeto que dependia deste não existe mais; a dependência não foi refeita.');
+        return;
+      }
+      if (!Array.isArray(dono.dependencias)) { dono.dependencias = []; }
+      const jaExiste = dono.dependencias.some(function (d) { return d && d.id === item.dependencia.id; });
+      if (jaExiste) {
+        avisos.push('Já existe uma dependência com o mesmo id em ' + (dono.codigo || dono.nome) + '; não foi refeita.');
+        return;
+      }
+      const idx = Math.min(item.indice, dono.dependencias.length);
+      dono.dependencias.splice(idx, 0, U.clonar(item.dependencia));
+    });
+
+    (payload.anexosDesvinculados || []).forEach(function (item) {
+      const anexosTopo = Array.isArray(draft.anexos) ? draft.anexos : [];
+      const anexo = anexosTopo.find(function (a) { return a && a.id === item.anexoId; });
+      if (!anexo) {
+        avisos.push('O anexo ' + item.anexoId + ' não existe mais no cofre; o vínculo não foi refeito.');
+        return;
+      }
+      if (anexo.projetoId) {
+        avisos.push('O anexo ' + item.anexoId + ' já está vinculado a outro projeto; o vínculo não foi refeito.');
+        return;
+      }
+      anexo.projetoId = projeto.id;
+      anexo.entidadeRef = item.entidadeRef ? U.clonar(item.entidadeRef) : null;
+    });
+
+    const rotulo = projeto.codigo || projeto.nome || projeto.id;
+    const resumo = rotulo + ' restaurado da lixeira' + (avisos.length ? ' (' + avisos.join(' ') + ')' : '');
+
+    return {
+      tipo: 'projeto', entidade: 'projeto', entidadeId: projeto.id,
+      acao: 'Restaurar projeto', rotulo: rotulo, resumo: resumo, avisos: avisos
+    };
+  }
+
+  /**
+   * Restaura uma exclusão lógica pelo id da entrada de auditLog (PROT-03,
+   * P-13). Nunca edita nem apaga a entrada original — só acrescenta. Recusa
+   * com motivo em pt-BR quando a entrada não existe, já foi restaurada, o
+   * payload tem versão desconhecida, o projeto-pai do registro não existe
+   * ou já existe entidade com o mesmo id.
+   */
+  model.restaurarDaLixeira = function (draft, auditId) {
+    const trilha = Array.isArray(draft.auditLog) ? draft.auditLog : [];
+    const entrada = trilha.find(function (e) { return e && e.id === auditId; });
+    if (!entrada) { throw new Error('entrada de exclusão não encontrada'); }
+    const jaRestaurada = trilha.some(function (e) { return e && e.restauraDe === auditId; });
+    if (jaRestaurada) { throw new Error('esta exclusão já foi restaurada'); }
+    const payload = entrada.payload;
+    if (!payload || payload.versao !== 1) { throw new Error('formato de exclusão desconhecido'); }
+    if (payload.tipo === 'projeto') { return restaurarProjetoDaLixeira(draft, payload); }
+    throw new Error('formato de exclusão desconhecido');
+  };
+
   /** Próximo código sequencial de um registro dentro do projeto (ex.: R-0101-3). */
   model.proximoCodigoRegistro = function (projeto, tipo) {
     const def = model.CAMPOS_EDICAO[tipo];
