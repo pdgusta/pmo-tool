@@ -1023,12 +1023,13 @@ terceiros para os clientes que só falam stdio, como Claude Desktop/Claude Code 
 
 Revista por D-31 em 27/09/2026.
 
-### D-11 — A ponte stdio sobe o servidor
+### D-11 — Auto-start pela ponte stdio: evidência para o MCP da v2
 
 **Status:** Ratificada em 27/09/2026
 
-**Em linguagem simples:** se a loja estiver fechada quando o telefone tocar, o próprio ramal liga
-as luzes e espera o balcão abrir antes de transferir a ligação.
+**Em linguagem simples:** o teste mostrou que o ramal consegue acender as luzes da loja fechada e
+esperar o balcão abrir antes de transferir a ligação; na v1 não há ramal, e se o ramal da v2 fará
+isso fica para o desenho do MCP corporativo.
 
 **Decisão:** sem MCP na v1 (D-31), nenhuma ponte stdio sobe um servidor local; o comportamento
 validado no Spike C — a ponte sobe o servidor quando ele não responde e aguarda o health; porta
