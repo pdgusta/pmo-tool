@@ -233,7 +233,15 @@
                 S.anexoBaixar(a.id).catch(function (e) { U.toast(e.message || String(e), 'erro'); });
               }, { tam: 14 }),
               vw.botaoIcone('lixeira', 'Remover', function () {
-                S.anexoRemover(a.id).then(function () { pintarLista(); PMO.app.recarregarView(); });
+                PMO.app.confirmar('Remover anexo',
+                  'Remover "' + a.nomeArquivo + '"? A exclusão é definitiva: o arquivo sai do navegador e do disco.',
+                  { perigo: true, ok: 'Remover' }).then(function (ok) {
+                  if (!ok) { return; }
+                  S.anexoRemover(a.id, { confirmado: true }).then(function (r) {
+                    if (!r || !r.ok) { return; }
+                    pintarLista(); PMO.app.recarregarView();
+                  });
+                });
               }, { tam: 14 })
             ])
           ]));

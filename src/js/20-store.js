@@ -1252,15 +1252,25 @@
     return U.download(nome, r.blob);
   };
 
-  store.anexoRemover = async function (id) {
+  /**
+   * Remoção do cofre continua fora da lixeira (P-11, decisão do dono
+   * T-024), mas é sempre exclusão definitiva: exige `{ confirmado: true }`
+   * — sem isso, recusa sem chamar mutate, sem apagar blob e sem toast (trava
+   * de programação; a tela sempre confirma antes de chamar).
+   */
+  store.anexoRemover = async function (id, opts) {
     exigirEscrita();
+    if (!opts || opts.confirmado !== true) {
+      return { ok: false, erro: 'A exclusão definitiva do anexo exige confirmação explícita.' };
+    }
     const meta = store.anexoMeta(id);
-    const mutacao = await store.mutate('Remover anexo', function (d) {
+    const mutacao = await store.mutate('Excluir anexo definitivamente', function (d) {
       d.anexos = d.anexos.filter(function (a) { return a.id !== id; });
       d.projetos.forEach(function (p) {
         p.anexos = (p.anexos || []).filter(function (x) { return x !== id; });
       });
-    }, { entidade: 'anexo', entidadeId: id, resumo: (meta && meta.nomeArquivo) || id });
+    }, { entidade: 'anexo', entidadeId: id,
+      resumo: ((meta && meta.nomeArquivo) || id) + ' — exclusão definitiva confirmada' });
     if (!mutacao.ok) { return mutacao; }
 
     // Primeiro confirma o bundle sem os metadados. Cada blob so pode ser

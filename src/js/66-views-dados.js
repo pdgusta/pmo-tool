@@ -662,7 +662,8 @@
                   PMO.app.confirmar('Remover anexo', 'Remover "' + a.nomeArquivo + '" do cofre?',
                     { perigo: true, ok: 'Remover' }).then(function (ok) {
                     if (!ok) { return; }
-                    S.anexoRemover(a.id).then(function () {
+                    S.anexoRemover(a.id, { confirmado: true }).then(function (r) {
+                      if (!r || !r.ok) { return; }
                       U.toast('Anexo removido.', 'ok');
                       PMO.app.recarregarView();
                     });
