@@ -389,4 +389,241 @@ verificar('restaurarDaLixeira: programa removido depois da exclusao volta com pr
   assert.doesNotThrow(function () { M.migrar(draft); });
 });
 
+/* ------------------------------- Task 2: os dez tipos de registro e a lixeira */
+
+const TIPOS_REGISTRO_PROT03 = [
+  'risco', 'issue', 'marco', 'gate', 'mudanca',
+  'decisao', 'beneficio', 'dependencia', 'alocacao', 'statusReport'
+];
+
+TIPOS_REGISTRO_PROT03.forEach(function (tipo) {
+  verificar('excluirRegistro/restaurarDaLixeira round-trip para o tipo "' + tipo + '"', function () {
+    const draft = M.migrar(fixture(4));
+    const def = M.CAMPOS_EDICAO[tipo];
+    const destino = M.projetoVazio({ id: 'prj-destino-' + tipo, codigo: 'PRJ-DEST-' + tipo });
+    const projeto = M.projetoVazio({ id: 'prj-host-' + tipo, codigo: 'PRJ-HOST-' + tipo });
+    draft.projetos.push(destino, projeto);
+
+    const overItem = { id: 'item-' + tipo };
+    if (tipo === 'dependencia') { overItem.projetoDestinoId = 'prj-destino-' + tipo; }
+    const item = M[def.fabrica](overItem);
+    projeto[def.colecao].push(item);
+
+    const anexo = {
+      id: 'anx-' + tipo, projetoId: projeto.id,
+      entidadeRef: { tipo: tipo, id: item.id }, nomeArquivo: 'evidencia-' + tipo + '.txt'
+    };
+    draft.anexos.push(anexo);
+    projeto.anexos.push(anexo.id);
+
+    const itemOriginal = clone(item);
+    const anexoOriginal = clone(anexo);
+
+    const payload = M.excluirRegistro(draft, tipo, projeto.id, item.id);
+
+    assert.strictEqual(payload.versao, 1);
+    assert.strictEqual(payload.tipo, tipo);
+    assert.strictEqual(payload.colecao, def.colecao);
+    assert.strictEqual(payload.projetoId, projeto.id);
+    assert.strictEqual(payload.itemId, item.id);
+    assert.deepStrictEqual(payload.item, itemOriginal);
+    assert.deepStrictEqual(payload.anexosDesvinculados,
+      [{ anexoId: anexo.id, entidadeRef: anexoOriginal.entidadeRef }]);
+
+    assert.strictEqual(
+      M.projetoPorId(draft, projeto.id)[def.colecao].some(function (x) { return x.id === item.id; }),
+      false);
+    const anexoDepois = draft.anexos.find(function (a) { return a.id === anexo.id; });
+    assert.strictEqual(anexoDepois.entidadeRef, null);
+    assert.strictEqual(anexoDepois.projetoId, projeto.id,
+      'o anexo continua no mesmo projeto, so perde o vinculo com o item');
+
+    assert.doesNotThrow(function () { M.migrar(draft); });
+
+    draft.auditLog.push(auditEntrada('aud-teste-excl-' + tipo, '2026-08-01T00:00:00.000Z', payload));
+    const resultado = M.restaurarDaLixeira(draft, 'aud-teste-excl-' + tipo);
+
+    assert.strictEqual(resultado.tipo, tipo);
+    assert.strictEqual(resultado.entidade, tipo);
+    assert.strictEqual(resultado.entidadeId, projeto.id);
+    assert.deepStrictEqual(resultado.avisos, []);
+
+    assert.deepStrictEqual(
+      M.projetoPorId(draft, projeto.id)[def.colecao].find(function (x) { return x.id === item.id; }),
+      itemOriginal);
+    const anexoRestaurado = draft.anexos.find(function (a) { return a.id === anexo.id; });
+    assert.deepStrictEqual(anexoRestaurado.entidadeRef, anexoOriginal.entidadeRef);
+
+    assert.doesNotThrow(function () { M.migrar(draft); });
+  });
+});
+
+verificar('excluirRegistro: tipo desconhecido lanca e nao muta', function () {
+  const draft = M.migrar(fixture(4));
+  const antes = clone(draft);
+  assert.throws(function () { M.excluirRegistro(draft, 'tipo-invalido', 'prj-v4', 'x'); });
+  assert.deepStrictEqual(draft, antes);
+});
+
+verificar('excluirRegistro: projeto inexistente lanca e nao muta', function () {
+  const draft = M.migrar(fixture(4));
+  const antes = clone(draft);
+  assert.throws(function () { M.excluirRegistro(draft, 'risco', 'prj-nao-existe', 'x'); });
+  assert.deepStrictEqual(draft, antes);
+});
+
+verificar('excluirRegistro: item inexistente lanca e nao muta', function () {
+  const draft = M.migrar(fixture(4));
+  const antes = clone(draft);
+  assert.throws(function () { M.excluirRegistro(draft, 'risco', 'prj-v4', 'rsk-nao-existe'); });
+  assert.deepStrictEqual(draft, antes);
+});
+
+verificar('restaurarDaLixeira (registro): dependencia cujo projeto destino sumiu volta com projetoDestinoId null e aviso', function () {
+  const draft = M.migrar(fixture(4));
+  const destino = M.projetoVazio({ id: 'prj-destino-sumiu', codigo: 'PRJ-SUMIU' });
+  const projeto = M.projetoVazio({ id: 'prj-host-dep-sumiu', codigo: 'PRJ-HOST-SUMIU' });
+  draft.projetos.push(destino, projeto);
+  const dep = M.dependenciaVazia({ id: 'dep-sumiu', projetoDestinoId: 'prj-destino-sumiu' });
+  projeto.dependencias.push(dep);
+
+  const payload = M.excluirRegistro(draft, 'dependencia', projeto.id, dep.id);
+  draft.projetos = draft.projetos.filter(function (p) { return p.id !== 'prj-destino-sumiu'; });
+  draft.auditLog.push(auditEntrada('aud-teste-dep-sumiu', '2026-08-02T00:00:00.000Z', payload));
+
+  const resultado = M.restaurarDaLixeira(draft, 'aud-teste-dep-sumiu');
+  const depRestaurada = M.projetoPorId(draft, projeto.id).dependencias
+    .find(function (d) { return d.id === 'dep-sumiu'; });
+  assert.strictEqual(depRestaurada.projetoDestinoId, null);
+  assert.strictEqual(resultado.avisos.length, 1);
+  assert.doesNotThrow(function () { M.migrar(draft); });
+});
+
+verificar('restaurarDaLixeira (registro): id ja existente na colecao lanca', function () {
+  const draft = M.migrar(fixture(4));
+  const p = M.projetoVazio({ id: 'prj-dup-reg', codigo: 'PRJ-DUP-REG' });
+  draft.projetos.push(p);
+  const issue = M.issueVazia({ id: 'iss-dup', titulo: 'Issue fictícia' });
+  p.issues.push(issue);
+
+  const payload = M.excluirRegistro(draft, 'issue', p.id, issue.id);
+  draft.auditLog.push(auditEntrada('aud-dup-reg', '2026-09-09T00:00:00.000Z', payload));
+  p.issues.push(M.issueVazia({ id: 'iss-dup', titulo: 'Outra issue com o mesmo id' }));
+
+  assert.throws(function () { M.restaurarDaLixeira(draft, 'aud-dup-reg'); }, /já existe/);
+});
+
+/* ------------------------------------------------ lixeira: bordas do edge probe */
+
+verificar('lixeira: portfolioVazio() -> []', function () {
+  assert.deepStrictEqual(M.lixeira(M.portfolioVazio()), []);
+});
+
+verificar('lixeira: bundle sem auditLog -> [] (edge probe PROT-03 empty)', function () {
+  const b = M.migrar(fixture(4));
+  delete b.auditLog;
+  assert.deepStrictEqual(M.lixeira(b), []);
+});
+
+verificar('lixeira: auditLog so com entradas sem payload -> [] (P-24, edge probe PROT-03 empty)', function () {
+  const b = M.migrar(fixture(4));
+  b.auditLog = [{ id: 'aud-sem-payload', em: '2026-01-01T00:00:00.000Z', acao: 'algo antigo' }];
+  assert.deepStrictEqual(M.lixeira(b), []);
+});
+
+verificar('lixeira: ordenacao decrescente por em; empate resolvido pela posicao maior na trilha primeiro (edge probe PROT-03 ordering)', function () {
+  const b = M.portfolioVazio();
+  function payloadProjetoFicticio(id) {
+    return {
+      versao: 1, tipo: 'projeto', projetoId: id, indice: 0,
+      projeto: { id: id, codigo: id.toUpperCase() },
+      dependenciasRemovidas: [], anexosDesvinculados: []
+    };
+  }
+  b.auditLog = [
+    auditEntrada('aud-ord-1', '2026-01-01T00:00:00.000Z', payloadProjetoFicticio('x1')),
+    auditEntrada('aud-ord-2', '2026-01-03T00:00:00.000Z', payloadProjetoFicticio('x2')),
+    auditEntrada('aud-ord-3', '2026-01-02T00:00:00.000Z', payloadProjetoFicticio('x3')),
+    auditEntrada('aud-ord-4', '2026-01-02T00:00:00.000Z', payloadProjetoFicticio('x4'))
+  ];
+  const ids = M.lixeira(b).map(function (x) { return x.auditId; });
+  assert.deepStrictEqual(ids, ['aud-ord-2', 'aud-ord-4', 'aud-ord-3', 'aud-ord-1']);
+});
+
+verificar('lixeira/restaurarDaLixeira: excluir, restaurar e excluir de novo -> lixeira mostra so a segunda exclusao (edge probe PROT-03 adjacency)', function () {
+  const draft = M.migrar(fixture(4));
+  const p = M.projetoVazio({ id: 'prj-adj-teste', codigo: 'PRJ-ADJ' });
+  draft.projetos.push(p);
+
+  const payload1 = M.excluirProjeto(draft, 'prj-adj-teste');
+  draft.auditLog.push(auditEntrada('aud-adj-excl-1', '2026-09-01T00:00:00.000Z', payload1));
+  M.restaurarDaLixeira(draft, 'aud-adj-excl-1');
+  draft.auditLog.push(auditEntrada('aud-adj-rest-1', '2026-09-02T00:00:00.000Z', null,
+    { restauraDe: 'aud-adj-excl-1' }));
+
+  const payload2 = M.excluirProjeto(draft, 'prj-adj-teste');
+  draft.auditLog.push(auditEntrada('aud-adj-excl-2', '2026-09-03T00:00:00.000Z', payload2));
+
+  const ids = M.lixeira(draft).map(function (x) { return x.auditId; });
+  assert.deepStrictEqual(ids, ['aud-adj-excl-2']);
+
+  assert.throws(function () { M.restaurarDaLixeira(draft, 'aud-adj-excl-1'); },
+    /esta exclusão já foi restaurada/);
+});
+
+verificar('lixeira/restaurarDaLixeira (registro): payload com versao desconhecida -> restauravel false e restaurar lanca', function () {
+  const b = M.migrar(fixture(4));
+  b.auditLog.push(auditEntrada('aud-reg-versao2', '2026-09-04T00:00:00.000Z',
+    { versao: 2, tipo: 'risco', projetoId: 'prj-v4', itemId: 'rsk-x' }));
+  const item = M.lixeira(b).find(function (x) { return x.auditId === 'aud-reg-versao2'; });
+  assert.strictEqual(item.restauravel, false);
+  assert.strictEqual(item.motivo, 'formato de exclusão desconhecido');
+  assert.throws(function () { M.restaurarDaLixeira(b, 'aud-reg-versao2'); },
+    /formato de exclusão desconhecido/);
+});
+
+verificar('lixeira: projeto-pai excluido depois do registro -> restauravel false ate o projeto voltar (P-13)', function () {
+  const draft = M.migrar(fixture(4));
+  const pai = M.projetoVazio({ id: 'prj-pai-teste', codigo: 'PRJ-PAI' });
+  draft.projetos.push(pai);
+  const risco = M.riscoVazio({ id: 'rsk-pai-teste', titulo: 'Risco fictício' });
+  pai.riscos.push(risco);
+
+  const payloadRegistro = M.excluirRegistro(draft, 'risco', pai.id, risco.id);
+  draft.auditLog.push(auditEntrada('aud-pai-excl-risco', '2026-09-05T00:00:00.000Z', payloadRegistro));
+
+  const payloadProjeto = M.excluirProjeto(draft, 'prj-pai-teste');
+  draft.auditLog.push(auditEntrada('aud-pai-excl-projeto', '2026-09-06T00:00:00.000Z', payloadProjeto));
+
+  let item = M.lixeira(draft).find(function (x) { return x.auditId === 'aud-pai-excl-risco'; });
+  assert.strictEqual(item.restauravel, false);
+  assert.strictEqual(item.motivo, 'restaure o projeto primeiro');
+  assert.throws(function () { M.restaurarDaLixeira(draft, 'aud-pai-excl-risco'); },
+    /restaure o projeto primeiro/);
+
+  M.restaurarDaLixeira(draft, 'aud-pai-excl-projeto');
+  item = M.lixeira(draft).find(function (x) { return x.auditId === 'aud-pai-excl-risco'; });
+  assert.strictEqual(item.restauravel, true);
+
+  const resultado = M.restaurarDaLixeira(draft, 'aud-pai-excl-risco');
+  assert.deepStrictEqual(resultado.avisos, []);
+  assert.doesNotThrow(function () { M.migrar(draft); });
+});
+
+verificar('lixeira: apos M.mesclarTrilha, exclusoes dos dois lados aparecem juntas (P-12)', function () {
+  const local = [auditEntrada('aud-mesc-local-1', '2026-09-07T00:00:00.000Z', {
+    versao: 1, tipo: 'projeto', projetoId: 'prj-mesc-local', indice: 0,
+    projeto: { id: 'prj-mesc-local' }, dependenciasRemovidas: [], anexosDesvinculados: []
+  })];
+  const doArquivo = [auditEntrada('aud-mesc-arquivo-1', '2026-09-08T00:00:00.000Z', {
+    versao: 1, tipo: 'projeto', projetoId: 'prj-mesc-arquivo', indice: 0,
+    projeto: { id: 'prj-mesc-arquivo' }, dependenciasRemovidas: [], anexosDesvinculados: []
+  })];
+  const r = M.mesclarTrilha(local, doArquivo);
+  const b = M.portfolioVazio();
+  b.auditLog = r.lista;
+  const ids = M.lixeira(b).map(function (x) { return x.auditId; }).sort();
+  assert.deepStrictEqual(ids, ['aud-mesc-arquivo-1', 'aud-mesc-local-1']);
+});
+
 console.log('protecao-captura: OK (' + n + ' verificacoes)');
