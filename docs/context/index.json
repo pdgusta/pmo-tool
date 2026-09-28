@@ -90,9 +90,11 @@
       "l0": "Registra mutações e histórico de importações como dados do usuário. A arquitetura portátil deve preservar esses registros e tornar qualquer política de retenção explícita e não destrutiva.",
       "l1": "docs/context/auditoria-retencao.md",
       "l2": [
+        "src/js/10-model.js",
         "src/js/20-store.js",
         "src/js/30-import.js",
-        "src/js/70-views-config.js"
+        "src/js/70-views-config.js",
+        "tests/protecao-captura.test.mjs"
       ],
       "tags": ["auditoria", "historico", "retencao", "undo"],
       "criticality": "high",
@@ -652,6 +654,55 @@
         "Parametro antigo LauncherLockHeld ainda permite bypass",
         "recovery confirmado nao foi limpo corretamente",
         "app-ready com activationId divergente"
+      ]
+    },
+    {
+      "id": "protecao-servidor",
+      "ownerId": "persistencia-hibrida",
+      "path": "serve.ps1",
+      "requiredPatterns": [
+        "/api/protecao/snapshot",
+        "/api/copia-verificavel/exportar",
+        "/api/copia-verificavel/conferir",
+        "function\\s+CriarSnapshotProtecao",
+        "function\\s+LimparBackupsPorJanela",
+        "portfolioBackupsHourlyHours"
+      ]
+    },
+    {
+      "id": "protecao-store",
+      "ownerId": "auditoria-retencao",
+      "path": "src/js/20-store.js",
+      "requiredPatterns": [
+        "store\\.limparTudo\\s*=\\s*async function",
+        "snapshotProtecao\\('limpar'\\)",
+        "snapshotProtecao\\('substituir'\\)",
+        "store\\.restaurarDaLixeira\\s*=\\s*async function",
+        "store\\.exportarCopiaVerificavel\\s*=\\s*async function",
+        "store\\.conferirCopiaVerificavel\\s*=\\s*async function"
+      ]
+    },
+    {
+      "id": "protecao-modelo",
+      "ownerId": "auditoria-retencao",
+      "path": "src/js/10-model.js",
+      "requiredPatterns": [
+        "model\\.bundleAposLimpeza\\s*=\\s*function",
+        "model\\.mesclarTrilha\\s*=\\s*function",
+        "model\\.excluirProjeto\\s*=\\s*function",
+        "model\\.excluirRegistro\\s*=\\s*function",
+        "model\\.lixeira\\s*=\\s*function",
+        "model\\.restaurarDaLixeira\\s*=\\s*function"
+      ]
+    },
+    {
+      "id": "testes-protecao-captura",
+      "ownerId": "persistencia-hibrida",
+      "path": "tests/Invoke-ServerIntegration.ps1",
+      "requiredPatterns": [
+        "PROT-01 snapshot de protecao: OK",
+        "PROT-04 retencao por janela: OK",
+        "PROT-05 copia verificavel: OK"
       ]
     }
   ]

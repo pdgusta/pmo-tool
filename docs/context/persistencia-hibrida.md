@@ -85,6 +85,63 @@ sem troca automática, pois origem diferente cria outro IndexedDB e outro `local
 `salvarEmDisco=false` preserva seu significado operacional. O preflight pode exportar diretamente
 do IndexedDB para o snapshot, sem mudar permanentemente a preferência.
 
+## Snapshot de proteção (Limpar e Substituir)
+
+Antes de "Limpar portfólio" ou "Substituir portfólio por bundle importado" mudarem qualquer coisa,
+o Store roda uma sequência de proteção: salva forçado no IndexedDB e no disco, materializa e
+confere o inventário de anexos, guarda o selo `meta.salvoEm`, pede ao servidor local `POST
+/api/protecao/snapshot` e só segue depois que a resposta confirma um snapshot selado e verificado;
+qualquer divergência de selo, versão, schema ou SHA-256 de anexo cancela a operação sem mudar nada.
+
+O snapshot fica em `data/backups/snapshots/<snapshotId>/`, com o mesmo layout do snapshot de
+update (`portfolio.json`, `raw-bundle.json`, `attachments/`, `user-templates/`, `manifest.json`),
+mas sem `config/` nem `state/` — premissa P-02, D-30. A rotina nunca lê nem escreve
+`state/update.json`, `state/update.lock` nem a flag de manutenção do updater. O manifesto tem
+`formatVersion 1`, `kind` `pre-limpar` ou `pre-substituir` e as contagens de cada coleção.
+
+Falha em qualquer etapa é fechada (G8): a pasta incompleta é removida e nada é limpo ou
+substituído. Snapshots de proteção ficam guardados sem prazo nesta fase — nenhuma rotina os apaga
+— e o espaço livre é conferido antes de criar cada um (premissa P-03). Sem servidor (`file://`) e
+sem dado a proteger (nenhum projeto, programa, pessoa, anexo ou visão salva), a operação roda sem
+snapshot; com dado a proteger e sem servidor, é recusada com motivo (premissa P-05).
+
+## Retenção dos backups rotativos
+
+Os backups automáticos de `portfolio.json` (`data/backups/portfolio-*.json`, um a cada gravação)
+seguem retenção por janela de tempo, não por contagem: um arquivo por hora nas últimas 48 horas e
+um por dia até 90 dias, em UTC, sempre mantendo o mais novo de cada balde; o backup mais recente e
+qualquer arquivo com data futura nunca são apagados — premissa P-14. As janelas são configuráveis
+só para cima em `config/install.json`, pelas chaves `retention.portfolioBackupsHourlyHours` e
+`retention.portfolioBackupsDailyDays`; um valor abaixo do piso 48/90 é elevado ao padrão e a chave
+antiga `retention.portfolioBackups` (contagem fixa) é ignorada sem erro.
+
+Os snapshots de update (`retention.snapshots`) e as versões instaladas continuam com retenção por
+contagem, sem mudança nesta fase; o mínimo "nunca só por contagem" (G8) se aplica aos backups
+rotativos do portfólio. Estender a mesma regra de janela aos snapshots de update é uma decisão do
+dono ainda em aberto — premissa P-16, marcado **Alvo**.
+
+## Cópia verificável
+
+A PMO exporta uma cópia verificável (manifesto SHA-256) do que o app protege — `portfolio.json`,
+os anexos referenciados e `user-templates/` — para uma pasta fora da instalação que ela escolhe;
+nunca `config/`, `state/`, `versions/`, `logs/`, backups nem snapshots (D-30, G11, premissa P-19).
+Cada exportação cria uma subpasta nova `pmo-copia-<data>-<id>/`; nada que já existia na pasta
+escolhida é tocado.
+
+O destino é validado pelo servidor: caminho absoluto de pasta local já existente, com letra de
+unidade — sem `..`, sem UNC, fora das raízes da instalação. Link simbólico e junção são recusados;
+pasta do OneDrive (reparse point de nuvem, OneDrive Files On-Demand) é aceita — premissa P-18,
+decisão do dono T-024. Para a PMO não precisar digitar, uma rota só de leitura
+(`GET /api/copia-verificavel/sugestoes`, nunca cria nada) devolve a pasta Documentos, as pastas do
+OneDrive do usuário quando existem e passam na validação, e o último destino usado, lido da trilha
+— premissa P-17.
+
+Cada exportação registra no `auditLog` o `copyId`, a pasta, o SHA-256 do manifesto, a contagem de
+arquivos e de bytes; "conferir" é somente leitura, não gera entrada de audit, e compara o SHA-256
+do manifesto atual com o registrado, apontando arquivo alterado, faltando ou a mais — premissa
+P-20. A cópia verificável é um artefato de backup, não sincronização da instalação (G11): o app
+nunca recomenda OneDrive, SharePoint ou pasta de rede como réplica contínua da própria instalação.
+
 ## Invariantes e falhas
 
 - Falhas em IndexedDB, disco ou servidor aparecem na UI e em status diagnóstico.
@@ -104,4 +161,8 @@ com conteúdo divergente; timestamp ausente ou inválido; disco indisponível;
 `salvarEmDisco=false`; queda durante arquivo temporário; schema futuro; tentativa de update com
 mutação pendente; cópia durável de arquivo e diretório; raiz ancestral, `config` sobreposto e
 junction; raiz de volume com `cwd` externo; delete gerenciado contendo junction em um descendente;
-reinício após cada fase persistida.
+reinício após cada fase persistida; falhas do snapshot de proteção (selo divergente, SHA-256 de
+anexo divergente, corpo inválido, manutenção ativa, espaço insuficiente) sem deixar pasta
+incompleta; rajada de escritas cobrindo os baldes de hora e de dia da retenção de backups; e a
+conferência da cópia verificável apontando arquivo alterado, faltando, a mais ou manifesto
+trocado.

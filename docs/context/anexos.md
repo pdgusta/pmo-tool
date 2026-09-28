@@ -28,6 +28,21 @@ apagado do destino que confirmou esse bundle. Se a limpeza física falhar, perma
 recuperável e sem referência, a falha é emitida e o retorno informa `orfaoRecuperavel`; nunca fica
 um metadado apontando para conteúdo já apagado.
 
+## Exclusão lógica de projeto e remoção definitiva de anexo
+
+Excluir um projeto (exclusão lógica, lixeira) desvincula os anexos dele — `projetoId` e
+`entidadeRef` ficam nulos, sem apagar blob nem metadado — e restaurar o projeto pela lixeira
+revincula os anexos possíveis, avisando o que não for possível. Corrige o achado A-1: antes,
+excluir um projeto com anexos deixava `anexos[].projetoId` apontando para um projeto inexistente e
+bloqueava `M.migrar` no próximo boot — premissa P-10.
+
+A remoção de anexo no cofre continua física e fora da lixeira, mas é sempre uma exclusão
+definitiva com confirmação explícita: `store.anexoRemover(id, { confirmado: true })` recusa sem
+mudar nada — sem chamar `mutate`, sem apagar blob — quando a confirmação não vem, e a exclusão
+fica no `auditLog` com a ação "Excluir anexo definitivamente". Todas as telas que removem anexo
+pedem confirmação antes de chamar; a copy final de cada diálogo vem do UI-SPEC (Fase 20, wave de
+UI) — premissa P-11, decidida pelo dono no T-024.
+
 ## Ressincronização
 
 A ressincronização considera individualmente cada anexo sem réplica em disco:
