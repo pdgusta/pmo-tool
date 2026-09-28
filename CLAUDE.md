@@ -21,14 +21,15 @@ Todo CSS e JS inline. Nenhum `<link>`,
 `<script src>`, `@import`, `fetch` de origem externa, webfont remota, imagem remota.
 Ícones = SVG inline ou glifos Unicode. Gráficos = SVG construído à mão.
 
-**Vigência e revisão (D-05, ratificada em 27/09/2026):** a regra acima vale integralmente até a
-Fase 13. A partir da Fase 4, o HTML único passa a ser gerado por Vite + `vite-plugin-singlefile`,
-com paridade verificada contra `build.ps1` no CI; as dependências de navegador entram embutidas
-no HTML pelo próprio bundle, nunca por CDN ou `<script src>` externo (D-07).
+**Vigência e revisão (D-05, ratificada em 27/09/2026; reancorada por D-35):** a regra acima vale
+integralmente em toda a v1. Quando uma fase adotar o Vite para embutir dependência (hoje, a Fase
+27), o HTML único passa a ser gerado por Vite + `vite-plugin-singlefile`, com paridade verificada
+contra `build.ps1` no CI; as dependências de navegador entram embutidas no HTML pelo próprio
+bundle, nunca por CDN ou `<script src>` externo (D-07).
 
-**Gatilho de revisão:** na Fase 13, quando o servidor Node vira fonte da verdade, a G1 é
-reavaliada (HTML único vs. arquivos servidos pelo Node). Até essa revisão, nenhuma mudança pode
-produzir mais de um arquivo de interface.
+**Gatilho de revisão:** no ADR corporativo (v2), quando o servidor corporativo vira fonte da
+verdade, a G1 é reavaliada (HTML único vs. arquivos servidos pelo servidor). Até essa revisão,
+nenhuma mudança pode produzir mais de um arquivo de interface.
 
 ### G2 — Dependências só pela lista aprovada; zero CDN
 Node.js 24 LTS e npm são permitidos em desenvolvimento e CI, e `npm install` para desenvolvimento
@@ -44,32 +45,37 @@ por processos locais e nunca pelo HTML (G1): (1) API e assets do GitHub Releases
 configurado, para consultar update (`serve.ps1`), consultar e baixar manifesto e ZIP do update
 (`tools/update-runtime.ps1`) e instalar (`tools/pmo-instalar.ps1`), com tamanho e SHA-256 de cada
 download conferidos contra o digest do GitHub; (2) login delegado da PMO na Microsoft e Microsoft
-Graph, só pelo módulo conector das Fases 17–18 (G6, D-09). Qualquer outra chamada a origem
-externa em runtime exige proposta aprovada. O build oficial continua `build.ps1` até o Vite provar
-paridade no CI (Fase 4), quando `build.ps1` é removido; até lá os dois coexistem (D-08). O
-servidor continua `serve.ps1` (`System.Net.HttpListener`) até a troca de runtime (Fases 11–13).
+Graph, só pelo módulo conector, quando existir (hoje congelado, D-23) (G6, D-29). Qualquer outra
+chamada a origem externa em runtime exige proposta aprovada. O build oficial continua `build.ps1`
+até o Vite provar paridade no CI, na fase que adotar o Vite para embutir dependência (hoje, a Fase
+27), quando `build.ps1` é removido; até lá os dois coexistem (D-08, D-35). O servidor da edição
+local continua `serve.ps1` (`System.Net.HttpListener`) e não troca de runtime (G3, D-27).
 Nenhum outro runtime (Python, .NET SDK) entra sem proposta aprovada.
 
-### G3 — Node 24 LTS no runtime; Windows PowerShell 5.1 nos scripts de entrada
-Node.js 24 LTS é o runtime de desenvolvimento, CI e produção (D-01). Na máquina da PMO ele chega
-como `node.exe` oficial portátil dentro do pacote de release (`versions/<semver>/`), com versão e
-SHA-256 declarados no `release.json` e na allowlist do ZIP, nada instalado globalmente, e
-rollback troca o Node junto com o código (D-02). Nenhuma instalação real recebe o runtime Node
-antes do ensaio de migração (FUND-02, Fase 13) (D-04). Só `pmo.ps1`, `atualizar.ps1` e
-`tools/pmo-instalar.ps1` permanecem definitivamente em Windows PowerShell 5.1 — a entrada sem
-pré-requisito em qualquer Windows (D-03). O servidor e o updater migram para Node; o updater
-transacional atual (journals, fail-closed) permanece em PowerShell até a troca de runtime da Fase
-13 e só migra repetindo os mesmos testes de falha simulada (D-03). Todo `.ps1` que existe no
-repositório roda em 5.1 e segue sua sintaxe:
+### G3 — Duas edições: a local não troca de runtime; Node 24 LTS em dev, CI e na corporativa
+**Edição local** (a v1): o servidor é o `serve.ps1`, e o updater e os scripts de entrada
+(`pmo.ps1`, `atualizar.ps1`, `tools/pmo-instalar.ps1`) ficam em Windows PowerShell 5.1 — a entrada
+sem pré-requisito em qualquer Windows (D-03); a edição local não troca de runtime (D-27; ver D-27
+em `docs/context/adr-v1-captura.md`). O updater transacional atual (journals, fail-closed)
+permanece em PowerShell. **Node.js 24 LTS** vale no desenvolvimento, no CI e no servidor da
+edição corporativa (v2) (D-01, D-27). O Node é permitido na máquina da PMO como `node.exe` oficial
+portátil dentro de `versions/<semver>/` — versão e SHA-256 declarados no `release.json` e na
+allowlist do ZIP, nada instalado globalmente, rollback troca o Node junto com o código (D-02) —,
+mas só entra no pacote quando uma fase precisar e justificar o uso por proposta ao dono; até
+lá, nenhum release leva `node.exe`. A edição local não tem servidor Node, fila offline local nem
+ensaio de troca de runtime local; a migração é local → nuvem pelo bundle JSON (D-27, D-28). Todo
+`.ps1` que existe no repositório roda em 5.1 e segue sua sintaxe:
 
 Sem `&&`, sem `||`, sem `??`, sem `?.`, sem ternário `? :`, sem `ConvertFrom-Json -AsHashtable`.
 Encadear com `;` ou `if ($?) { }`. Ao gravar arquivos que o browser vai ler, usar
 `-Encoding utf8` explícito. Fechamento de here-string (`'@`) sempre na coluna 0.
 
-### G4 — Porta 8090
-O servidor usa **8090** e a origem canônica é sempre `http://localhost:8090/`. Porta ocupada é
-erro bloqueante: nunca escolher outra porta nem trocar `localhost` por IP/hostname, porque a
-origem identifica IndexedDB e `localStorage`.
+### G4 — Porta 8090 na edição local
+A G4 vale só para a edição local (D-28). Nela, o servidor usa **8090** e a origem canônica é
+sempre `http://localhost:8090/`. Porta ocupada é erro bloqueante: nunca escolher outra porta nem
+trocar `localhost` por IP/hostname, porque a origem identifica IndexedDB e `localStorage`. Na
+edição corporativa (v2), a origem é a corporativa (HTTPS) e o dado mora no servidor; a migração
+local → nuvem usa o bundle JSON com um ensaio no estilo FUND-02.
 
 ### G5 — Interface em português (pt-BR)
 Todos os rótulos, menus, mensagens e relatórios em pt-BR. Preservar termos de PMO consagrados
@@ -77,18 +83,23 @@ em sua forma de mercado: EVM, PV, EV, AC, SPI, CPI, EAC, ETC, VAC, TCPI, BAC, RA
 stage-gate, kanban, CAPEX, OPEX, stakeholder, sponsor, steering committee, backlog, WBS.
 Datas em `dd/mm/aaaa`. Moeda em `R$ 1.234.567` (pt-BR). Sem acentuação quebrada — UTF-8 sempre.
 
-### G6 — Microsoft só com login delegado da PMO (decisão do usuário em 26/09/2026, ratificada como D-09 em 27/09/2026)
-Integração com SharePoint/OneDrive é permitida **apenas** com o login delegado da própria PMO.
-**Nunca** criar App Registration própria nem usar permissão de aplicação no Microsoft Graph.
-Caminho candidato = client público de primeira parte da Microsoft com device code. Fallback
-garantido = a pasta sincronizada pelo OneDrive, lida sem login. O token nunca fica em `data/`,
-`config/` nem `versions/` (nem em snapshot ou no ZIP de release). O conector é validado primeiro,
-com cautela, no tenant do dono do projeto, antes do tenant da PMO (SP-04, Fase 18). A
-compatibilidade file-based continua: import/export de MSPDI, XER, PMXML, CSV, XLSX, ICS, e
+### G6 — Microsoft só com acesso delegado (D-29, 27/09/2026; revê a D-09)
+Integração com SharePoint/OneDrive só com acesso delegado. **Nunca** uma permissão de aplicação
+no Microsoft Graph, nem App Registration fora do tenant da empresa. **Edição local:** o login
+delegado é opcional e permitido, com o client público de primeira parte da Microsoft (nenhum App
+Registration próprio na v1); login interativo com PKCE; device code só como fallback, se o tenant
+permitir; a alternativa garantida continua sendo a pasta sincronizada mais o export do Power
+Automate, lida sem login; nenhuma fase do v1.6 implementa o login local — ele é só permitido.
+**Edição corporativa (v2):** um registro Entra no tenant da empresa, criado e governado pela TI,
+com permissões delegadas mínimas e app roles; login interativo com PKCE, device code como
+fallback se a TI permitir. **Token (D-30):** nenhum token é persistido junto com dados,
+configuração, versões, snapshots, pacotes de release ou pacotes de captura. A validação do login
+delegado no tenant do dono do projeto, antes do tenant da PMO (SP-04), é item do portão v1→v2.
+A compatibilidade file-based continua: import/export de MSPDI, XER, PMXML, CSV, XLSX, ICS, e
 campos de deep link (URLs coladas manualmente). **Atual:** não existe módulo conector no código
-hoje — ele é criado nas Fases 17–18 e se torna o único ponto de extensão para chamadas
-autenticadas à Microsoft; nenhuma chamada de rede autenticada existe fora dele. Ver D-09 e
-`docs/context/avaliacao-evolucao.md` para a justificativa completa.
+hoje; o módulo conector, quando existir (hoje congelado, D-23), é o único ponto de extensão para
+chamadas autenticadas à Microsoft, e nenhuma chamada de rede autenticada existe fora dele. Ver
+D-29 e D-30 em `docs/context/adr-v1-captura.md`.
 
 ### G7 — Honestidade sobre `.mpp`
 `.mpp` é OLE/CFB binário proprietário. Não existe parser JS do conteúdo de cronograma.
@@ -105,6 +116,20 @@ ser marcados como persistidos. Schema futuro abre em modo protegido e não pode 
 
 Update só pode começar depois de flush, materialização dos blobs, inventário e snapshot completo
 selado. Falha em qualquer fase deve manter a versão ativa e os dados anteriores (`fail closed`).
+
+**Reforço (D-32, 27/09/2026):** todo trecho novo de código atende a estes cinco mínimos
+verificáveis:
+- exclusão lógica (tombstone): o conteúdo apagado vai para o audit e pode ser restaurado;
+- "Limpar" e "substituir" só rodam depois de um snapshot verificado, sem perder nenhuma entrada de
+  `auditLog` nem de `imports`;
+- backups são retidos por janela de tempo, nunca só por contagem;
+- a PMO exporta uma cópia verificável (manifesto SHA-256) para um destino que ela escolhe, fora
+  da máquina — um artefato de backup, não sincronização de instalação (a G11 continua valendo);
+- itens removidos na origem são detectados e sinalizados, nunca apagados em silêncio.
+
+**Alvo:** o código atual ainda não atende a esses mínimos; eles entram na Fase 20 (proteção da
+captura) e, para os itens removidos na origem, na Fase 23. As janelas concretas de retenção vivem
+no ADR (`docs/context/adr-v1-captura.md`, D-32).
 
 ### G9 — Funciona offline e com dados vazios
 Abrir sem servidor (`file://`) deve funcionar em modo somente-IndexedDB com aviso, mas esse modo é
@@ -141,6 +166,28 @@ Antes de alterar um domínio, ler `docs/context/index.json` (L0), os documentos 
 somente então os arquivos L2 necessários. Mudança de contrato, schema, persistência, diretórios,
 release ou recuperação exige atualizar o L1 correspondente e executar
 `tools/validar-contexto.ps1`.
+
+### G14 — Uso local (S5)
+O registro de uso (telas abertas, filtros, exportações, documentos gerados, correções de dado
+importado) é local, visível para a PMO e desligável, e só sai da máquina dentro do pacote de
+captura que ela exporta; nenhuma chamada de rede para telemetria. Padrão: ligado, com aviso
+visível e botão de desligar (D-33). O consentimento da PMO para esse registro de uso continua
+pendente: se ela recusar, a G14 volta a "desligado por padrão" por ADR.
+
+---
+
+## Fora do escopo da v1
+
+A v1 (edição local) é o instrumento de captura para a v2 corporativa (D-19; ADR em
+`docs/context/adr-v1-captura.md`).
+
+- Colaboração multiusuário e MCP remoto com OAuth → v2 corporativa (D-34); "Sem MCP na v1" (D-31).
+- Sincronização bidirecional contínua e o app escrever nas Listas do SharePoint da PMO → fora
+  (D-20, D-34).
+- Local-first vira "local na v1 (captura); servidor primeiro, com tolerância offline, na v2"
+  (D-34).
+- Congelado até o ADR corporativo: servidor Node local, fila offline local, MCP e conector
+  Microsoft (D-23).
 
 ---
 

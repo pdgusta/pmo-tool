@@ -247,7 +247,7 @@
       "id": "avaliacao-evolucao",
       "title": "Avaliação técnica e decisões de evolução",
       "kind": "domain",
-      "l0": "Avaliação técnica do protótipo v1.5.0 com medições reais e spikes descartáveis; ratifica Node 24 LTS e o transporte MCP Streamable HTTP com ponte stdio. Toda fase que dependa de Node, MCP ou do conector Microsoft lê este L1 antes de planejar: registra alternativas descartadas e o motivo de cada guardrail reescrito.",
+      "l0": "Avaliação técnica do protótipo v1.5.0 com medições reais, spikes descartáveis e as decisões D-01 a D-18 da Fase 1; D-01, D-02, D-09 e D-10..D-12 foram revistas pelo ADR D-19+ (adr-v1-captura), que prevalece. Registra alternativas descartadas e a lista aprovada de dependências (G2).",
       "l1": "docs/context/avaliacao-evolucao.md",
       "l2": [
         "build.ps1",
@@ -257,6 +257,22 @@
       "tags": ["avaliacao", "decisoes", "dependencias", "guardrails", "mcp", "node"],
       "criticality": "high",
       "dependsOn": []
+    },
+    {
+      "id": "adr-v1-captura",
+      "title": "ADR D-19+: a v1 como roupa de captura e as guardrails da v1",
+      "kind": "domain",
+      "l0": "ADR D-19+: a v1 como instrumento de captura e pode(papel, ação, recurso, vínculo) como regra única de acesso; reescreve G3 (duas edições), G4 (só local), G6, D-01/D-02, D-10..D-12 e o fora do escopo; reforça a G8 e cria a G14 (uso local). Toda fase de runtime, Microsoft, MCP ou proteção de dados lê este L1 primeiro.",
+      "l1": "docs/context/adr-v1-captura.md",
+      "l2": [
+        "pmo.ps1",
+        "serve.ps1",
+        "src/js/20-store.js",
+        "tools/portable-common.ps1"
+      ],
+      "tags": ["adr", "autorizacao", "decisoes", "edicao-local", "guardrails", "microsoft", "protecao-dados", "v1-captura"],
+      "criticality": "critical",
+      "dependsOn": ["avaliacao-evolucao"]
     }
   ],
   "contracts": [

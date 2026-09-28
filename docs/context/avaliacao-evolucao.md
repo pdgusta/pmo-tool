@@ -2,7 +2,8 @@
 
 Este L1 registra a avaliação técnica medida do protótipo v1.5.0 (commit base `571d058`,
 27/09/2026), os spikes de verificação descartáveis e as decisões ratificadas na Fase 1 (D-01 a
-D-13). Usa os marcadores **Atual**, **Alvo**, **Invariante** e **Gate** definidos em
+D-13) — parte delas revista pelo ADR D-19+ (`docs/context/adr-v1-captura.md`). Usa os marcadores
+**Atual**, **Alvo**, **Invariante** e **Gate** definidos em
 `docs/context/README.md`; tudo marcado como **Alvo** ainda não está implementado — só foi
 aprovado como direção.
 
@@ -22,22 +23,32 @@ Authenticode conferidos; o Spike B mostrou que Vite com `vite-plugin-singlefile`
 HTML autocontido, menor que o `build.ps1` de hoje; e o Spike C mostrou uma ponte stdio fina
 repassando corretamente chamadas para um servidor MCP Streamable HTTP, com token e validação de
 Host/Origin funcionando — e um achado importante: a proteção contra DNS rebinding do SDK vem
-desligada por padrão, então a Fase 14 precisa de um middleware próprio. Com essa evidência em
+desligada por padrão, então o MCP da v2 corporativa precisa de um middleware próprio. Com essa evidência em
 mãos, o dono do projeto ratificou em 27/09/2026 (D-14, este L1 novo é o registro oficial) o Node
 24 LTS como motor de desenvolvimento, CI e produção, e o transporte MCP (Streamable HTTP mais a
 ponte stdio). As guardrails do CLAUDE.md foram reescritas de acordo: a G1 (HTML único) continua
-valendo até a Fase 13, quando o servidor Node assume a fonte da verdade; a G2 passa de "zero
+valendo em toda a v1, com revisão no ADR corporativo (D-35); a G2 passa de "zero
 dependências" para uma lista permitida com licença verificada item a item; a G3 troca "sem Node"
-por Node 24 LTS portátil dentro da release, com PowerShell 5.1 restrito aos três scripts de
-entrada; e a G6 troca a antiga proibição de integração Microsoft por login delegado da PMO, sem
+pela regra das duas edições — Node 24 LTS em dev, no CI e na edição corporativa (v2) e, na
+edição local, entrada, servidor (`serve.ps1`) e updater em PowerShell 5.1, sem troca de runtime
+(D-27); e a G6 troca a antiga proibição de integração Microsoft por login delegado da PMO, sem
 chave própria do app. As divergências conhecidas entre código e CLAUDE.md (D-17) foram corrigidas
 já nesta fase quando o custo era baixo — o contrato real de `reconciliar()` e a lista completa de
 rotas administrativas — e as demais (pino de Node do CI, o SKILL.md do app, a proibição de ESM, a
 menção a `build.ps1` na Estrutura e a frase do README sobre runtime) ficaram registradas na tabela
 abaixo com a fase certa para corrigi-las. Fica propositalmente para depois (D-16) a escolha do
-framework de UI — a Fase 8 decide isso junto com a PMO, a partir dos candidatos e critérios listados
+framework de UI — a v2 corporativa decide isso, a partir do que a captura mostrar, a partir dos candidatos e
+critérios listados
 em `### Framework de UI`. Por fim, toda a reescrita de guardrails e as correções do D-17 aconteceram
 na execução desta fase, na branch e via PR (D-18), não durante a conversa que produziu as decisões.
+
+**Revisão de 27/09/2026 (ADR D-19+):** no mesmo dia, o ADR `docs/context/adr-v1-captura.md`
+revisou parte destas decisões — a edição local não troca de runtime e o `node.exe` portátil
+continua permitido, mas só entra no pacote quando uma fase justificar o empacotamento (D-27); a G4
+(porta 8090 fixa) vale só para a edição local (D-28); a G6 passa a ter duas edições, local e
+corporativa (D-29); o MCP fica para a v2 corporativa, sem MCP na v1 (D-31). D-01, D-02, D-09,
+D-10, D-11 e D-12 foram reescritas no lugar e terminam com "Revista por D-xx"; D-03, D-04, D-05 e
+D-08 foram reancoradas (D-35).
 
 ## Medições do protótipo
 
@@ -85,7 +96,7 @@ Comando: `du -sh src/` → **1016K**.
 
 Comando: `grep -cE 'function\s*\(|function [a-zA-Z_]+\(|=>\s*\{|=\s*function' src/js/*.js` — proxy
 grosseiro de contagem de declarações função-símile; não é uma ferramenta real de complexidade
-ciclomática (nenhum linter de complexidade está instalado antes da Fase 2).
+ciclomática (nenhum linter de complexidade está instalado antes de uma fase do v1.6 adotar lint).
 
 | Arquivo | Declarações função-símile (aprox.) |
 |---|---|
@@ -156,7 +167,8 @@ estão **sem teste comportamental**.
 
 Comando: `grep -n "node-version" .github/workflows/release.yml` → linha 66: `node-version:
 '22.22.0'`. O CI ainda está fixado no Node 22, não no Node 24 (D-01); bumpar esse pino é escopo da
-Fase 2 (junto com o contrato `workflow-gates-release` em `index.json`), não desta fase.
+fase do v1.6 que adotar Node 24 no CI (junto com o contrato `workflow-gates-release` em
+`index.json`), não desta fase.
 
 `tests/Run-Tests.ps1` (linhas 22-28) já resolve e **exige** um Node.js de desenvolvimento —
 `throw 'Node.js de desenvolvimento e obrigatorio para validar migracoes e o JavaScript do
@@ -411,7 +423,7 @@ Um único `<script>`, zero referências externas `src=`/`href=` para `http(s)://
 `@import` remoto — mesmo critério que `build.ps1` já aplica. O script inline extraído
 (`inline.mjs`, 527.202 caracteres) passa `node --check` sem erro de parse.
 
-**8. Sinal de modo estrito ESM para a Fase 4 (cada `src/js/*.js` como `.mjs`):**
+**8. Sinal de modo estrito ESM para a extração ESM (cada `src/js/*.js` como `.mjs`):**
 
 ```text
 $ for f in src/js/*.js; do node --check "strict/$(basename "$f" .js).mjs"; done
@@ -419,25 +431,25 @@ TOTAL_FAILURES=0 of 15
 ```
 
 Nenhum dos 15 arquivos de `src/js/` falhou `node --check` quando tratado como módulo ESM estrito
-(0 é resultado válido) — sinal de que a conversão da Fase 4 não deve encontrar incompatibilidade
+(0 é resultado válido) — sinal de que a conversão para ESM não deve encontrar incompatibilidade
 sintática de nível ESM nesses arquivos, embora isso não teste `import`/`export` real nem execução
 em navegador.
 
 **9. Limite explícito deste spike:** a equivalência de comportamento em runtime de navegador **não
-é provada aqui** (não há navegador nesta execução) — isso é o gate de paridade da Fase 4 (MOD-01)
-contra `build.ps1`, mais a suíte Playwright da Fase 3.
+é provada aqui** (não há navegador nesta execução) — isso é o gate de paridade da fase que
+adotar o Vite (hoje, a Fase 27) contra `build.ps1`, mais uma suíte E2E quando uma fase a adotar.
 
 **Resultado:** aprovado — Vite + `vite-plugin-singlefile` gera um único HTML autocontido a partir
 de uma cópia de `src/`, sem referência externa, menor que a saída de `build.ps1` (~581 KB vs 957,4
 KB), com todos os módulos passando checagem sintática ESM.
 
-**Implicação:** para D-05/D-08, a Fase 4 pode migrar para Vite mantendo o contrato de HTML único
-sem regressão de autocontenção; o gate de paridade real (comportamento no navegador, não só
-estrutura do HTML) fica para a Fase 4 (MOD-01) e a suíte Playwright da Fase 3 — este spike só
+**Implicação:** para D-05/D-08, a fase que adotar o Vite pode migrar mantendo o contrato de HTML
+único sem regressão de autocontenção; o gate de paridade real (comportamento no navegador, não só
+estrutura do HTML) fica para essa fase e para uma suíte E2E — este spike só
 prova a mecânica de bundling e a saída estática. Para D-07, este spike só bundlou código próprio
 de `src/`; não incluiu nenhuma dependência de terceiros no navegador (ex.: `@e965/xlsx`) — a
 prova de que uma dependência npm real fica embutida no HTML pelo bundler (e não como CDN) ainda
-precisa ser verificada quando essa dependência for de fato adicionada (Fase 7).
+precisa ser verificada quando essa dependência for de fato adicionada (hoje, a Fase 27).
 
 ### Spike C — transporte MCP: Streamable HTTP + ponte stdio (D-10, D-11, D-12)
 
@@ -533,7 +545,8 @@ Node (undici) trata `Host` como cabeçalho proibido e o sobrescreve silenciosame
 cabeçalho forjado abaixo usam `node:http` diretamente (`probe.mjs`, script do spike, não citado
 aqui em código-fonte) para garantir que o cabeçalho realmente chega ao servidor.
 
-**Achado central para a Fase 14 (resolve a premissa A3 do RESEARCH):** o SDK `1.30.1` mantém
+**Achado central para o MCP da v2 corporativa (congelado, D-23; resolve a premissa A3 do
+RESEARCH):** o SDK `1.30.1` mantém
 `enableDnsRebindingProtection` (e as listas `allowedHosts`/`allowedOrigins` que o acompanham) em
 `WebStandardStreamableHTTPServerTransportOptions`, mas o **valor padrão é `false`** — a proteção
 fica **desligada por padrão**, exatamente como a citação do GHSA-w48q-cv73-mx4w em
@@ -542,7 +555,8 @@ ligada por padrão) está **reprovada** pela evidência direta do pacote instala
 `.d.ts` do próprio pacote marca as três opções (`allowedHosts`, `allowedOrigins`,
 `enableDnsRebindingProtection`) como `@deprecated`, com a nota "Use external middleware for
 [host/origin validation / DNS rebinding protection] instead" — ou seja, o SDK não promete manter
-esse mecanismo interno; a Fase 14 deve tratar a validação de Host/Origin como responsabilidade de
+esse mecanismo interno; o MCP da v2 corporativa deve tratar a validação de Host/Origin como
+responsabilidade de
 um middleware do próprio servidor Node do produto, não como algo que basta "ligar" no SDK.
 
 | Cenário | Esperado | Obtido |
@@ -662,7 +676,7 @@ observado no Spike A) — nenhuma entrada `LISTENING` na porta 18090 ou 18091.
 
 **Resultado:** aprovado — os quatro mecanismos (token, Host/Origin, auto-start, porta ocupada)
 comportaram-se como o D-10/D-11/D-12/G4 exigem, com uma ressalva importante sobre o padrão do SDK
-registrada como achado para a Fase 14.
+registrada como achado para o MCP da v2 corporativa (congelado, D-23).
 
 **Implicação:**
 - **D-10** (ponte relay-only): viável — a ponte de 43/111 linhas (Task 1/Task 2) nunca importou
@@ -671,10 +685,12 @@ registrada como achado para a Fase 14.
   primeiro `/health` — nem instantâneo nem lento a ponto de preocupar uma PMO abrindo um cliente
   MCP; o produto deve orçar essa espera na UX da ponte real.
 - **D-12** (token + Host/Origin): o token local funciona como projetado (401 sem ele/com ele
-  errado); **a Fase 14 precisa habilitar Host/Origin explicitamente** — `allowedHosts`,
+  errado); **o MCP da v2 corporativa (congelado, D-23) precisa habilitar Host/Origin
+  explicitamente** — `allowedHosts`,
   `allowedOrigins` e `enableDnsRebindingProtection: true` no `StreamableHTTPServerTransport` — e,
   por essas três opções estarem marcadas `@deprecated` no SDK `1.30.1` a favor de "middleware
-  externo", **a Fase 14 deve implementar a validação de Host/Origin como middleware do próprio
+  externo", **o MCP da v2 corporativa deve implementar a validação de Host/Origin como middleware
+  do próprio
   servidor Node do produto** (checagem antes de repassar ao SDK), não confiar apenas nas opções
   internas do transporte, que podem ser removidas em versão futura do SDK.
 - **D-13** (autoria): `clientInfo` do handshake MCP é suficiente para popular
@@ -684,31 +700,35 @@ registrada como achado para a Fase 14.
 
 Lista as decisões D-01 a D-13 (Node 24 LTS, distribuição do runtime, transporte MCP, acesso
 Microsoft delegado), cada uma com data, justificativa, efeito nas fases seguintes e
-reversibilidade.
+reversibilidade. As D-01, D-02, D-09 e D-10..D-12 foram reescritas no lugar pelo ADR D-19+
+(`docs/context/adr-v1-captura.md`) e terminam com "Revista por D-xx em 27/09/2026"; as D-03, D-04,
+D-05 e D-08 foram reancoradas pela D-35 e terminam com "Reancorada por D-35 em 27/09/2026".
 
-### D-01 — Node.js 24 LTS em dev/CI e produção
+### D-01 — Node.js 24 LTS em dev/CI e no servidor corporativo
 
 **Status:** Ratificada em 27/09/2026
 
 **Em linguagem simples:** escolher o motor do carro antes de desenhar a carroceria: tudo o que
 vem depois é montado em volta dele.
 
-**Decisão:** Node.js 24 LTS é ratificado como runtime de **dev/CI e de produção**. Justificativa:
-MCP SDK oficial, `@azure/msal-node` e o servidor autoritativo (Fases 11–13) exigem Node; "só
-dev/CI" travaria MCP e SharePoint.
+**Decisão:** Node.js 24 LTS é o runtime de **dev/CI e do servidor da edição corporativa (v2)**; a
+edição local não troca de runtime (`serve.ps1` continua em PS 5.1, D-27). O MCP SDK oficial,
+`@azure/msal-node` e o servidor autoritativo exigem Node e por isso vivem na v2 (conector
+congelado até o ADR corporativo, D-23).
 
 **Justificativa:** O MCP SDK oficial (`@modelcontextprotocol/sdk`) e `@azure/msal-node` (fluxo
 device code, confirmado Node/desktop-only — não existe em `msal-browser`) só rodam em Node; o
-servidor autoritativo das Fases 11–13 também é Node. As medições desta fase (seção `## Medições
+servidor autoritativo (v2 corporativa) também é Node. As medições desta fase (seção `## Medições
 do protótipo`) já mostram que `tests/Run-Tests.ps1` **exige** Node de desenvolvimento hoje
 (linhas 22-28, lança erro sem `$NodePath`) — a premissa antiga da G2 ("não existe Node nesta
 máquina") já era falsa antes desta ratificação.
 
-**Efeito nas fases seguintes:** Fases 2 a 18 são construídas sobre Node (tooling, Vite, servidor
-autoritativo, MCP, conector Microsoft).
+**Efeito nas fases seguintes:** dev/CI usam Node 24 quando uma fase do v1.6 adotar tooling; o
+servidor corporativo, o MCP e o conector são construídos sobre Node na v2 (congelado até o ADR
+corporativo, D-23); nenhuma fase do v1.6 troca o runtime local (D-27).
 
-**Reversibilidade:** one-way — as Fases 2–18 são construídas sobre Node; desfazer exige
-reescrever servidor, MCP e conector.
+**Reversibilidade:** one-way para a v2 corporativa — servidor, MCP e conector são planejados
+sobre Node; desfazer exige reescrevê-los. Na edição local nada depende de Node em runtime (D-27).
 
 **Alternativas descartadas:** Bun (mais rápido, single-binary por padrão, mas `@azure/msal-node`
 e `@byteink/mppjs` têm binários nativos validados contra Node, não Bun — adicionaria risco de
@@ -717,21 +737,24 @@ com Bun for confirmada independentemente); .NET single-file executable em C# (em
 single-exe igualmente bom e MSAL.NET maduro, mas perde totalmente o caminho de reuso de
 `PMO.model`/`PMO.util` — são JS, não portáveis para C# sem reescrita — e não há SDK MCP oficial
 para .NET tão maduro/central quanto o TypeScript; só reconsiderar se uma fase futura de "repensar
-a UI" decidir abandonar o modelo de domínio JS por completo); "Node só em dev/CI" (travaria MCP e
-SharePoint, per CONTEXT).
+a UI" decidir abandonar o modelo de domínio JS por completo); "Node nunca fora de dev/CI" (travaria
+o MCP e o conector Microsoft da v2).
 
-### D-02 — node.exe oficial portátil dentro da release
+Revista por D-27 em 27/09/2026.
+
+### D-02 — node.exe oficial portátil: permitido, empacotado só quando uma fase justificar
 
 **Status:** Ratificada em 27/09/2026
 
-**Em linguagem simples:** o app viaja com a própria bateria dentro da caixa, então não depende
-da tomada da máquina e, ao voltar de versão, a bateria antiga volta junto.
+**Em linguagem simples:** a bateria portátil já foi testada e pode entrar na caixa, mas só entra
+quando uma viagem específica precisar dela.
 
-**Decisão:** Distribuição na máquina da PMO: **`node.exe` oficial portátil dentro do pacote da
-release** (`versions/<semver>/`), com versão e SHA-256 declarados no `release.json` e na
-allowlist do ZIP. Nada instalado globalmente; rollback troca Node junto com o código (coerente
-com G11/G12). Descartados: SEA (executável único — build/assinatura mais caros, atrito com
-antivírus) e Node instalado globalmente (versão fora do controle da release).
+**Decisão:** o Node é permitido na máquina da PMO como o `node.exe` oficial portátil em
+`versions/<semver>/`, com versão e SHA-256 declarados no `release.json` e na allowlist do ZIP,
+nada instalado globalmente e rollback trocando o Node junto com o código (coerente com G11/G12);
+mas só entra no pacote quando uma fase precisar e justificar o uso por proposta ao dono — até
+lá, nenhum release leva `node.exe` (o empacotamento automático desta ratificação original não
+está em vigor). SEA e Node instalado globalmente continuam descartados.
 
 **Justificativa:** Spike A comprovou o mecanismo ponta a ponta: hash local do
 `node-v24.21.0-win-x64.zip` idêntico ao `SHASUMS256.txt` publicado; `node.exe` copiado sozinho
@@ -742,12 +765,14 @@ ficou livre depois do processo parar. O mecanismo de verificação de hash é o 
 `Assert-PmoReleaseManifest` já aplica aos artefatos de release do PMO Tool
 (`tools/portable-common.ps1`).
 
-**Efeito nas fases seguintes:** empacotamento de release e `release.json`/allowlist do ZIP quando
-o runtime trocar (Fase 13); rollback do G11/G12 passa a trocar o Node junto com o código; o ZIP de
-release cresce ~36 MB por plataforma-alvo (footprint mínimo: um único `node.exe`, sem
-`npm`/`npx`/`corepack`).
+**Efeito nas fases seguintes:** quando uma fase justificar `node.exe`, ela acrescenta o arquivo ao
+`release.json` e à allowlist do ZIP, o rollback troca o Node junto com o código e o ZIP de release
+cresce ~36 MB por plataforma-alvo (footprint mínimo: um único `node.exe`, sem
+`npm`/`npx`/`corepack`); hoje a allowlist de runtime de `tools/portable-common.ps1` não tem
+`node.exe`.
 
-**Reversibilidade:** costly — muda o contrato do pacote e do manifesto de release.
+**Reversibilidade:** costly — muda o contrato do pacote e do manifesto de release quando for
+adotado.
 
 **Alternativas descartadas:** SEA / single executable application (build/assinatura mais caros,
 mais atrito com antivírus/SmartScreen por reputação — o Spike A mostrou que mesmo o `node.exe`
@@ -755,18 +780,22 @@ assinado sofre um scan único do antivírus na primeira execução, e um SEA sem
 reconhecida tende a sofrer mais, não menos); Node instalado globalmente (versão fora do controle
 da release).
 
-### D-03 — PowerShell 5.1 só no bootstrap e no instalador
+Revista por D-27 em 27/09/2026.
+
+### D-03 — PowerShell 5.1 na edição local: entrada, servidor e updater
 
 **Status:** Ratificada em 27/09/2026
 
 **Em linguagem simples:** a porta de entrada continua a mesma chave que já funciona em qualquer
-Windows; só o que está lá dentro muda.
+Windows; na edição local, o motor lá dentro também continua o mesmo, e só a edição corporativa
+(v2) troca de motor.
 
-**Decisão:** Em PowerShell 5.1 ficam **apenas** o bootstrap e o instalador: `pmo.ps1`,
-`atualizar.ps1`, `pmo-instalar.ps1` (entrada sem pré-requisito em qualquer Windows; bootstrap
-estável pela G12). Servidor e updater migram para Node; o updater transacional atual (journals,
-fail-closed) permanece em PS até a troca de runtime da Fase 13 e só migra com os mesmos testes de
-falha simulada.
+**Decisão:** Na edição local, ficam em PowerShell 5.1 os scripts de entrada — o bootstrap e o
+instalador: `pmo.ps1`, `atualizar.ps1`, `pmo-instalar.ps1` (entrada sem pré-requisito em
+qualquer Windows; bootstrap estável pela G12) — e também o servidor (`serve.ps1`) e o updater,
+que não trocam de runtime (G3, D-27); a migração de servidor e updater para Node só existe na
+edição corporativa (v2) e, se o updater transacional (journals, fail-closed) migrar, migra com os
+mesmos testes de falha simulada.
 
 **Justificativa:** G12 exige um bootstrap estável que resolve `active.json` sem pré-requisito —
 manter `pmo.ps1`, `atualizar.ps1` e `tools/pmo-instalar.ps1` em PS 5.1 preserva essa garantia em
@@ -774,56 +803,70 @@ qualquer Windows sem instalar nada primeiro. O updater transacional já tem jour
 falha simulada (`tests/Test-UpdaterRecovery.ps1`) provados em PowerShell; migrar sem repetir essa
 cobertura arriscaria regressão silenciosa no G8/G12.
 
-**Efeito nas fases seguintes:** servidor migra para Node na Fase 11; updater permanece em
-PowerShell até a Fase 13 e só migra com os mesmos testes de falha simulada que já existem hoje.
+**Efeito nas fases seguintes:** na edição local, `serve.ps1` e o updater ficam em PowerShell 5.1
+(D-27); a troca de runtime é da v2 corporativa e repete os mesmos testes de falha simulada que já
+existem hoje.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+Reancorada por D-35 em 27/09/2026.
 
 ### D-04 — G3 deixa de valer para o repositório
 
 **Status:** Ratificada em 27/09/2026
 
-**Em linguagem simples:** a regra antiga vale só para a porta de entrada; o resto da casa pode
-usar a ferramenta nova, mas ninguém se muda antes do ensaio da mudança.
+**Em linguagem simples:** a regra antiga deixa de valer para a oficina (o repositório), que já pode
+usar a ferramenta nova; na edição local, a porta de entrada e o motor lá dentro (o servidor
+`serve.ps1` e o updater) continuam os mesmos, em PowerShell 5.1, e só a edição corporativa (v2)
+troca de motor; nenhuma instalação recebe a ferramenta nova sem uma fase que justifique a mudança.
 
 **Decisão:** A G3 ("PS 5.1, sem Node") **deixa de valer imediatamente** ao ratificar. Node passa
-a ser permitido em qualquer parte do repositório. Observação para o planner: a ordem prática do
-roadmap continua — nenhuma instalação real recebe o runtime Node antes do ensaio de migração
-(FUND-02, Fase 13); a regra de PS 5.1 continua valendo para os três scripts de D-03.
+a ser permitido em qualquer parte do repositório. A G3 em vigor é a de duas edições (D-27): nenhuma
+instalação real recebe o runtime Node enquanto nenhuma fase justificar o empacotamento do
+`node.exe`, e a edição local não troca de runtime; a regra de PS 5.1 continua valendo para os três
+scripts de D-03 e, na edição local, também para o servidor e o updater.
 
-**Justificativa:** G12 (bootstrap estável) e os journals do updater exigem que a transição de
-runtime seja testada antes de qualquer instalação real receber o Node — o mesmo rigor que hoje
-protege trocas de versão de código.
+**Justificativa:** G12 (bootstrap estável) e os journals do updater exigem que o empacotamento
+do `node.exe` seja validado antes de qualquer instalação real recebê-lo — versão e SHA-256 no
+`release.json` e na allowlist do ZIP e rollback trocando o Node junto com o código (D-02), com o
+mesmo rigor que hoje protege trocas de versão de código; essa validação continua valendo para a
+fase que justificar o `node.exe`. O ensaio de troca de runtime local deixou de ser condição: a
+edição local não troca de runtime, e a migração é local → nuvem pelo bundle JSON (D-27).
 
 **Efeito nas fases seguintes:** Node passa a ser permitido em qualquer parte do repositório a
-partir de agora, mas nenhuma instalação real recebe o runtime Node antes do ensaio de migração
-(FUND-02, Fase 13); a regra de PS 5.1 continua valendo para `pmo.ps1`, `atualizar.ps1` e
-`tools/pmo-instalar.ps1`.
+partir de agora, mas a G3 em vigor é a de duas edições (D-27): nenhuma instalação real recebe o
+runtime Node enquanto nenhuma fase justificar o empacotamento do `node.exe`, e a edição local não
+troca de runtime; a regra de PS 5.1 continua valendo para `pmo.ps1`, `atualizar.ps1` e
+`tools/pmo-instalar.ps1` e, na edição local, também para o servidor e o updater.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
-### D-05 — G1: HTML único até a Fase 13
+Reancorada por D-35 em 27/09/2026.
+
+### D-05 — G1: HTML único em toda a v1
 
 **Status:** Ratificada em 27/09/2026
 
 **Em linguagem simples:** a casa continua com uma porta de entrada só até o dia em que o servidor
 passar a morar dentro dela; aí a planta é revista.
 
-**Decisão:** G1 reescrita: a interface continua **um único HTML autocontido até a Fase 13** (Vite
-+ `vite-plugin-singlefile` na Fase 4, com paridade contra `build.ps1`); a G1 é **revisada na Fase
-13**, quando o servidor Node vira fonte da verdade. Registrar isso explicitamente como gatilho de
-revisão.
+**Decisão:** G1 reescrita: a interface continua **um único HTML autocontido em toda a v1** (Vite
++ `vite-plugin-singlefile` quando uma fase adotar o Vite para embutir dependência — hoje, a Fase
+27 —, com paridade contra `build.ps1`); a G1 é **revisada no ADR corporativo (v2)**, quando o
+servidor corporativo vira fonte da verdade. Registrar isso explicitamente como gatilho de revisão.
 
 **Justificativa:** Spike B provou que Vite + `vite-plugin-singlefile` gera um único HTML
 autocontido (1 `<script>`, zero referências externas `src=`/`href=` para `http(s)://`/`//`, zero
 `@import` remoto) a partir de uma cópia de `src/`, menor que a saída de `build.ps1` (~581 KB vs
-957,4 KB) — a migração de tooling da Fase 4 não perde a autocontenção do G1.
+957,4 KB) — a migração de tooling para o Vite não perde a autocontenção do G1.
 
-**Efeito nas fases seguintes:** Fase 4 (Vite + singlefile; o gate de paridade real de
-comportamento no navegador, não só estrutura do HTML, fica para MOD-01 e a suíte Playwright da
-Fase 3); Fase 13 (revisão explícita da G1 quando o servidor Node vira fonte da verdade).
+**Efeito nas fases seguintes:** fase que adotar o Vite (hoje, a Fase 27): Vite + singlefile, com
+gate de paridade de comportamento no navegador, não só de estrutura do HTML, e uma suíte E2E
+quando uma fase a adotar; ADR corporativo (v2): revisão explícita da G1.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+Reancorada por D-35 em 27/09/2026.
 
 ### D-06 — G2: dependências por lista permitida
 
@@ -867,9 +910,10 @@ por telefone a outra loja toda vez que a casa abre.
 `src=`/`href=` nem `@import` remoto no HTML final.
 
 **Efeito nas fases seguintes:** quando `@e965/xlsx` ou qualquer lib de componentes de fato for
-adicionada (ex.: Fase 7), a prova de que o bundler embute a dependência no HTML (e não a serve
-via CDN) precisa ser verificada nesse momento — Spike B só bundlou código próprio de `src/`, sem
-nenhuma dependência de terceiros no navegador ainda.
+adicionada (ex.: a fase que adotar o Vite para embutir dependência; hoje, a Fase 27), a prova de
+que o bundler embute a dependência no HTML (e não a serve via CDN) precisa ser verificada nesse
+momento — Spike B só bundlou código próprio de `src/`, sem nenhuma dependência de terceiros no
+navegador ainda.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
@@ -880,25 +924,27 @@ nenhuma dependência de terceiros no navegador ainda.
 **Em linguagem simples:** as duas ferramentas de montagem trabalham lado a lado até a nova provar
 que faz o mesmo trabalho; só então a antiga se aposenta.
 
-**Decisão:** `build.ps1` é **removido depois que o Vite provar paridade no CI** (Fase 4). Até lá
-coexistem. A G2 reescrita deve dizer isso (e o CLAUDE.md deixa de proibir `npm install` para
-desenvolvimento).
+**Decisão:** `build.ps1` é **removido depois que o Vite provar paridade no CI** (na fase que
+adotar o Vite; hoje, a Fase 27). Até lá coexistem. A G2 reescrita deve dizer isso (e o CLAUDE.md
+deixa de proibir `npm install` para desenvolvimento).
 
 **Justificativa:** Spike B mediu que o tempo interno do Vite ("built in", sem o custo de iniciar
 o processo `npx`/Node) cai para 182 ms na terceira rodada — mesma ordem de grandeza da mediana de
 `build.ps1` (176 ms, seção `## Medições do protótipo`); a maior parte da diferença de wall-clock
-(2.443 ms) vem do custo de processo, não da transformação em si. Isso dá confiança de que a Fase
-4 pode alcançar paridade sem perder a autocontenção do G1 (D-05).
+(2.443 ms) vem do custo de processo, não da transformação em si. Isso dá confiança de que a fase
+que adotar o Vite pode alcançar paridade sem perder a autocontenção do G1 (D-05).
 
-**Efeito nas fases seguintes:** Fase 4 mede paridade real de `build.ps1` vs Vite (tempo e
-comportamento no navegador); só depois `build.ps1` é removido. A paridade condiciona apenas essa
-remoção: `npm install` para desenvolvimento já é permitido desde a ratificação (G2, D-01, D-04),
-restrito às dependências de `## Dependências aprovadas (G2)` (D-06); é por essa via que a Fase 2
-instala `typescript`, `eslint` e `vitest`.
+**Efeito nas fases seguintes:** a fase que adotar o Vite mede paridade real de `build.ps1` vs Vite
+(tempo e comportamento no navegador); só depois `build.ps1` é removido. A paridade condiciona
+apenas essa remoção: `npm install` para desenvolvimento já é permitido desde a ratificação (G2,
+D-01, D-04), restrito às dependências de `## Dependências aprovadas (G2)` (D-06); é por essa via
+que uma fase do v1.6 que adotar tooling instala `typescript`, `eslint` e `vitest`.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
-### D-09 — G6: Microsoft com login delegado
+Reancorada por D-35 em 27/09/2026.
+
+### D-09 — G6: Microsoft só com acesso delegado
 
 **Status:** Ratificada em 27/09/2026
 
@@ -906,14 +952,21 @@ instala `typescript`, `eslint` e `vitest`.
 nunca tem uma chave-mestra própria — e se o crachá não funcionar, ainda existe a porta dos
 fundos (a pasta sincronizada do OneDrive).
 
-**Decisão:** (já decidido no new-project, só aplicar) G6 reescrita: integração com
-SharePoint/OneDrive **com login delegado da PMO**, sem App Registration própria nem permissão de
-aplicação no Graph; caminho candidato = client público Microsoft com device code; fallback
-garantido = pasta sincronizada pelo OneDrive. Token fora de `data/`, `config/` e `versions/`.
-Ponto de extensão continua sendo o conector.
+**Decisão:** nunca uma permissão de aplicação no Microsoft Graph, nem App Registration fora do
+tenant da empresa. Edição local: o login delegado é opcional e permitido, com o client público de
+primeira parte da Microsoft; fluxo = login interativo com PKCE; o device code só como fallback, se
+o tenant permitir; a alternativa garantida continua sendo a pasta sincronizada mais o export do
+Power Automate, lidos sem login. Edição corporativa (v2): um registro Entra no tenant da empresa,
+criado e governado pela TI, com permissões delegadas mínimas e app roles; login interativo com
+PKCE, device code como fallback se a TI permitir. Nenhum token é persistido junto com dados,
+configuração, versões, snapshots, pacotes de release ou pacotes de captura (D-30). Nenhuma fase do
+v1.6 implementa o login local — ele é só permitido; o ponto de extensão continua sendo o módulo
+conector, quando existir (hoje congelado, D-23); a validação no tenant do dono antes do tenant da
+PMO (SP-04) vira item do portão v1→v2.
 **Correção factual (01-09):** o texto original desta decisão dava um arquivo de conector como já
 existente, mas esse arquivo nunca existiu no repositório (ver a tabela de divergências abaixo);
-não existe módulo conector no código hoje — ele é criado nas Fases 17–18.
+não existe módulo conector no código hoje; ele só é criado quando o conector sair do congelamento
+(D-23).
 
 **Justificativa:** `@azure/msal-node` confirma que o fluxo device code é Node/desktop-only (não
 existe em `msal-browser`) contra um client público de primeira parte da Microsoft (candidato:
@@ -923,16 +976,20 @@ sistema operacional (DPAPI, por usuário Windows), fora de `data/`, `config/`, `
 segredo dentro.
 A decisão em si é do usuário, tomada em 26/09/2026 no new-project (substituindo a de
 30/07/2026); esta fase a ratificou como D-09 em 27/09/2026, e o cabeçalho da G6 no CLAUDE.md
-registra as duas datas.
+registrava as duas datas. Revista no mesmo dia pela D-29, que reescreveu a G6 com a data dela — PKCE primeiro porque a Microsoft
+recomenda bloquear o device code.
 
-**Efeito nas fases seguintes:** o conector é criado nas Fases 17–18; não existe código dele hoje.
-Nome e local do arquivo do conector são definidos nessas fases; até lá, nenhuma chamada
-autenticada à Microsoft existe no código.
+**Efeito nas fases seguintes:** nenhuma fase do v1.6 implementa o login local (só permitido); a
+ponte das Listas (Fase 23) lê só a pasta; quando o conector existir, ele é o único ponto de
+extensão para chamadas autenticadas; a validação no tenant do dono antes do da PMO (SP-04) é item
+do portão v1→v2.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
 **Alternativas descartadas:** PnP PowerShell (exige App Registration própria desde 09/2024 — não
 é mais uma opção delegada-sem-registro).
+
+Revista por D-29 em 27/09/2026.
 
 ### D-10 — Transporte MCP: Streamable HTTP + ponte stdio
 
@@ -941,11 +998,10 @@ autenticada à Microsoft existe no código.
 **Em linguagem simples:** um balcão único de atendimento (o servidor) e um ramal telefônico (a
 ponte stdio) que só transfere a ligação, sem atender ninguém por conta própria.
 
-**Decisão:** Ratificado: **Streamable HTTP como endpoint principal** no servidor em
-`http://localhost:8090/` (ex.: `/mcp`) **+ ponte stdio fina** que apenas repassa as chamadas ao
-endpoint HTTP, sem acessar dados. Preserva a instância única e a fonte da verdade única;
-compatível com clientes que só falam stdio. Descartados: só stdio (conflita com a instância
-única) e só HTTP (exige adaptador de terceiros para clientes stdio).
+**Decisão:** o transporte fica — **Streamable HTTP como endpoint principal** mais **ponte stdio
+fina** que apenas repassa as chamadas ao endpoint HTTP, sem acessar dados — para o MCP da edição
+corporativa (v2), onde a autenticação vira OAuth Entra (metadados de recurso protegido). Sem MCP
+na v1: nenhum endpoint MCP roda na edição local.
 
 **Justificativa:** Spike C provou o caminho feliz ponta a ponta — um cliente que só fala stdio
 (spawna a ponte como subprocesso) listou as duas ferramentas registradas no servidor Streamable
@@ -957,8 +1013,8 @@ STACK.md (recomendava stdio + HTTP como duas portas de entrada separadas) e ARCH
 assenta a divergência com a ponte relay-only: um único processo servidor (mutex preservado),
 acessível por HTTP direto e por qualquer cliente stdio via ponte.
 
-**Efeito nas fases seguintes:** Fase 11 (servidor Node hospeda `/mcp` no mesmo processo/porta
-8090); Fases 14–15 (implementação real da ponte e das ferramentas MCP).
+**Efeito nas fases seguintes:** o servidor corporativo da v2 hospeda o endpoint MCP (congelado até
+o ADR corporativo, D-23); "MCP remoto com OAuth" sai do "fora do escopo" e vai para a v2 (D-34).
 
 **Reversibilidade:** costly — clientes MCP configurados e a superfície de segurança dependem do
 transporte.
@@ -968,16 +1024,20 @@ transporte.
 `docs/context/runtime-portatil.md`, conflita com a instância única); só HTTP (exige adaptador de
 terceiros para os clientes que só falam stdio, como Claude Desktop/Claude Code por padrão).
 
-### D-11 — A ponte stdio sobe o servidor
+Revista por D-31 em 27/09/2026.
+
+### D-11 — Auto-start pela ponte stdio: evidência para o MCP da v2
 
 **Status:** Ratificada em 27/09/2026
 
-**Em linguagem simples:** se a loja estiver fechada quando o telefone tocar, o próprio ramal liga
-as luzes e espera o balcão abrir antes de transferir a ligação.
+**Em linguagem simples:** o teste mostrou que o ramal consegue acender as luzes da loja fechada e
+esperar o balcão abrir antes de transferir a ligação; na v1 não há ramal, e se o ramal da v2 fará
+isso fica para o desenho do MCP corporativo.
 
-**Decisão:** Se o servidor não estiver rodando, a **ponte stdio sobe o servidor** (via `pmo.ps1`
-sem browser, aguardando o health). Porta 8090 ocupada por outro processo = erro claro e
-bloqueante (G4).
+**Decisão:** sem MCP na v1 (D-31), nenhuma ponte stdio sobe um servidor local; o comportamento
+validado no Spike C — a ponte sobe o servidor quando ele não responde e aguarda o health; porta
+8090 ocupada por outro processo é erro claro e bloqueante (G4) — fica como evidência para o
+desenho do MCP da v2, onde o servidor é o corporativo.
 
 **Justificativa:** Spike C estendeu a ponte para checar `/health` antes de conectar: com o
 servidor parado, a ponte detectou a ausência de resposta, subiu o processo (`spawn` detached,
@@ -986,24 +1046,28 @@ seguiu normalmente. Com a porta ocupada por outro processo, a ponte identificou 
 resposta de `/health` (corpo diferente do esperado) que a porta pertence a outro processo e saiu
 com código 1 sem nunca tentar subir um segundo servidor.
 
-**Efeito nas fases seguintes:** Fases 14–15 orçam ~527 ms de espera de auto-start na UX da ponte
-real; o erro de porta ocupada segue o mesmo padrão bloqueante do G4.
+**Efeito nas fases seguintes:** nada no v1.6; o MCP da v2 (congelado, D-23) decide se alguma ponte
+ainda sobe um processo; a espera de ~527 ms fica como referência.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
-### D-12 — Token local por instalação em state/
+Revista por D-31 em 27/09/2026.
+
+### D-12 — Autenticação do endpoint MCP: OAuth Entra na v2
 
 **Status:** Ratificada em 27/09/2026
 
 **Em linguagem simples:** um crachá guardado na portaria da própria casa, que não viaja na
 mudança nem na cópia de segurança.
 
-**Decisão:** Autenticação do endpoint HTTP: **token local por instalação em `state/`** (fora de
-`data/`, dos snapshots e do ZIP); a ponte stdio lê automaticamente; clientes HTTP diretos usam o
-token na configuração. Host/Origin sempre validados (anti DNS rebinding).
+**Decisão:** na v2 o endpoint MCP autentica com OAuth Entra (metadados de recurso protegido),
+substituindo o token local por instalação em `state/` ratificado originalmente; Host/Origin
+sempre validados, como middleware do próprio servidor (anti DNS rebinding). Sem MCP na v1 não há
+token MCP local; nenhum token é persistido junto com dados, configuração, versões, snapshots,
+pacotes de release ou pacotes de captura (D-30).
 
 **Justificativa:** Spike C confirmou o token: `/mcp` sem `Authorization` ou com token errado
-retorna `401`. Achado importante para a Fase 14: o SDK `@modelcontextprotocol/sdk@1.30.1` mantém
+retorna `401`. Achado importante para o MCP da v2: o SDK `@modelcontextprotocol/sdk@1.30.1` mantém
 `enableDnsRebindingProtection` (e `allowedHosts`/`allowedOrigins`) em
 `WebStandardStreamableHTTPServerTransportOptions`, mas **o valor padrão é `false`** — a proteção
 contra DNS rebinding fica **desligada por padrão** (confirma o alerta do GHSA-w48q-cv73-mx4w
@@ -1015,14 +1079,13 @@ externo" para validação de Host/Origin/DNS rebinding. Com as opções explicit
 forjados foram recusados com `403`, e um controle positivo com `Host`/`Origin` corretos confirmou
 que a rejeição não é efeito colateral de outra coisa quebrada.
 
-**Efeito nas fases seguintes:** a Fase 14 precisa habilitar Host/Origin explicitamente no
-`StreamableHTTPServerTransport` **e**, por essas opções estarem `@deprecated` no SDK `1.30.1`,
-implementar a validação de Host/Origin como middleware do próprio servidor Node do produto
-(checagem antes de repassar ao SDK) — não confiar apenas nas opções internas do transporte, que
-podem ser removidas em versão futura do SDK; a Fase 14 deve reverificar esse comportamento contra
-a versão do SDK de fato fixada no momento da implementação.
+**Efeito nas fases seguintes:** o MCP da v2 (congelado, D-23) implementa OAuth Entra e a validação
+de Host/Origin como middleware do próprio servidor Node do produto, reverificando o comportamento
+do SDK contra a versão de fato fixada no momento da implementação.
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
+
+Revista por D-31 em 27/09/2026.
 
 ### D-13 — Autoria de agente no audit log
 
@@ -1041,7 +1104,8 @@ mensagem JSON-RPC de handshake, sem instrumentação adicional no SDK. Este acha
 com ARCHITECTURE.md: "came via MCP" é o fato confiável (qual token local chamou), e o nome de
 cliente fornecido é tratado como anotação, não como fronteira de segurança.
 
-**Efeito nas fases seguintes:** Fase 11 (autoria no audit log, SRV-04) e Fase 15 (MCP-04).
+**Efeito nas fases seguintes:** v2 corporativa: o servidor autoritativo registra autor = identidade
+Entra e o MCP registra a autoria de agente (ambos congelados até o ADR corporativo, D-23).
 
 **Reversibilidade:** não classificada na discussão; tratada como reversível.
 
@@ -1066,8 +1130,8 @@ reaproveitando o pipeline de transformação do Vite (primeiro alvo de porte:
 `tests/model-migration.test.mjs`), e Playwright contra o servidor real para automatizar a
 checklist "Antes de dizer pronto" do CLAUDE.md. As suítes PowerShell 5.1 (`Run-Tests.ps1`,
 `Test-UpdaterRecovery.ps1`, `Invoke-ServerIntegration.ps1`) continuam rodando em paralelo — nada
-disso é substituído nesta fase. Faseamento sugerido: Fase 2 (scaffold), Fase 3 (testes de
-caracterização antes de qualquer divisão de arquivo).
+disso é substituído nesta fase. Faseamento: o scaffold de tooling entra quando uma fase do v1.6
+precisar dele; a caracterização mínima do núcleo no CI é a Fase 21 (núcleo protegido).
 
 **Alternativas descartadas:**
 
@@ -1075,7 +1139,7 @@ caracterização antes de qualquer divisão de arquivo).
 |---|---|
 | Reescrever `src/js/` em sintaxe TypeScript | Contradiz o mandato "evoluir, não reescrever" do PROJECT.md; `checkJs` já dá o benefício de tipo sem tocar a sintaxe existente |
 | esbuild direto, sem Vite | Falta servidor de desenvolvimento com HMR e o ecossistema de plugins que Playwright/Vitest compartilham via config do Vite; o Vite 8 já usa esbuild internamente (via Oxc/Rolldown), então a velocidade não é perdida |
-| Jest | Pipeline de transformação separado do Vite; Vitest reaproveita a mesma config e é a escolha natural já que a Fase 4 adota Vite |
+| Jest | Pipeline de transformação separado do Vite; Vitest reaproveita a mesma config e é a escolha natural já que o Vite é o bundler aprovado (D-05, D-08) |
 
 ### Dependências
 
@@ -1104,11 +1168,13 @@ da verdade, com IndexedDB + réplica em disco. `10-model.js` (2.723 linhas) já 
 colateral — candidato natural à extração ESM.
 
 **Recomendação:** evoluir, não reescrever. Ordem de dependência: núcleo ESM compartilhado
-(`10-model.js` extraído primeiro, Fase 4), catálogo de ações nomeadas substituindo os closures ad
-hoc de `20-store.js` (Fase 6), servidor Node autoritativo em `localhost:8090` (Fases 11–13)
-hospedando `/api/*` e o endpoint MCP no mesmo processo (D-10), conector Microsoft dentro desse
-mesmo processo Node para o token nunca alcançar o navegador (D-09/D-12), `node.exe` portátil
-dentro da release (D-02). `GET /api/eventos` via SSE (não WebSocket) para notificar mudanças a
+(`10-model.js` extraído primeiro, na fase que extrair o núcleo para ESM), catálogo de ações
+nomeadas substituindo os closures ad hoc de `20-store.js` (as ações nomeadas mínimas entram com a
+autorização, Fase 24), servidor Node autoritativo — na v2, o servidor corporativo (D-27, D-28;
+congelado até o ADR corporativo, D-23) — hospedando `/api/*` e o endpoint MCP no mesmo processo
+(D-10, D-31), conector Microsoft dentro desse mesmo processo Node para o token nunca alcançar o
+navegador (D-09/D-12), `node.exe` portátil permitido, empacotado só quando uma fase justificar
+(D-02, D-27). `GET /api/eventos` via SSE (não WebSocket) para notificar mudanças a
 qualquer aba aberta — não há necessidade de push bidirecional de baixa latência nesta ferramenta.
 
 **Alternativas descartadas:**
@@ -1149,13 +1215,14 @@ imperativo atual).
 | Critério | O que avaliar |
 |---|---|
 | Adoção incremental | Encaixa dentro do contrato `montar()`/`desmontar()` de view existente, sem exigir migração de tudo de uma vez |
-| Peso no HTML único | Custo em KB embutido no bundle, enquanto G1 exige HTML autocontido (até a Fase 13) |
+| Peso no HTML único | Custo em KB embutido no bundle, enquanto G1 exige HTML autocontido (em toda a v1; revisão no ADR corporativo, D-35) |
 | Acessibilidade e RAG | Mantém AA e RAG com cor + rótulo/ícone (convenção do CLAUDE.md), sem regressão |
 | Encaixe com `el()` | Coexiste ou substitui o DOM helper imperativo atual sem exigir reescrever tudo de uma vez |
 | Curva de aprendizado | Custo de manutenção para quem só conhece o padrão vanilla atual |
 | Licença | Termos compatíveis com a lista permitida do D-06 (MIT/Apache-2.0/BSD/ISC) |
 
-Nenhum framework é escolhido nesta fase: a decisão é da Fase 8, com a PMO (UI-01).
+Nenhum framework é escolhido nesta fase: a decisão fica para a UI nova da v2 corporativa,
+desenhada a partir das visões por persona captadas na v1 (D-16, D-19).
 
 ## Dependências aprovadas (G2)
 
@@ -1169,35 +1236,36 @@ que a G2 reescrita do CLAUDE.md referencia como allow-list.
 `.planning/phases/01-avalia-o-t-cnica-e-decis-es-de-evolu-o/01-RESEARCH.md` (nenhuma divergência
 de licença ou repositório encontrada).
 
-| Pacote | Versão verificada | Licença | Uso | Ambiente | Fase de adoção | Situação |
+| Pacote | Versão verificada | Licença | Uso | Ambiente | Adoção | Situação |
 |---|---|---|---|---|---|---|
-| Node.js | 24.21.0 (LTS Krypton) | MIT | Runtime de dev/CI e produção | runtime (node.exe portátil na release, D-02) | Fase 2 (dev/CI); Fase 11–13 (servidor de produção) | aprovada |
-| `typescript` | 7.0.2 | Apache-2.0 | Checagem de tipo via JSDoc + `checkJs`, sem reescrever `src/js/` | dev/CI | Fase 2 | aprovada |
-| `vite` | 8.3.1 | MIT | Servidor de desenvolvimento (HMR) e bundler de produção | dev/CI | Fase 4 | aprovada |
-| `vite-plugin-singlefile` | 2.3.3 | MIT | Injeta JS/CSS construído em um único HTML (substitui a concatenação do `build.ps1`) | dev/CI | Fase 4 | aprovada |
-| `eslint` | 10.11.0 | MIT | Lint em flat config com ambientes separados de navegador e Node | dev/CI | Fase 2 | aprovada |
-| `vitest` | 5.0.2 | MIT | Testes unitários reaproveitando o pipeline de transformação do Vite | dev/CI | Fase 2 | aprovada |
-| `@playwright/test` | 1.63.0 | Apache-2.0 | Testes end-to-end contra `localhost:8090`, automatiza a checklist "Antes de dizer pronto" | dev/CI | Fase 3 | aprovada |
-| `@modelcontextprotocol/sdk` | 1.30.1 | MIT | SDK oficial do servidor MCP (Streamable HTTP + ponte stdio) | Node (servidor) | Fase 14–15 | aprovada |
-| `zod` | 4.6.5 | MIT | Validação de schema dos argumentos das ferramentas MCP | Node (servidor) | Fase 14–15 | aprovada |
-| `express` | 5.2.1 | MIT | Servidor HTTP hospedando `/`, `/api/*` e `/mcp` no mesmo processo | Node (servidor) | Fase 11+ | aprovada |
-| `@azure/msal-node` | 7.0.0 | MIT | Fluxo device code, autenticação delegada da PMO com a Microsoft | Node (servidor) | Fase 17–18 | aprovada |
-| `@microsoft/microsoft-graph-client` | 3.0.7 | MIT | Chamadas típadas ao Microsoft Graph (SharePoint/OneDrive) | Node (servidor) | Fase 17–18 | aprovada |
-| `@e965/xlsx` | 0.20.3 | Apache-2.0 | Leitura/escrita de `.xlsx` (mirror mantido do SheetJS Community Edition) | navegador (embutido no bundle, D-07) | Fase 7 | aprovada com ressalva — sem publicação desde 19/07/2024 (mais de 2 anos); reverificar atualidade na Fase 7 antes de instalar |
-| `@byteink/mppjs` | 0.1.8 | MIT (wrapper) / **LGPL-2.1-or-later** (binário nativo, embute o MPXJ compilado) | Conversão `.mpp` → MSPDI XML, sem JVM | Node (servidor) | Fase 17 | condicionada — não aprovada — flag `[SUS]` no audit de legitimidade (~4,5 meses, 5 versões publicadas); a licença do binário fica fora da lista MIT/Apache-2.0/BSD/ISC do D-06, então a adoção exige decisão explícita mais o spike com arquivos `.mpp` reais e o gate de legitimidade bloqueante da Fase 17 |
-| `lit` | 3.3.3 | BSD-3-Clause | Candidato de framework de UI (Web Components), avaliação D-16 | navegador (embutido no bundle, D-07) | Fase 8 | candidata — não aprovada — a escolha do framework de UI é da Fase 8, com a PMO |
+| Node.js | 24.21.0 (LTS Krypton) | MIT | Runtime de dev/CI e do servidor corporativo (v2) | runtime de dev/CI; `node.exe` portátil permitido na máquina da PMO, fora do pacote até uma fase justificar (D-27) | dev/CI (D-01); servidor corporativo, v2 (D-27) | aprovada |
+| `typescript` | 7.0.2 | Apache-2.0 | Checagem de tipo via JSDoc + `checkJs`, sem reescrever `src/js/` | dev/CI | quando uma fase do v1.6 adotar tooling de tipo, lint ou teste | aprovada |
+| `vite` | 8.3.1 | MIT | Servidor de desenvolvimento (HMR) e bundler de produção | dev/CI | quando uma fase precisar embutir dependência no bundle (hoje, a Fase 27) (D-35) | aprovada |
+| `vite-plugin-singlefile` | 2.3.3 | MIT | Injeta JS/CSS construído em um único HTML (substitui a concatenação do `build.ps1`) | dev/CI | quando uma fase precisar embutir dependência no bundle (hoje, a Fase 27) (D-35) | aprovada |
+| `eslint` | 10.11.0 | MIT | Lint em flat config com ambientes separados de navegador e Node | dev/CI | quando uma fase do v1.6 adotar tooling de tipo, lint ou teste | aprovada |
+| `vitest` | 5.0.2 | MIT | Testes unitários reaproveitando o pipeline de transformação do Vite | dev/CI | quando uma fase do v1.6 adotar tooling de tipo, lint ou teste | aprovada |
+| `@playwright/test` | 1.63.0 | Apache-2.0 | Testes end-to-end contra `localhost:8090`, automatiza a checklist "Antes de dizer pronto" | dev/CI | quando uma fase do v1.6 adotar suíte E2E | aprovada |
+| `@modelcontextprotocol/sdk` | 1.30.1 | MIT | SDK oficial do servidor MCP (Streamable HTTP + ponte stdio) | Node (servidor) | v2 corporativa (MCP congelado, D-23; sem MCP na v1, D-31) | aprovada |
+| `zod` | 4.6.5 | MIT | Validação de schema dos argumentos das ferramentas MCP | Node (servidor) | v2 corporativa (MCP congelado, D-23; sem MCP na v1, D-31) | aprovada |
+| `express` | 5.2.1 | MIT | Servidor HTTP hospedando `/`, `/api/*` e `/mcp` no mesmo processo | Node (servidor) | v2 corporativa (servidor Node congelado, D-23) | aprovada |
+| `@azure/msal-node` | 7.0.0 | MIT | Login delegado da PMO com a Microsoft (PKCE interativo; device code como fallback, D-29) | Node (servidor) | conector Microsoft, quando existir (hoje congelado, D-23); login local permitido e não implementado (D-29) | aprovada |
+| `@microsoft/microsoft-graph-client` | 3.0.7 | MIT | Chamadas típadas ao Microsoft Graph (SharePoint/OneDrive) | Node (servidor) | conector Microsoft, quando existir (hoje congelado, D-23); login local permitido e não implementado (D-29) | aprovada |
+| `@e965/xlsx` | 0.20.3 | Apache-2.0 | Leitura/escrita de `.xlsx` (mirror mantido do SheetJS Community Edition) | navegador (embutido no bundle, D-07) | quando uma fase do v1.6 precisar de parser XLSX (candidata: a ponte das Listas, Fase 23, se o export exigir) | aprovada com ressalva — sem publicação desde 19/07/2024 (mais de 2 anos); reverificar atualidade na fase que o adotar, antes de instalar |
+| `@byteink/mppjs` | 0.1.8 | MIT (wrapper) / **LGPL-2.1-or-later** (binário nativo, embute o MPXJ compilado) | Conversão `.mpp` → MSPDI XML, sem JVM | Node (servidor) | v2 corporativa — `.mpp` sem investimento na v1 | condicionada — não aprovada — flag `[SUS]` no audit de legitimidade (~4,5 meses, 5 versões publicadas); a licença do binário fica fora da lista MIT/Apache-2.0/BSD/ISC do D-06, então a adoção exige decisão explícita mais o spike com arquivos `.mpp` reais e o gate de legitimidade bloqueante da fase que o adotar |
+| `lit` | 3.3.3 | BSD-3-Clause | Candidato de framework de UI (Web Components), avaliação D-16 | navegador (embutido no bundle, D-07) | UI nova da v2 corporativa (D-19) | candidata — não aprovada — a escolha do framework de UI fica para a v2 corporativa |
 
 **Regras:**
 
 - Esta lista governa dependências diretas; dependências transitivas são fixadas pelo lockfile
-  commitado (`package-lock.json` a partir da Fase 2) — não precisam de linha própria aqui.
+  commitado (`package-lock.json` a partir do primeiro `package.json`) — não precisam de linha
+  própria aqui.
 - Dependência nova = proposta ao Maestro (regra 8 do time) antes de qualquer `npm install`; só
   depois disso ela ganha uma linha nesta lista.
 - Licença verificada item a item: só entram como `aprovada` pacotes com MIT, Apache-2.0, BSD ou
   ISC confirmados no registro nesta ou em verificação futura equivalente.
 - Pacote marcado `[ASSUMED]`/`[SUS]` no audit de legitimidade exige um `checkpoint:human-verify`
   bloqueante (`gate="blocking-human"`) antes de qualquer `npm install` — é o caso de
-  `@byteink/mppjs` na Fase 17.
+  `@byteink/mppjs`, quando uma fase o adotar.
 - Dependências usadas no navegador entram embutidas no HTML único pelo bundle (D-07); nunca CDN,
   nunca `<script src>` externo — mesma regra do G1.
 - Zero CDN e zero recurso externo em runtime, em qualquer ambiente (navegador ou servidor Node):
@@ -1211,10 +1279,11 @@ de licença ou repositório encontrada).
     `tools/update-runtime.ps1` (`Get-LatestRelease` e `Invoke-UpdateOperation`) e instalação em
     `tools/pmo-instalar.ps1` (`Get-Release` e `Receber-Asset`); todo download é conferido por
     tamanho e SHA-256 contra o digest publicado pelo GitHub.
-  - **Alvo:** login delegado da PMO na Microsoft e Microsoft Graph, só pelo módulo conector das
-    Fases 17–18 (G6, D-09); nenhuma chamada autenticada à Microsoft existe no código hoje.
-- `build.ps1` e Vite coexistem até o Vite provar paridade no CI (Fase 4); só então `build.ps1` é
-  removido (D-08).
+  - **Alvo:** login delegado da PMO na Microsoft e Microsoft Graph, só pelo módulo conector,
+    quando existir (hoje congelado, D-23) (G6, D-29); nenhuma chamada autenticada à Microsoft
+    existe no código hoje.
+- `build.ps1` e Vite coexistem até o Vite provar paridade no CI, na fase que adotar o Vite (hoje,
+  a Fase 27) (D-08, D-35); só então `build.ps1` é removido.
 
 ## Divergências código × documentação
 
@@ -1233,45 +1302,48 @@ divergência conhecida está listada abaixo como **Corrigida** (com o plano que 
 | A subseção D-09 deste L1 repetia, no presente, o caminho do conector inexistente da G6 antiga como se o arquivo existisse hoje | `docs/context/avaliacao-evolucao.md`, D-09 | Corrigida (01-09) | Fase 1 | a subseção D-09 não cita mais nenhum arquivo de conector e diz que não existe módulo conector no código hoje; a busca por nome de arquivo de conector entre os arquivos versionados continua sem resultado |
 | "Interfaces operacionais" dizia que `GET /api/health`, `/api/update/check` e `/api/update/status` exigiam o token efêmero da sessão; em `serve.ps1` só `GET /api/restore-pending` e as rotas `POST` listadas chamam `ExigirAdministracao` | CLAUDE.md, "Interfaces operacionais" | Corrigida (01-09) | Fase 1 | as três consultas aparecem como "somente loopback, sem token"; a divergência é anterior à Fase 1 (já existia em `main`) |
 | A G2 do CLAUDE.md e as Regras de `## Dependências aprovadas (G2)` deste L1 proibiam qualquer busca externa em runtime, "em qualquer ambiente (navegador ou servidor Node)", mas `serve.ps1`, `tools/update-runtime.ps1` e `tools/pmo-instalar.ps1` já consultam e baixam do GitHub Releases, e a D-09 autoriza o Microsoft Graph pelo conector delegado | CLAUDE.md, G2; `docs/context/avaliacao-evolucao.md`, D-06 e Regras da G2 | Corrigida (01-10) | Fase 1 | a proibição vale para recursos e dependências buscados em runtime; a G2 e as Regras listam as duas chamadas autorizadas; a D-06 manteve o texto ratificado e ganhou um Esclarecimento (01-10); `Invoke-WebRequest` e `Invoke-RestMethod` aparecem só em `serve.ps1` (1), `tools/update-runtime.ps1` (4, uma delas o health em `localhost`) e `tools/pmo-instalar.ps1` (2) |
-| A D-08 deste L1 ("Efeito nas fases seguintes") só liberava `npm install` para desenvolvimento depois da paridade do Vite (Fase 4), contra a G2 do CLAUDE.md (`npm install` para desenvolvimento é permitido, D-01, D-04) e a própria Decisão da D-08, que tira a proibição já na reescrita da G2 | `docs/context/avaliacao-evolucao.md`, D-08 | Corrigida (01-10) | Fase 1 | a paridade condiciona só a remoção do `build.ps1`; o Efeito da D-08 diz que `npm install` para desenvolvimento já é permitido, restrito à lista aprovada (G2, D-06); Decisão e Status da D-08 ficaram intactos |
-| `.claude/skills/pmo-app/SKILL.md` diz "Sem Node, sem npm, sem dependências" | `.claude/skills/pmo-app/SKILL.md` (linha 12) | Registrada — **Alvo** | Fase 2 | atualizar o SKILL.md na mesma PR que introduz `package.json` |
-| CI fixa `node-version: '22.22.0'` e o contrato `workflow-gates-release` de `docs/context/index.json` exige esse valor exato | `.github/workflows/release.yml` (linha 66) | Registrada — **Alvo** | Fase 2 | bumpar o workflow para Node 24 e o `requiredPatterns` do contrato na mesma PR, ou `validar-contexto.ps1` falha por descompasso |
-| "Convenções de código" do CLAUDE.md proíbe módulos ES ("nada de módulos ES") | CLAUDE.md, "Convenções de código" | Registrada — **Alvo** | Fase 4 (MOD-02) | revisar junto com a extração ESM real de `10-model.js` |
-| "Estrutura" e a descrição de build do CLAUDE.md citam `build.ps1` como o build único | CLAUDE.md, "Estrutura" | Registrada — **Alvo** | Fase 4 (D-08: removido depois da paridade do Vite) | `build.ps1` sai do CLAUDE.md quando a Fase 4 provar paridade no CI |
-| README.md diz "Nenhum runtime adicional — sem Node, npm, Python ou .NET SDK" | `README.md` (linha 49) | Registrada — **Alvo** | Fase 13 | continua verdadeiro para quem instala hoje (o `node.exe` viaja dentro do pacote), mas o texto precisa mencionar o runtime embutido quando a Fase 13 trocar o runtime do servidor |
+| A D-08 deste L1 ("Efeito nas fases seguintes") só liberava `npm install` para desenvolvimento depois da paridade do Vite (fase que adotar o Vite), contra a G2 do CLAUDE.md (`npm install` para desenvolvimento é permitido, D-01, D-04) e a própria Decisão da D-08, que tira a proibição já na reescrita da G2 | `docs/context/avaliacao-evolucao.md`, D-08 | Corrigida (01-10) | Fase 1 | a paridade condiciona só a remoção do `build.ps1`; o Efeito da D-08 diz que `npm install` para desenvolvimento já é permitido, restrito à lista aprovada (G2, D-06); Decisão e Status da D-08 ficaram intactos |
+| `.claude/skills/pmo-app/SKILL.md` diz "Sem Node, sem npm, sem dependências" | `.claude/skills/pmo-app/SKILL.md` (linha 12) | Registrada — **Alvo** | fase que introduzir `package.json` | atualizar o SKILL.md na mesma PR que introduz `package.json` |
+| CI fixa `node-version: '22.22.0'` e o contrato `workflow-gates-release` de `docs/context/index.json` exige esse valor exato | `.github/workflows/release.yml` (linha 66) | Registrada — **Alvo** | fase do v1.6 que adotar Node 24 no CI | bumpar o workflow para Node 24 e o `requiredPatterns` do contrato na mesma PR, ou `validar-contexto.ps1` falha por descompasso |
+| "Convenções de código" do CLAUDE.md proíbe módulos ES ("nada de módulos ES") | CLAUDE.md, "Convenções de código" | Registrada — **Alvo** | fase que extrair `10-model.js` para ESM | revisar junto com a extração ESM real de `10-model.js` |
+| "Estrutura" e a descrição de build do CLAUDE.md citam `build.ps1` como o build único | CLAUDE.md, "Estrutura" | Registrada — **Alvo** | fase que adotar o Vite (hoje, a Fase 27; D-08: removido depois da paridade) | `build.ps1` sai do CLAUDE.md quando essa fase provar paridade no CI |
+| README.md diz "Nenhum runtime adicional — sem Node, npm, Python ou .NET SDK" | `README.md` (linha 49) | Registrada — **Alvo** | fase que empacotar o `node.exe` (D-27) | continua verdadeiro: nenhum release leva `node.exe` hoje (D-27); o texto muda na fase que empacotar o `node.exe` |
 
 ## Adiado para fases seguintes
 
-Registra o que foi propositalmente deixado para depois: revisão da G1 (Fase 13), escolha do
-framework de UI (Fase 8), formato do token MCP (Fase 14) e migração do updater para Node
-(Fase 13).
+Registra o que foi propositalmente deixado para depois: revisão da G1 (ADR corporativo), escolha
+do framework de UI (v2 corporativa), autenticação do MCP (v2, D-31) e o destino do updater (fica
+em PowerShell na edição local, D-27).
 
-- **Revisão da G1** (HTML único vs. arquivos servidos pelo Node) — Fase 13, quando o servidor
-  Node vira fonte da verdade (D-05).
-- **Escolha do framework de UI** — Fase 8, com a PMO, entre os candidatos e critérios listados em
-  `### Framework de UI` acima (D-16).
-- **Formato do token MCP, nome da rota e UX de configuração do cliente** — Fase 14; `/mcp`
-  sugerido como nome de rota (D-12, Claude's Discretion do CONTEXT).
-- **Migração do updater para Node** — Fase 13, junto com a troca de runtime do servidor; o
-  updater transacional atual (journals, fail-closed) permanece em PowerShell até lá e só migra
-  repetindo os mesmos testes de falha simulada (D-03).
+- **Revisão da G1** (HTML único vs. arquivos servidos pelo Node) — ADR corporativo (v2), quando
+  o servidor corporativo vira fonte da verdade (D-05, D-35).
+- **Escolha do framework de UI** — v2 corporativa, a partir das visões por persona captadas na
+  v1, entre os candidatos e critérios de `### Framework de UI` acima (D-16).
+- **Autenticação do MCP, nome da rota e UX de configuração do cliente** — v2 corporativa: OAuth
+  Entra com metadados de recurso protegido (D-31); `/mcp` continua sugerido como nome de rota
+  (D-12, Claude's Discretion do CONTEXT).
+- **Migração do updater para Node** — não acontece na edição local: o updater transacional
+  (journals, fail-closed) fica em PowerShell (D-27); na v2 corporativa, qualquer migração repete
+  os mesmos testes de falha simulada (D-03).
 - **Pino de Node do CI (`.github/workflows/release.yml`, hoje `22.22.0`) e o contrato
-  `workflow-gates-release`** — Fase 2, na mesma PR (bump para 24 e atualização do regex do
-  contrato em `index.json`, ou `validar-contexto.ps1` falha por descompasso).
+  `workflow-gates-release`** — fase do v1.6 que adotar Node 24 no CI, na mesma PR (bump para 24 e
+  atualização do regex do contrato em `index.json`, ou `validar-contexto.ps1` falha por
+  descompasso).
 - **Reverificação do default de `enableDnsRebindingProtection` contra a versão do SDK MCP
-  efetivamente fixada** — Fase 14; o Spike C encontrou `false` como padrão e as três opções
-  (`allowedHosts`, `allowedOrigins`, `enableDnsRebindingProtection`) marcadas `@deprecated` no
-  `1.30.1` — a Fase 14 precisa de middleware próprio de Host/Origin, não só das opções internas
-  do transporte (D-12).
-- **Validação de `@byteink/mppjs` com arquivos `.mpp` reais e gate de legitimidade** — Fase 17
-  (IMP-04); pacote `[SUS]`, com binário nativo LGPL-2.1-or-later fora da lista de licenças do
-  D-06 — ver linha `condicionada — não aprovada` em `## Dependências aprovadas (G2)`.
-- **Reverificação de atualidade de `@e965/xlsx`** — Fase 7, no momento da adoção; sem publicação
-  desde 19/07/2024 (mais de dois anos), conforme a linha `aprovada com ressalva` em `##
-  Dependências aprovadas (G2)`.
-- **Proibição de ESM em "Convenções de código" do CLAUDE.md** — Fase 4, quando `10-model.js` for
-  extraído para ESM real (MOD-02); a proibição atual ("nada de módulos ES") precisa ser revista
-  junto com essa extração, não antes.
+  efetivamente fixada** — MCP da v2 corporativa (congelado, D-23); o Spike C encontrou `false`
+  como padrão e as três opções (`allowedHosts`, `allowedOrigins`,
+  `enableDnsRebindingProtection`) marcadas `@deprecated` no `1.30.1` — o MCP da v2 corporativa
+  precisa de middleware próprio de Host/Origin, não só das opções internas do transporte (D-12).
+- **Validação de `@byteink/mppjs` com arquivos `.mpp` reais e gate de legitimidade** — v2
+  corporativa — `.mpp` sem investimento na v1; pacote `[SUS]`, com binário nativo
+  LGPL-2.1-or-later fora da lista de licenças do D-06 — ver linha `condicionada — não aprovada`
+  em `## Dependências aprovadas (G2)`.
+- **Reverificação de atualidade de `@e965/xlsx`** — na fase que o adotar, no momento da adoção;
+  sem publicação desde 19/07/2024 (mais de dois anos), conforme a linha `aprovada com ressalva`
+  em `## Dependências aprovadas (G2)`.
+- **Proibição de ESM em "Convenções de código" do CLAUDE.md** — fase que extrair `10-model.js`
+  para ESM real; a proibição atual ("nada de módulos ES") precisa ser revista junto com essa
+  extração, não antes.
 
 ## Gate de validação
 
@@ -1281,8 +1353,8 @@ O gate mecânico desta fase é `tools/validar-contexto.ps1`:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/validar-contexto.ps1 -Detalhado
 ```
 
-Resultado esperado depois desta entrada: `Entradas: 16  Contratos: 30` e, na última linha,
-`Contexto valido.` — código de saída `0`.
+Resultado esperado hoje: `Entradas: 17  Contratos: 30` (as 16 entradas da Fase 1 mais o ADR
+D-19+, `adr-v1-captura`) e, na última linha, `Contexto valido.` — código de saída `0`.
 
 Todo spike de verificação (D-15) roda exclusivamente em `%TEMP%\pmo-spikes-f1`, fora da árvore do
 repositório; `git status --short` nunca pode listar artefato de spike — se listar, é falha
