@@ -370,13 +370,79 @@ function LerCorpoTexto($req, [Int64]$limite = 4194304) {
     return [System.Text.Encoding]::UTF8.GetString($b)
 }
 
+function Get-RetencaoBackups() {
+    $cfg = Read-PmoJson $installJson $null
+    $horas = 48
+    $dias = 90
+    if ($cfg) {
+        $retencaoProp = $cfg.PSObject.Properties['retention']
+        if ($null -ne $retencaoProp -and $retencaoProp.Value) {
+            $retencao = $retencaoProp.Value
+            $horasProp = $retencao.PSObject.Properties['portfolioBackupsHourlyHours']
+            if ($null -ne $horasProp) {
+                $horasInt = 0
+                if ([int]::TryParse([string]$horasProp.Value, [ref]$horasInt)) {
+                    $horas = [Math]::Max(48, $horasInt)
+                }
+            }
+            $diasProp = $retencao.PSObject.Properties['portfolioBackupsDailyDays']
+            if ($null -ne $diasProp) {
+                $diasInt = 0
+                if ([int]::TryParse([string]$diasProp.Value, [ref]$diasInt)) {
+                    $dias = [Math]::Max(90, $diasInt)
+                }
+            }
+        }
+    }
+    return [pscustomobject]@{ horasHorario = $horas; diasDiario = $dias }
+}
+
+# Retencao por janela de tempo (D-32 item 3, PROT-04): um backup por hora nas
+# ultimas N horas e um por dia ate M dias, sempre mantendo o mais recente e
+# qualquer arquivo com data futura. So considera portfolio-*.json direto em
+# $bkpDir (nunca data/backups/snapshots/ nem outro arquivo).
+function LimparBackupsPorJanela() {
+    $retencao = Get-RetencaoBackups
+    $agora = (Get-Date).ToUniversalTime()
+    $arquivos = @(Get-ChildItem -LiteralPath $bkpDir -Filter 'portfolio-*.json' -File -ErrorAction SilentlyContinue |
+        Sort-Object -Property @{Expression='LastWriteTimeUtc';Descending=$true}, @{Expression='Name';Descending=$true})
+    if ($arquivos.Count -eq 0) { return }
+    $manter = New-Object 'System.Collections.Generic.HashSet[string]'
+    $null = $manter.Add($arquivos[0].FullName)
+    $baldes = @{}
+    foreach ($arquivo in $arquivos) {
+        $modificado = $arquivo.LastWriteTimeUtc
+        if ($modificado -gt $agora) {
+            $null = $manter.Add($arquivo.FullName)
+            continue
+        }
+        $idade = $agora - $modificado
+        if ($idade.TotalHours -lt $retencao.horasHorario) {
+            $chave = 'H' + $modificado.ToString('yyyyMMddHH')
+        } elseif ($idade.TotalDays -lt $retencao.diasDiario) {
+            $chave = 'D' + $modificado.ToString('yyyyMMdd')
+        } else {
+            continue
+        }
+        if (-not $baldes.ContainsKey($chave)) {
+            $baldes[$chave] = $arquivo
+            $null = $manter.Add($arquivo.FullName)
+        }
+    }
+    foreach ($arquivo in $arquivos) {
+        if ($manter.Contains($arquivo.FullName)) { continue }
+        if (Test-PmoSubPath $bkpDir $arquivo.FullName) {
+            Remove-Item -LiteralPath $arquivo.FullName -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function RotacionarBackup() {
     if (-not (Test-Path -LiteralPath $portJson)) { return }
-    $stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
-    Copy-Item -LiteralPath $portJson -Destination (Join-Path $bkpDir ("portfolio-$stamp.json")) -Force
-    # mantem os 30 mais recentes
-    $antigos = Get-ChildItem -Path $bkpDir -Filter 'portfolio-*.json' -File | Sort-Object LastWriteTime -Descending | Select-Object -Skip 30
-    foreach ($a in $antigos) { Remove-Item -LiteralPath $a.FullName -Force -ErrorAction SilentlyContinue }
+    $agora = (Get-Date).ToUniversalTime()
+    $nome = 'portfolio-' + $agora.ToString('yyyyMMdd-HHmmss-fff') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,4) + '.json'
+    Copy-PmoFileDurable -Source $portJson -Destination (Join-Path $bkpDir $nome)
+    LimparBackupsPorJanela
 }
 
 function EspacoLivre($path) {
@@ -1186,7 +1252,9 @@ try {
                     $itens += ('{"nome":"' + (JsonEscapar $f.Name) + '","tamanho":' + $f.Length +
                                ',"em":"' + $f.LastWriteTimeUtc.ToString('o') + '"}')
                 }
-                ResponderJson $resp 200 ('{"ok":true,"itens":[' + ($itens -join ',') + ']}')
+                $retencaoBackups = Get-RetencaoBackups
+                ResponderJson $resp 200 ('{"ok":true,"itens":[' + ($itens -join ',') + '],"retencao":{"horasHorario":' +
+                    $retencaoBackups.horasHorario + ',"diasDiario":' + $retencaoBackups.diasDiario + '}}')
             }
             # -------------------------------------------------------- anexos
             elseif ($rota -eq '/api/attachments' -and $metodo -eq 'GET') {

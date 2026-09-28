@@ -532,6 +532,139 @@ try {
 
     Write-Host 'PROT-01 snapshot de protecao: OK' -ForegroundColor Green
 
+    # ------------------------------------------- PROT-04: retencao por janela
+    $bkpDirTeste = Join-Path $data 'backups'
+    $realBackupPattern = '^portfolio-\d{8}-\d{6}-\d{3}-[0-9a-f]{4}\.json$'
+    function New-ProtBackupFixture([string]$Rotulo, [DateTime]$Quando) {
+        $caminho = Join-Path $bkpDirTeste ('portfolio-fixture-' + $Rotulo + '.json')
+        [System.IO.File]::WriteAllText($caminho, '{}', (New-Object System.Text.UTF8Encoding($false)))
+        (Get-Item -LiteralPath $caminho).LastWriteTimeUtc = $Quando
+        return $caminho
+    }
+    function Get-ProtRealBackups() {
+        return @(Get-ChildItem -LiteralPath $bkpDirTeste -Filter 'portfolio-*.json' -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match $realBackupPattern })
+    }
+    function Set-ProtInstallRetention($RetentionObj) {
+        Write-PmoJsonAtomic (Join-Path $config 'install.json') ([ordered]@{
+            formatVersion=$instalacaoBase.formatVersion; repository=$instalacaoBase.repository; channel=$instalacaoBase.channel
+            port=$instalacaoBase.port; checkIntervalHours=$instalacaoBase.checkIntervalHours
+            dataDir=$instalacaoBase.dataDir; configDir=$instalacaoBase.configDir; stateDir=$instalacaoBase.stateDir
+            retention=$RetentionObj
+        })
+    }
+
+    Get-ChildItem -LiteralPath $bkpDirTeste -Filter 'portfolio-*.json' -File -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+    $protLeiaMe = Join-Path $bkpDirTeste 'leia-me.txt'
+    [System.IO.File]::WriteAllText($protLeiaMe, 'leia-me fixture PROT-04', (New-Object System.Text.UTF8Encoding($false)))
+
+    $agoraProt = (Get-Date).ToUniversalTime()
+    $horaTruncada = New-Object DateTime($agoraProt.Year,$agoraProt.Month,$agoraProt.Day,$agoraProt.Hour,0,0,[DateTimeKind]::Utc)
+    $diaTruncado = New-Object DateTime($agoraProt.Year,$agoraProt.Month,$agoraProt.Day,0,0,0,[DateTimeKind]::Utc)
+
+    # Grupo 1 - rajada: 40 PUT seguidos na hora corrente; so o(s) mais novo(s) por hora ficam
+    $fixtureUmaHora = New-ProtBackupFixture 'uma-hora-atras' ($horaTruncada.AddHours(-1).AddMinutes(30))
+    for ($i = 0; $i -lt 40; $i++) {
+        $portfolio.meta.salvoEm = (Get-Date).ToUniversalTime().ToString('o')
+        $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+    }
+    $reaisRajada = @(Get-ProtRealBackups)
+    if ($reaisRajada.Count -lt 1 -or $reaisRajada.Count -gt 2) {
+        throw ('Rajada nao respeitou o balde por hora: ' + $reaisRajada.Count + ' sobreviventes reais.')
+    }
+    if (-not (Test-Path -LiteralPath $fixtureUmaHora)) { throw 'Fixture de 1h atras nao sobreviveu a rajada.' }
+
+    # Grupo 2 - hora: k de 2 a 46 (k=1 ja coberto por 'uma-hora-atras'); k=5 tem tres extras, so +40min fica
+    $fixturesHora = @{}
+    for ($k = 2; $k -le 46; $k++) {
+        if ($k -eq 5) { continue }
+        $fixturesHora[$k] = New-ProtBackupFixture ('h-' + $k) ($horaTruncada.AddHours(-$k).AddMinutes(30))
+    }
+    $fixturesHora[5] = New-ProtBackupFixture 'h-5' ($horaTruncada.AddHours(-5).AddMinutes(30))
+    $h5Mais10 = New-ProtBackupFixture 'h5-mais10' ($horaTruncada.AddHours(-5).AddMinutes(10))
+    $h5Mais20 = New-ProtBackupFixture 'h5-mais20' ($horaTruncada.AddHours(-5).AddMinutes(20))
+    $h5Mais40 = New-ProtBackupFixture 'h5-mais40' ($horaTruncada.AddHours(-5).AddMinutes(40))
+
+    # Grupo 3 - dia: d de 4 a 88; d=10 tem tres extras, so +20h fica; d de 92 a 100 sai
+    $fixturesDia = @{}
+    for ($d = 4; $d -le 88; $d++) {
+        $fixturesDia[$d] = New-ProtBackupFixture ('d-' + $d) ($diaTruncado.AddDays(-$d).AddHours(12))
+    }
+    $d10Mais2 = New-ProtBackupFixture 'd10-mais2' ($diaTruncado.AddDays(-10).AddHours(2))
+    $d10Mais6 = New-ProtBackupFixture 'd10-mais6' ($diaTruncado.AddDays(-10).AddHours(6))
+    $d10Mais20 = New-ProtBackupFixture 'd10-mais20' ($diaTruncado.AddDays(-10).AddHours(20))
+    $fixturesForaJanela = @{}
+    for ($d = 92; $d -le 100; $d++) {
+        $fixturesForaJanela[$d] = New-ProtBackupFixture ('d-' + $d) ($diaTruncado.AddDays(-$d).AddHours(12))
+    }
+
+    # Grupo 4 - data futura sempre fica
+    $fixtureFuturo = New-ProtBackupFixture 'futuro' ($agoraProt.AddDays(2))
+
+    # Dispara a rotacao sobre todos os fixtures acima
+    $portfolio.meta.salvoEm = (Get-Date).ToUniversalTime().ToString('o')
+    $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+
+    if (-not (Test-Path -LiteralPath $fixtureUmaHora)) { throw 'Fixture de 1h atras nao sobreviveu apos a rotacao completa.' }
+    foreach ($k in @(2..46)) {
+        if ($k -eq 5) { continue }
+        if (-not (Test-Path -LiteralPath $fixturesHora[$k])) { throw ('Fixture de hora k=' + $k + ' deveria ter sobrevivido.') }
+    }
+    if (Test-Path -LiteralPath $fixturesHora[5]) { throw 'Fixture h-5 (+30min) deveria ter sido removida (nao e a mais nova da hora).' }
+    if (Test-Path -LiteralPath $h5Mais10) { throw 'Fixture h5-mais10 deveria ter sido removida.' }
+    if (Test-Path -LiteralPath $h5Mais20) { throw 'Fixture h5-mais20 deveria ter sido removida.' }
+    if (-not (Test-Path -LiteralPath $h5Mais40)) { throw 'Fixture h5-mais40 (a mais nova da hora k=5) deveria ter sobrevivido.' }
+
+    foreach ($d in @(4..88)) {
+        if ($d -eq 10) { continue }
+        if (-not (Test-Path -LiteralPath $fixturesDia[$d])) { throw ('Fixture de dia d=' + $d + ' deveria ter sobrevivido.') }
+    }
+    if (Test-Path -LiteralPath $fixturesDia[10]) { throw 'Fixture d-10 (+12h) deveria ter sido removida (nao e a mais nova do dia).' }
+    if (Test-Path -LiteralPath $d10Mais2) { throw 'Fixture d10-mais2 deveria ter sido removida.' }
+    if (Test-Path -LiteralPath $d10Mais6) { throw 'Fixture d10-mais6 deveria ter sido removida.' }
+    if (-not (Test-Path -LiteralPath $d10Mais20)) { throw 'Fixture d10-mais20 (a mais nova do dia d=10) deveria ter sobrevivido.' }
+
+    foreach ($d in @(92..100)) {
+        if (Test-Path -LiteralPath $fixturesForaJanela[$d]) { throw ('Fixture de dia d=' + $d + ' deveria ter saido da janela de retencao.') }
+    }
+
+    if (-not (Test-Path -LiteralPath $fixtureFuturo)) { throw 'Fixture com data futura deveria ter permanecido.' }
+    if (-not (Test-Path -LiteralPath $protLeiaMe)) { throw 'leia-me.txt em data\backups nao pode ser removido pela rotacao.' }
+    if (-not (Test-Path -LiteralPath $protecaoSnapshotsDir -PathType Container)) { throw 'Pasta data\backups\snapshots nao pode ser afetada pela rotacao de backups.' }
+    if (-not (Test-Path -LiteralPath $protecaoLimparDir -PathType Container) -or -not (Test-Path -LiteralPath $protecaoFinalDir -PathType Container)) {
+        throw 'Snapshots de protecao do bloco PROT-01 nao podem ser afetados pela rotacao de backups.'
+    }
+
+    # Grupo 5 - configuracao: piso 48/90, chave antiga ignorada, teto configuravel
+    $instalacaoBase = Read-PmoJson (Join-Path $config 'install.json') $null
+
+    Set-ProtInstallRetention ([ordered]@{ versions=2; snapshots=3; portfolioBackups=30 })
+    $retSemChaves = (Invoke-LocalApi '/api/backups').Content | ConvertFrom-Json
+    if ([int]$retSemChaves.retencao.horasHorario -ne 48 -or [int]$retSemChaves.retencao.diasDiario -ne 90) {
+        throw 'Sem as chaves novas (so a chave antiga portfolioBackups), a retencao deveria ser 48/90.'
+    }
+
+    Set-ProtInstallRetention ([ordered]@{ versions=2; snapshots=3; portfolioBackupsHourlyHours=10; portfolioBackupsDailyDays=5 })
+    $retBaixo = (Invoke-LocalApi '/api/backups').Content | ConvertFrom-Json
+    if ([int]$retBaixo.retencao.horasHorario -ne 48 -or [int]$retBaixo.retencao.diasDiario -ne 90) {
+        throw 'Configuracao abaixo do piso (10/5) deveria ser elevada para 48/90.'
+    }
+
+    Set-ProtInstallRetention ([ordered]@{ versions=2; snapshots=3; portfolioBackupsHourlyHours=72; portfolioBackupsDailyDays=120 })
+    $retAlta = (Invoke-LocalApi '/api/backups').Content | ConvertFrom-Json
+    if ([int]$retAlta.retencao.horasHorario -ne 72 -or [int]$retAlta.retencao.diasDiario -ne 120) {
+        throw 'Configuracao 72/120 nao foi refletida em GET /api/backups.'
+    }
+    $fixtureConfig72 = New-ProtBackupFixture 'config-72' ($horaTruncada.AddHours(-60))
+    $portfolio.meta.salvoEm = (Get-Date).ToUniversalTime().ToString('o')
+    $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+    if (-not (Test-Path -LiteralPath $fixtureConfig72)) {
+        throw 'Fixture a 60h com janela de 72h deveria ter sobrevivido como balde por hora.'
+    }
+
+    Write-Host 'PROT-04 retencao por janela: OK' -ForegroundColor Green
+
     Write-Host 'Integracao do servidor, auth, snapshot, restore, rollback e app-ready: OK' -ForegroundColor Green
 } finally {
     if ($healthProcess -and -not $healthProcess.HasExited) { $healthProcess.Kill(); $healthProcess.WaitForExit(5000) | Out-Null }
