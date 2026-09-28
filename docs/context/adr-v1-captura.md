@@ -23,8 +23,8 @@ edições (a local não troca de runtime; o Node 24 LTS vale em dev, no CI e no 
 e a G4 passa a valer só para a edição local; G6, D-01/D-02 e D-10..D-12 também são reescritas para
 duas edições (local e corporativa) e o "fora do escopo" ganha os novos itens (D-27 a D-31, D-34).
 A G8 é reforçada com mínimos verificáveis de proteção de dado, e nasce a G14 para o registro de uso
-local (D-32, D-33). D-04, D-05 e D-08 são reancoradas como consequência da D-23, sem mudar de
-sentido (D-35).
+local (D-32, D-33). D-03, D-04, D-05 e D-08 são reancoradas como consequência da D-23, sem mudar
+de sentido (D-35).
 
 ## Origem das decisões
 
