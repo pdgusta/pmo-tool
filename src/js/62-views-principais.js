@@ -2020,12 +2020,7 @@
             'Excluir "' + (p.codigo || p.nome) + '" do portfólio? Os anexos permanecem no cofre. Esta ação pode ser desfeita com Ctrl+Z.')
             .then(function (ok) {
               if (!ok) { return; }
-              S.mutate('Excluir projeto', function (bb) {
-                bb.projetos = bb.projetos.filter(function (x) { return x.id !== id; });
-                bb.projetos.forEach(function (x) {
-                  x.dependencias = (x.dependencias || []).filter(function (dp) { return dp.projetoDestinoId !== id; });
-                });
-              }, { entidade: 'projeto', entidadeId: id, resumo: (p.codigo || p.nome) + ' excluído' }).then(function () {
+              S.excluirProjeto(id).then(function () {
                 PMO.app.fecharModal();
                 PMO.app.fecharDrawer();
                 U.toast('Projeto excluído.', 'ok', { acao: 'Desfazer', onAcao: function () { S.desfazer(); } });

@@ -177,21 +177,7 @@
       { perigo: true, ok: 'Excluir' }
     ).then(function (ok) {
       if (!ok) { return; }
-      return S.mutate('Excluir ' + d.rotulo.toLowerCase(), function (b) {
-        const p = b.projetos.find(function (x) { return x.id === projetoId; });
-        if (!p) { throw new Error('projeto não encontrado'); }
-        p[d.colecao] = (p[d.colecao] || []).filter(function (x) { return x.id !== itemId; });
-        // o anexo sobrevive, mas perde o vínculo com o registro que sumiu
-        (b.anexos || []).forEach(function (a) {
-          if (a.entidadeRef && a.entidadeRef.tipo === tipo && a.entidadeRef.id === itemId) {
-            a.entidadeRef = null;
-          }
-        });
-        p.atualizadoEm = U.agoraIso();
-      }, {
-        entidade: tipo, entidadeId: projetoId,
-        resumo: (projeto.codigo || projeto.nome) + ' — excluído: ' + rotuloItem
-      }).then(function () {
+      return S.excluirRegistro(tipo, projetoId, itemId).then(function () {
         PMO.app.fecharModal();
         U.toast(d.rotulo + ' excluído.', 'ok',
           { acao: 'Desfazer', onAcao: function () { S.desfazer().then(function () { reabrir(projetoId, tipo); }); } });
