@@ -18,11 +18,13 @@ simulada localmente na v1 (sem autenticação) e aplicada no servidor da v2 com 
 Entra (D-22). As Listas do SharePoint da PMO continuam a fonte dos dados operacionais; o app é
 fonte só do que é dele e não escreve nelas (D-20). Ficam congeladas até o ADR corporativo as
 antigas Fases 9, 11–15 e 17–18, a fila offline local e o servidor Node local, com o `node.exe`
-portátil saindo do congelamento como permitido, não usado (D-23). G3 e G4 passam a valer só para a
-edição local; G6, D-01/D-02 e D-10..D-12 são reescritas para duas edições (local e corporativa) e o
-"fora do escopo" ganha os novos itens (D-27 a D-31, D-34). A G8 é reforçada com mínimos
-verificáveis de proteção de dado, e nasce a G14 para o registro de uso local (D-32, D-33). D-04,
-D-05 e D-08 são reancoradas como consequência da D-23, sem mudar de sentido (D-35).
+portátil saindo do congelamento como permitido, não usado (D-23). A G3 passa a ser a regra das duas
+edições (a local não troca de runtime; o Node 24 LTS vale em dev, no CI e no servidor corporativo)
+e a G4 passa a valer só para a edição local; G6, D-01/D-02 e D-10..D-12 também são reescritas para
+duas edições (local e corporativa) e o "fora do escopo" ganha os novos itens (D-27 a D-31, D-34).
+A G8 é reforçada com mínimos verificáveis de proteção de dado, e nasce a G14 para o registro de uso
+local (D-32, D-33). D-04, D-05 e D-08 são reancoradas como consequência da D-23, sem mudar de
+sentido (D-35).
 
 ## Origem das decisões
 
