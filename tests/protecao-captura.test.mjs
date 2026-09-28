@@ -237,4 +237,156 @@ verificar('mesclarTrilha: bundle com auditLog e imports mesclados passa em M.mig
   assert.doesNotThrow(function () { M.migrar(mesclado); });
 });
 
+/* ================================================================ PROT-03
+   Exclusao logica (lixeira) de projeto e dos dez tipos de registro, e
+   restauracao com o mesmo conteudo (D-32 item 1, P-01, P-09, P-10, P-12,
+   P-13, P-24). Fixtures ficticias: base v4 (prj-v4/anx-v4.txt, ja migrada)
+   mais projetos e itens criados no proprio teste pelas fabricas de
+   CAMPOS_EDICAO. As entradas de auditLog sao montadas no proprio teste,
+   como o Store vai gravar (20-06): id, em, ator, acao, entidade, entidadeId,
+   resumo, payload e restauraDe nas restauracoes. */
+
+function auditEntrada(id, em, payload, extra) {
+  const base = {
+    id: id, em: em, ator: 'PMO Lead', acao: 'fixture-exclusao',
+    entidade: null, entidadeId: null, resumo: 'fixture', payload: payload || null
+  };
+  return Object.assign(base, extra || {});
+}
+
+/* ---------------------------------------------- Task 1: projeto (A-1) */
+
+verificar('[A-1] vermelho: filtrar o projeto sem desvincular os anexos quebra M.migrar (regressao)', function () {
+  const draft = M.migrar(fixture(4));
+  draft.projetos = draft.projetos.filter(function (p) { return p.id !== 'prj-v4'; });
+  // anx-v4.txt continua com projetoId: 'prj-v4' -> referencia orfa
+  assert.throws(function () { M.migrar(draft); }, function (err) {
+    return err && err.code === 'MIGRACAO_INVALIDA';
+  });
+});
+
+verificar('excluirProjeto: projeto some, anexo fica com projetoId/entidadeRef nulos, payload completo, M.migrar passa', function () {
+  const draft = M.migrar(fixture(4));
+  const projetoOriginal = clone(M.projetoPorId(draft, 'prj-v4'));
+
+  const payload = M.excluirProjeto(draft, 'prj-v4');
+
+  assert.strictEqual(M.projetoPorId(draft, 'prj-v4'), null, 'projeto deveria ter sido removido');
+  const anexo = draft.anexos.find(function (a) { return a.id === 'anx-v4.txt'; });
+  assert.strictEqual(anexo.projetoId, null, 'anexo deveria ficar sem projetoId');
+  assert.strictEqual(anexo.entidadeRef, null, 'anexo deveria ficar sem entidadeRef');
+
+  assert.strictEqual(payload.versao, 1);
+  assert.strictEqual(payload.tipo, 'projeto');
+  assert.strictEqual(payload.projetoId, 'prj-v4');
+  assert.strictEqual(payload.indice, 0);
+  assert.deepStrictEqual(payload.projeto, projetoOriginal, 'payload.projeto deveria ser identico ao original');
+  assert.deepStrictEqual(payload.anexosDesvinculados,
+    [{ anexoId: 'anx-v4.txt', projetoId: 'prj-v4', entidadeRef: null }]);
+  assert.deepStrictEqual(payload.dependenciasRemovidas, []);
+
+  assert.doesNotThrow(function () { M.migrar(draft); });
+});
+
+verificar('excluirProjeto: id inexistente lanca "projeto não encontrado" e nao muta o rascunho', function () {
+  const draft = M.migrar(fixture(4));
+  const antes = clone(draft);
+  assert.throws(function () { M.excluirProjeto(draft, 'prj-nao-existe'); }, /projeto não encontrado/);
+  assert.deepStrictEqual(draft, antes, 'o rascunho nao deveria ter sido mutado');
+});
+
+verificar('excluirProjeto: remove dependencias de outros projetos que apontavam para o excluido (payload guarda cada uma)', function () {
+  const draft = M.migrar(fixture(4));
+  const a = M.projetoVazio({ id: 'prj-a-teste', codigo: 'PRJ-A', nome: 'Projeto A' });
+  const b = M.projetoVazio({ id: 'prj-b-teste', codigo: 'PRJ-B', nome: 'Projeto B' });
+  const dep = M.dependenciaVazia({ id: 'dep-teste-1', projetoDestinoId: 'prj-a-teste', descricao: 'depende de A' });
+  b.dependencias.push(dep);
+  draft.projetos.push(a, b);
+
+  const payload = M.excluirProjeto(draft, 'prj-a-teste');
+
+  assert.deepStrictEqual(M.projetoPorId(draft, 'prj-b-teste').dependencias, [],
+    'a dependencia de B para A deveria ter sido removida');
+  assert.deepStrictEqual(payload.dependenciasRemovidas,
+    [{ projetoId: 'prj-b-teste', indice: 0, dependencia: dep }]);
+  assert.doesNotThrow(function () { M.migrar(draft); });
+});
+
+verificar('restaurarDaLixeira (projeto): volta na mesma posicao, deepStrictEqual ao original, refaz dependencia; sem avisos', function () {
+  const draft = M.migrar(fixture(4));
+  const a = M.projetoVazio({ id: 'prj-a2-teste', codigo: 'PRJ-A2', nome: 'Projeto A2' });
+  const b = M.projetoVazio({ id: 'prj-b2-teste', codigo: 'PRJ-B2', nome: 'Projeto B2' });
+  const dep = M.dependenciaVazia({ id: 'dep-teste-2', projetoDestinoId: 'prj-a2-teste', descricao: 'depende de A2' });
+  b.dependencias.push(dep);
+  draft.projetos.push(a, b);
+  const aOriginal = clone(a);
+
+  const payload = M.excluirProjeto(draft, 'prj-a2-teste');
+  draft.auditLog.push(auditEntrada('aud-teste-excl-a2', '2026-07-01T00:00:00.000Z', payload));
+
+  const resultado = M.restaurarDaLixeira(draft, 'aud-teste-excl-a2');
+
+  assert.strictEqual(resultado.tipo, 'projeto');
+  assert.strictEqual(resultado.entidade, 'projeto');
+  assert.strictEqual(resultado.entidadeId, 'prj-a2-teste');
+  assert.strictEqual(resultado.acao, 'Restaurar projeto');
+  assert.deepStrictEqual(resultado.avisos, []);
+  assert.deepStrictEqual(M.projetoPorId(draft, 'prj-a2-teste'), aOriginal);
+  assert.deepStrictEqual(M.projetoPorId(draft, 'prj-b2-teste').dependencias, [dep]);
+  assert.doesNotThrow(function () { M.migrar(draft); });
+});
+
+verificar('restaurarDaLixeira: entrada de exclusao nao encontrada lanca', function () {
+  const draft = M.migrar(fixture(4));
+  assert.throws(function () { M.restaurarDaLixeira(draft, 'aud-nao-existe'); },
+    /entrada de exclusão não encontrada/);
+});
+
+verificar('restaurarDaLixeira: payload com versao desconhecida lanca "formato de exclusão desconhecido"', function () {
+  const draft = M.migrar(fixture(4));
+  draft.auditLog.push(auditEntrada('aud-teste-versao2', '2026-07-02T00:00:00.000Z',
+    { versao: 2, tipo: 'projeto', projetoId: 'x' }));
+  assert.throws(function () { M.restaurarDaLixeira(draft, 'aud-teste-versao2'); },
+    /formato de exclusão desconhecido/);
+});
+
+verificar('restaurarDaLixeira: exclusao ja restaurada (entrada com restauraDe) lanca "esta exclusão já foi restaurada"', function () {
+  const draft = M.migrar(fixture(4));
+  const payload = M.excluirProjeto(draft, 'prj-v4');
+  draft.auditLog.push(auditEntrada('aud-teste-excl-v4b', '2026-07-03T00:00:00.000Z', payload));
+  draft.auditLog.push(auditEntrada('aud-teste-rest-v4b', '2026-07-04T00:00:00.000Z', null,
+    { restauraDe: 'aud-teste-excl-v4b' }));
+  assert.throws(function () { M.restaurarDaLixeira(draft, 'aud-teste-excl-v4b'); },
+    /esta exclusão já foi restaurada/);
+});
+
+verificar('restaurarDaLixeira: id de projeto ja existente no rascunho lanca', function () {
+  const draft = M.migrar(fixture(4));
+  const payload = M.excluirProjeto(draft, 'prj-v4');
+  draft.auditLog.push(auditEntrada('aud-teste-excl-dup', '2026-07-05T00:00:00.000Z', payload));
+  // simula outro projeto criado com o mesmo id enquanto o original estava na lixeira
+  draft.projetos.push(M.projetoVazio({ id: 'prj-v4', codigo: 'PRJ-DUP' }));
+  assert.throws(function () { M.restaurarDaLixeira(draft, 'aud-teste-excl-dup'); });
+});
+
+verificar('restaurarDaLixeira: programa removido depois da exclusao volta com programaId null e um aviso', function () {
+  const draft = M.migrar(fixture(4));
+  draft.programas.push({
+    id: 'prg-teste-1', codigo: 'PRG-1', nome: 'Programa fictício', objetivo: '',
+    sponsorId: null, donoId: null, driverIds: [], status: 'ativo'
+  });
+  const p = M.projetoVazio({ id: 'prj-c-teste', codigo: 'PRJ-C', nome: 'Projeto C', programaId: 'prg-teste-1' });
+  draft.projetos.push(p);
+
+  const payload = M.excluirProjeto(draft, 'prj-c-teste');
+  // programa removido enquanto o projeto estava na lixeira
+  draft.programas = draft.programas.filter(function (x) { return x.id !== 'prg-teste-1'; });
+  draft.auditLog.push(auditEntrada('aud-teste-excl-c', '2026-07-06T00:00:00.000Z', payload));
+
+  const resultado = M.restaurarDaLixeira(draft, 'aud-teste-excl-c');
+  assert.strictEqual(M.projetoPorId(draft, 'prj-c-teste').programaId, null);
+  assert.strictEqual(resultado.avisos.length, 1);
+  assert.doesNotThrow(function () { M.migrar(draft); });
+});
+
 console.log('protecao-captura: OK (' + n + ' verificacoes)');
