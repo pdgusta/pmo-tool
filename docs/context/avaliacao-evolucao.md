@@ -814,8 +814,10 @@ Reancorada por D-35 em 27/09/2026.
 
 **Status:** Ratificada em 27/09/2026
 
-**Em linguagem simples:** a regra antiga vale só para a porta de entrada; o resto da casa pode
-usar a ferramenta nova, mas ninguém se muda sem uma fase que justifique a mudança.
+**Em linguagem simples:** a regra antiga deixa de valer para a oficina (o repositório), que já pode
+usar a ferramenta nova; na edição local, a porta de entrada e o motor lá dentro (o servidor
+`serve.ps1` e o updater) continuam os mesmos, em PowerShell 5.1, e só a edição corporativa (v2)
+troca de motor; nenhuma instalação recebe a ferramenta nova sem uma fase que justifique a mudança.
 
 **Decisão:** A G3 ("PS 5.1, sem Node") **deixa de valer imediatamente** ao ratificar. Node passa
 a ser permitido em qualquer parte do repositório. A G3 em vigor é a de duas edições (D-27): nenhuma
