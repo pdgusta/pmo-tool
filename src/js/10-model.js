@@ -755,6 +755,55 @@
     );
   };
 
+  /**
+   * União por id de duas trilhas (auditLog ou imports), usada por "Substituir
+   * portfólio por bundle importado" (PROT-02, D-32 item 2, P-08): em id
+   * repetido nos dois lados, vale a entrada local e a do arquivo é descartada
+   * e contada em ignoradasPorIdRepetido; ids sem correspondência no lado local
+   * entram e contam em adicionadas. Ordena o resultado por 'em' crescente
+   * (texto ISO; ausente conta como texto vazio, fica no início); em empate,
+   * local antes do arquivo, preservando a ordem original de cada lado — usa a
+   * posição original como critério de desempate, sem depender de ordenação
+   * estável do motor JS. Nunca muta os argumentos; o resultado é feito de
+   * clones profundos.
+   */
+  model.mesclarTrilha = function (local, doArquivo) {
+    const loc = Array.isArray(local) ? local : [];
+    const arq = Array.isArray(doArquivo) ? doArquivo : [];
+    const idsLocais = Object.create(null);
+    loc.forEach(function (item) {
+      if (item && item.id !== undefined && item.id !== null) { idsLocais[item.id] = true; }
+    });
+    let adicionadas = 0;
+    let ignoradasPorIdRepetido = 0;
+    const combinada = [];
+    loc.forEach(function (item, i) {
+      combinada.push({ entrada: U.clonar(item), origem: 0, posicao: i });
+    });
+    arq.forEach(function (item, i) {
+      const id = item && item.id;
+      if (id !== undefined && id !== null && idsLocais[id]) {
+        ignoradasPorIdRepetido += 1;
+        return;
+      }
+      adicionadas += 1;
+      combinada.push({ entrada: U.clonar(item), origem: 1, posicao: i });
+    });
+    combinada.sort(function (a, b) {
+      const emA = String((a.entrada && a.entrada.em) || '');
+      const emB = String((b.entrada && b.entrada.em) || '');
+      if (emA < emB) { return -1; }
+      if (emA > emB) { return 1; }
+      if (a.origem !== b.origem) { return a.origem - b.origem; }
+      return a.posicao - b.posicao;
+    });
+    return {
+      lista: combinada.map(function (x) { return x.entrada; }),
+      adicionadas: adicionadas,
+      ignoradasPorIdRepetido: ignoradasPorIdRepetido
+    };
+  };
+
   /* ==================================================== campos editáveis
      Descreve, por tipo de registro, o que o editor genérico deve renderizar.
      É a única fonte de verdade do formulário: acrescentar um campo aqui o faz

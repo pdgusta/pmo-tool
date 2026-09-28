@@ -112,4 +112,129 @@ verificar('temDadoAProteger: só um anexo -> verdadeiro', function () {
   assert.strictEqual(M.temDadoAProteger(b), true);
 });
 
+/* ============================================================ mesclarTrilha
+   PROT-02 (D-32 item 2, P-08): funcao pura de uniao por id de duas trilhas
+   (auditLog ou imports), usada por "Substituir portfolio por bundle
+   importado". Fixtures ficticias com ids no formato aud-teste-N / imp-teste-N. */
+
+function entradaAud(id, em, extra) {
+  const base = { id: id, ator: 'PMO Lead', acao: 'fixture', entidade: null,
+    entidadeId: null, resumo: 'evento fictício ' + id, campos: null };
+  if (em !== undefined) { base.em = em; }
+  return Object.assign(base, extra || {});
+}
+
+function entradaImp(id, em, extra) {
+  const base = { id: id, kind: 'fixture', fileName: 'fixture-' + id + '.json',
+    resumo: 'import fictício ' + id };
+  if (em !== undefined) { base.em = em; }
+  return Object.assign(base, extra || {});
+}
+
+verificar('mesclarTrilha: dois lados vazios -> lista vazia, contadores zero', function () {
+  const r = M.mesclarTrilha([], []);
+  assert.deepStrictEqual(r, { lista: [], adicionadas: 0, ignoradasPorIdRepetido: 0 });
+});
+
+verificar('mesclarTrilha: dois lados nao-array -> lista vazia, contadores zero', function () {
+  const r = M.mesclarTrilha(null, undefined);
+  assert.deepStrictEqual(r, { lista: [], adicionadas: 0, ignoradasPorIdRepetido: 0 });
+});
+
+verificar('mesclarTrilha: so local -> resultado igual ao local', function () {
+  const local = [
+    entradaAud('aud-teste-1', '2026-01-01T00:00:00.000Z'),
+    entradaAud('aud-teste-2', '2026-01-02T00:00:00.000Z')
+  ];
+  const r = M.mesclarTrilha(local, []);
+  assert.deepStrictEqual(r.lista, local);
+  assert.strictEqual(r.adicionadas, 0);
+  assert.strictEqual(r.ignoradasPorIdRepetido, 0);
+});
+
+verificar('mesclarTrilha: so arquivo -> resultado igual ao arquivo, ordenado por em', function () {
+  const doArquivo = [
+    entradaImp('imp-teste-2', '2026-02-02T00:00:00.000Z'),
+    entradaImp('imp-teste-1', '2026-02-01T00:00:00.000Z')
+  ];
+  const r = M.mesclarTrilha([], doArquivo);
+  assert.deepStrictEqual(r.lista, [doArquivo[1], doArquivo[0]]);
+  assert.strictEqual(r.adicionadas, 2);
+  assert.strictEqual(r.ignoradasPorIdRepetido, 0);
+});
+
+verificar('mesclarTrilha: ids disjuntos -> tamanho = soma, entrada local identica', function () {
+  const local = [entradaAud('aud-teste-3', '2026-01-03T00:00:00.000Z')];
+  const doArquivo = [entradaAud('aud-teste-4', '2026-01-04T00:00:00.000Z')];
+  const r = M.mesclarTrilha(local, doArquivo);
+  assert.strictEqual(r.lista.length, 2);
+  const localNoResultado = r.lista.find(function (x) { return x.id === 'aud-teste-3'; });
+  assert.deepStrictEqual(localNoResultado, local[0]);
+  assert.strictEqual(r.adicionadas, 1);
+  assert.strictEqual(r.ignoradasPorIdRepetido, 0);
+});
+
+verificar('mesclarTrilha: mesmo id nos dois lados -> vale a local, ignorada contada', function () {
+  const local = [entradaAud('aud-teste-5', '2026-01-05T00:00:00.000Z', { resumo: 'versao local' })];
+  const doArquivo = [entradaAud('aud-teste-5', '2026-01-05T00:00:00.000Z', { resumo: 'versao do arquivo' })];
+  const r = M.mesclarTrilha(local, doArquivo);
+  assert.strictEqual(r.lista.length, 1);
+  assert.strictEqual(r.lista[0].resumo, 'versao local');
+  assert.strictEqual(r.adicionadas, 0);
+  assert.strictEqual(r.ignoradasPorIdRepetido, 1);
+});
+
+verificar('mesclarTrilha: ordena por em crescente; empate mantem local antes do arquivo e a ordem original; em ausente vai para o inicio', function () {
+  const local = [
+    entradaAud('aud-teste-6', '2026-03-01T00:00:00.000Z'),
+    entradaAud('aud-teste-7', '2026-03-01T00:00:00.000Z')
+  ];
+  const doArquivo = [
+    entradaAud('aud-teste-8', '2026-03-01T00:00:00.000Z'),
+    entradaAud('aud-teste-9', '2026-01-01T00:00:00.000Z'),
+    entradaAud('aud-teste-10')
+  ];
+  const r = M.mesclarTrilha(local, doArquivo);
+  assert.deepStrictEqual(r.lista.map(function (x) { return x.id; }),
+    ['aud-teste-10', 'aud-teste-9', 'aud-teste-6', 'aud-teste-7', 'aud-teste-8']);
+});
+
+verificar('mesclarTrilha: nao muta as entradas de entrada; o resultado e feito de clones', function () {
+  const local = [entradaAud('aud-teste-11', '2026-04-01T00:00:00.000Z')];
+  const doArquivo = [entradaAud('aud-teste-12', '2026-04-02T00:00:00.000Z')];
+  const localAntes = clone(local);
+  const arquivoAntes = clone(doArquivo);
+  const r = M.mesclarTrilha(local, doArquivo);
+  assert.deepStrictEqual(local, localAntes, 'local foi mutado por mesclarTrilha');
+  assert.deepStrictEqual(doArquivo, arquivoAntes, 'doArquivo foi mutado por mesclarTrilha');
+  assert.strictEqual(r.lista[0].id, 'aud-teste-11');
+  r.lista[0].resumo = 'mudou depois da mescla';
+  assert.notStrictEqual(local[0].resumo, 'mudou depois da mescla');
+  assert.strictEqual(r.lista[1].id, 'aud-teste-12');
+  r.lista[1].resumo = 'mudou depois da mescla';
+  assert.notStrictEqual(doArquivo[0].resumo, 'mudou depois da mescla');
+});
+
+verificar('mesclarTrilha: mesclar o resultado com o mesmo arquivo de novo nao muda nada (idempotencia por id)', function () {
+  const local = [entradaAud('aud-teste-13', '2026-05-01T00:00:00.000Z')];
+  const doArquivo = [entradaAud('aud-teste-14', '2026-05-02T00:00:00.000Z')];
+  const primeira = M.mesclarTrilha(local, doArquivo);
+  const segunda = M.mesclarTrilha(primeira.lista, doArquivo);
+  assert.deepStrictEqual(segunda.lista, primeira.lista);
+  assert.strictEqual(segunda.adicionadas, 0);
+  assert.strictEqual(segunda.ignoradasPorIdRepetido, doArquivo.length);
+});
+
+verificar('mesclarTrilha: bundle com auditLog e imports mesclados passa em M.migrar', function () {
+  const bundleLocal = M.migrar(fixture(4));
+  const auditDoArquivo = [entradaAud('aud-teste-15', '2026-06-01T00:00:00.000Z')];
+  const importsDoArquivo = [entradaImp('imp-teste-15', '2026-06-01T00:00:00.000Z')];
+  const resAud = M.mesclarTrilha(bundleLocal.auditLog, auditDoArquivo);
+  const resImp = M.mesclarTrilha(bundleLocal.imports, importsDoArquivo);
+  const mesclado = clone(bundleLocal);
+  mesclado.auditLog = resAud.lista;
+  mesclado.imports = resImp.lista;
+  assert.doesNotThrow(function () { M.migrar(mesclado); });
+});
+
 console.log('protecao-captura: OK (' + n + ' verificacoes)');
