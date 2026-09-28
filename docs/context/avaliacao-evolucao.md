@@ -29,8 +29,9 @@ mãos, o dono do projeto ratificou em 27/09/2026 (D-14, este L1 novo é o regist
 ponte stdio). As guardrails do CLAUDE.md foram reescritas de acordo: a G1 (HTML único) continua
 valendo em toda a v1, com revisão no ADR corporativo (D-35); a G2 passa de "zero
 dependências" para uma lista permitida com licença verificada item a item; a G3 troca "sem Node"
-por Node 24 LTS portátil dentro da release, com PowerShell 5.1 restrito aos três scripts de
-entrada; e a G6 troca a antiga proibição de integração Microsoft por login delegado da PMO, sem
+pela regra das duas edições — Node 24 LTS em dev, no CI e na edição corporativa (v2) e, na
+edição local, entrada, servidor (`serve.ps1`) e updater em PowerShell 5.1, sem troca de runtime
+(D-27); e a G6 troca a antiga proibição de integração Microsoft por login delegado da PMO, sem
 chave própria do app. As divergências conhecidas entre código e CLAUDE.md (D-17) foram corrigidas
 já nesta fase quando o custo era baixo — o contrato real de `reconciliar()` e a lista completa de
 rotas administrativas — e as demais (pino de Node do CI, o SKILL.md do app, a proibição de ESM, a
