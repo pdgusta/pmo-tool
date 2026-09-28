@@ -64,7 +64,7 @@ function New-TestInstall([string]$Name) {
     $runtime140 = New-TestRuntime $base '1.4.0' 3 1 3
     Write-PmoJsonAtomic (Join-Path $base 'config\install.json') ([ordered]@{
         formatVersion=1; repository=''; channel='stable'; port=8090; checkIntervalHours=24
-        dataDir='data'; configDir='config'; stateDir='state'; retention=[ordered]@{versions=2;snapshots=3;portfolioBackups=30}
+        dataDir='data'; configDir='config'; stateDir='state'; retention=[ordered]@{versions=2;snapshots=3;portfolioBackupsHourlyHours=48;portfolioBackupsDailyDays=90}
     })
     Write-PmoJsonAtomic (Join-Path $base 'state\active.json') ([ordered]@{
         formatVersion=1; bootstrapVersion='1.0.0'; activeVersion='1.4.1'; previousVersion='1.4.0'

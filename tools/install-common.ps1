@@ -195,7 +195,7 @@ function Install-PmoPortableFromPackages {
         $install = [ordered]@{
             formatVersion=1; repository=$Repositorio; channel='stable'; port=8090; checkIntervalHours=24
             dataDir='data'; configDir='config'; stateDir='state'
-            retention=[ordered]@{ versions=2; snapshots=3; portfolioBackups=30 }
+            retention=[ordered]@{ versions=2; snapshots=3; portfolioBackupsHourlyHours=48; portfolioBackupsDailyDays=90 }
         }
         Write-PmoJsonAtomic (Join-Path $stagingFull 'config\install.json') $install
         Write-PmoJsonAtomic (Join-Path $stagingFull 'state\active.json') ([ordered]@{

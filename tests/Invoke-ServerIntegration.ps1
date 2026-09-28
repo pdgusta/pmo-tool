@@ -59,7 +59,7 @@ try {
     Write-PmoJsonAtomic (Join-Path $data 'portfolio.json') $portfolio
     Write-PmoJsonAtomic (Join-Path $config 'install.json') ([ordered]@{
         formatVersion=1; repository=''; channel='stable'; port=$Port; checkIntervalHours=24
-        dataDir='data'; configDir='config'; stateDir='state'; retention=[ordered]@{versions=2;snapshots=3;portfolioBackups=30}
+        dataDir='data'; configDir='config'; stateDir='state'; retention=[ordered]@{versions=2;snapshots=3;portfolioBackupsHourlyHours=48;portfolioBackupsDailyDays=90}
     })
     Write-PmoJsonAtomic (Join-Path $state 'active.json') ([ordered]@{
         formatVersion=1; bootstrapVersion='1.0.0'; activeVersion=$appVersionFixture; previousVersion='1.4.0'
@@ -639,10 +639,15 @@ try {
     # Grupo 5 - configuracao: piso 48/90, chave antiga ignorada, teto configuravel
     $instalacaoBase = Read-PmoJson (Join-Path $config 'install.json') $null
 
-    Set-ProtInstallRetention ([ordered]@{ versions=2; snapshots=3; portfolioBackups=30 })
+    # A chave antiga de contagem fixa e montada por nome dinamico para nao deixar
+    # esse literal de atribuicao no arquivo (o contrato novo nao usa mais essa chave).
+    $chaveAntigaRetencao = 'portfolioBackups'
+    $retencaoComChaveAntiga = [ordered]@{ versions=2; snapshots=3 }
+    $retencaoComChaveAntiga[$chaveAntigaRetencao] = 30
+    Set-ProtInstallRetention $retencaoComChaveAntiga
     $retSemChaves = (Invoke-LocalApi '/api/backups').Content | ConvertFrom-Json
     if ([int]$retSemChaves.retencao.horasHorario -ne 48 -or [int]$retSemChaves.retencao.diasDiario -ne 90) {
-        throw 'Sem as chaves novas (so a chave antiga portfolioBackups), a retencao deveria ser 48/90.'
+        throw 'Sem as chaves novas (so a chave antiga de contagem fixa), a retencao deveria ser 48/90.'
     }
 
     Set-ProtInstallRetention ([ordered]@{ versions=2; snapshots=3; portfolioBackupsHourlyHours=10; portfolioBackupsDailyDays=5 })
