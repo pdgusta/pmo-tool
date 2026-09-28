@@ -852,6 +852,75 @@
     return { dispensado: false, snapshotId: resposta.snapshotId, manifest: resposta.manifest };
   }
 
+  /* ==================================================== lixeira (PROT-03) */
+
+  /**
+   * Exclusão lógica de um projeto inteiro (PROT-03, P-09, P-10, D-32 item 1).
+   * Passa pela porta única de mutação (G8): `M.excluirProjeto` guarda tudo o
+   * que a exclusão muda no `payload` da entrada de audit, que
+   * `registrarAudit` clona depois que `fn` roda dentro de `store.mutate`.
+   */
+  store.excluirProjeto = async function (projetoId) {
+    exigirEscrita();
+    const projeto = store.state.projetos.find(function (p) { return p && p.id === projetoId; });
+    if (!projeto) { return { ok: false, erro: 'projeto não encontrado' }; }
+    const meta = {
+      entidade: 'projeto', entidadeId: projetoId,
+      resumo: (projeto.codigo || projeto.nome) + ' excluído'
+    };
+    return store.mutate('Excluir projeto', function (d) {
+      meta.payload = M.excluirProjeto(d, projetoId);
+    }, meta);
+  };
+
+  /**
+   * Exclusão lógica de um registro dos dez tipos de `M.CAMPOS_EDICAO`
+   * (PROT-03, P-09). Mesmo padrão de `store.excluirProjeto`.
+   */
+  store.excluirRegistro = async function (tipo, projetoId, itemId) {
+    exigirEscrita();
+    const def = M.CAMPOS_EDICAO[tipo];
+    if (!def) { return { ok: false, erro: 'tipo de registro desconhecido: ' + tipo }; }
+    const projeto = store.state.projetos.find(function (p) { return p && p.id === projetoId; });
+    if (!projeto) { return { ok: false, erro: 'projeto não encontrado' }; }
+    const item = (projeto[def.colecao] || []).find(function (x) { return x && x.id === itemId; });
+    if (!item) { return { ok: false, erro: def.rotulo.toLowerCase() + ' não encontrado(a)' }; }
+    const titulo = item[def.campoTitulo] ? String(item[def.campoTitulo]) : def.rotulo;
+    const meta = {
+      entidade: tipo, entidadeId: projetoId,
+      resumo: (projeto.codigo || projeto.nome) + ' — excluído: ' + titulo
+    };
+    return store.mutate('Excluir ' + def.rotulo.toLowerCase(), function (d) {
+      meta.payload = M.excluirRegistro(d, tipo, projetoId, itemId);
+    }, meta);
+  };
+
+  /** Leitura pura da lixeira (PROT-03): devolve `M.lixeira(store.state)`. */
+  store.lixeira = function () {
+    return M.lixeira(store.state);
+  };
+
+  /**
+   * Restaura uma exclusão lógica pelo id da entrada de auditLog (PROT-03,
+   * P-13). Passa por `store.mutate`, então a restauração também vira uma
+   * entrada nova na trilha (com `restauraDe`), sem tocar na entrada original.
+   */
+  store.restaurarDaLixeira = async function (auditId) {
+    exigirEscrita();
+    const item = M.lixeira(store.state).find(function (x) { return x.auditId === auditId; });
+    if (!item) { return { ok: false, erro: 'item não está na lixeira' }; }
+    const acao = item.tipo === 'projeto' ? 'Restaurar projeto' : 'Restaurar ' + item.rotulo.toLowerCase();
+    const meta = { entidade: item.tipo, entidadeId: item.projetoId, resumo: '', restauraDe: auditId };
+    let avisos = [];
+    const r = await store.mutate(acao, function (d) {
+      const resultado = M.restaurarDaLixeira(d, auditId);
+      meta.resumo = resultado.resumo;
+      avisos = resultado.avisos || [];
+    }, meta);
+    if (!r.ok) { return { ok: false, erro: r.erro }; }
+    return { ok: true, avisos: avisos };
+  };
+
   store.limparTudo = async function () {
     exigirEscrita();
     try {
