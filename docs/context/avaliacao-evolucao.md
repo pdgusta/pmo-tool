@@ -822,9 +822,12 @@ instalação real recebe o runtime Node enquanto nenhuma fase justificar o empac
 `node.exe`, e a edição local não troca de runtime; a regra de PS 5.1 continua valendo para os três
 scripts de D-03 e, na edição local, também para o servidor e o updater.
 
-**Justificativa:** G12 (bootstrap estável) e os journals do updater exigem que a transição de
-runtime seja testada antes de qualquer instalação real receber o Node — o mesmo rigor que hoje
-protege trocas de versão de código.
+**Justificativa:** G12 (bootstrap estável) e os journals do updater exigem que o empacotamento
+do `node.exe` seja validado antes de qualquer instalação real recebê-lo — versão e SHA-256 no
+`release.json` e na allowlist do ZIP e rollback trocando o Node junto com o código (D-02), com o
+mesmo rigor que hoje protege trocas de versão de código; essa validação continua valendo para a
+fase que justificar o `node.exe`. O ensaio de troca de runtime local deixou de ser condição: a
+edição local não troca de runtime, e a migração é local → nuvem pelo bundle JSON (D-27).
 
 **Efeito nas fases seguintes:** Node passa a ser permitido em qualquer parte do repositório a
 partir de agora, mas a G3 em vigor é a de duas edições (D-27): nenhuma instalação real recebe o
