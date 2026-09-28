@@ -49,6 +49,56 @@ pin e o inventário. Incompatibilidade de schema encerra a operação sem altera
 Mantenha o modo de manutenção e siga o runbook de incidente. Não experimente múltiplos snapshots
 na instalação original.
 
+### D — Restaurar um snapshot de proteção (Limpar/Substituir)
+
+O snapshot de proteção (Fase 20, premissa P-04) não é o snapshot de update: fica em
+`data/backups/snapshots/<snapshotId>/`, criado antes de "Limpar portfólio" ou "Substituir
+portfólio por bundle importado". Contenha e preserve como na seção 1.
+
+1. Localize o `snapshotId` na entrada de audit da própria operação ("Limpar portfólio" ou
+   "Substituir portfólio por bundle importado" registram o campo `snapshotId`).
+2. Confira a pasta com `Test-PmoInventory` contra `manifest.json` antes de mexer em qualquer coisa.
+3. Copie a pasta inteira para `data/update-backups/<snapshotId>/` com `Copy-PmoDirectoryDurable` —
+   o restaurador atual só lê snapshots de `data/update-backups/`; o caminho é manual nesta fase.
+4. Rode:
+
+```powershell
+.\pmo.ps1 -RestaurarSnapshot <snapshotId>
+```
+
+5. Compare `snapshotId`, contagens (`manifest.json.contagens`) e SHA-256 de cada arquivo
+   (`manifest.json.files`) com o que a restauração produziu — os mesmos critérios da seção 3.
+
+### E — Recuperar item excluído (lixeira)
+
+Pela tela da lixeira quando ela existir (Fase 20, wave de UI). Até lá, pelo console do navegador
+com a instalação aberta:
+
+```js
+PMO.store.lixeira()
+PMO.store.restaurarDaLixeira('<auditId>')
+```
+
+`lixeira()` lista os itens (projeto ou registro), já marcando quais são restauráveis e o motivo
+quando não forem. `restaurarDaLixeira` acrescenta uma entrada nova na trilha (`restauraDe`) sem
+tocar na exclusão original.
+
+### F — Conferir uma cópia verificável
+
+A cópia verificável fica na pasta que a PMO escolheu, em `pmo-copia-<data>-<id>/` — é um artefato
+de backup, não sincronização da instalação (G11); não a use para "restaurar" a instalação em uso.
+Até a tela existir (Fase 20, wave de UI), pelo console:
+
+```js
+PMO.store.conferirCopiaVerificavel('<pasta pmo-copia-...>')
+```
+
+Interpretação das mensagens: `ok: true` com `erros` vazio é cópia intacta; `hash divergente:
+<arquivo>` é arquivo alterado desde a exportação; `arquivo ausente: <arquivo>` é arquivo faltando
+na cópia; `arquivo fisico nao declarado: <arquivo>` é arquivo a mais que o manifesto não previa;
+"manifesto diferente do registrado..." é o `manifest.json` da pasta divergindo do SHA-256 gravado
+no `auditLog` na exportação.
+
 ## 3. Verificar
 
 Após o updater encerrar, reabra por `pmo.ps1`. Quando houve restauração de dados, aguarde o Store

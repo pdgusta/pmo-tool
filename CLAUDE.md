@@ -127,9 +127,16 @@ verificáveis:
   da máquina — um artefato de backup, não sincronização de instalação (a G11 continua valendo);
 - itens removidos na origem são detectados e sinalizados, nunca apagados em silêncio.
 
-**Alvo:** o código atual ainda não atende a esses mínimos; eles entram na Fase 20 (proteção da
-captura) e, para os itens removidos na origem, na Fase 23. As janelas concretas de retenção vivem
-no ADR (`docs/context/adr-v1-captura.md`, D-32).
+**Atual (Fase 20):** os mínimos 1 a 4 valem. Exclusão lógica (tombstone) cobre projetos e
+registros, com lixeira derivada da trilha. "Limpar" e "Substituir" só rodam depois de um snapshot
+de proteção verificado, sem perder nenhuma entrada de `auditLog` nem de `imports`. Os backups
+rotativos são retidos por janela de tempo. A PMO exporta uma cópia verificável (manifesto
+SHA-256) para um destino que ela escolhe, fora da máquina. A remoção de anexo no cofre continua
+fora da lixeira, mas é sempre uma exclusão definitiva com confirmação explícita, registrada no
+`auditLog` (premissa P-11, decisão do dono T-024). As janelas concretas de retenção vivem no L1
+`docs/context/persistencia-hibrida.md` e em `config/install.json`.
+
+**Alvo:** o item 5 (itens removidos na origem, detectados e sinalizados) entra na Fase 23.
 
 ### G9 — Funciona offline e com dados vazios
 Abrir sem servidor (`file://`) deve funcionar em modo somente-IndexedDB com aviso, mas esse modo é
@@ -260,6 +267,7 @@ PMO-Tool/
     portfolio.json
     attachments/
     backups/
+      snapshots/<snapshot-id>/
     update-backups/<snapshot-id>/
     user-templates/
   staging/
@@ -299,9 +307,10 @@ cabeçalho `Host` igual a `localhost:<porta>`. Nas rotas operacionais abaixo, o 
 sessão (cabeçalho `X-PMO-Admin-Token`) é exigido assim:
 
 - `GET /api/health`, `/api/update/check` e `/api/update/status`: somente loopback, sem token;
-- `GET /api/restore-pending`: loopback e token;
+- `GET /api/restore-pending` e `GET /api/copia-verificavel/sugestoes`: loopback e token;
 - `POST /api/update/prepare`, `/api/update/apply`, `/api/update/cancel`, `/api/rollback/apply`,
-  `/api/restore/apply`, `/api/restore-ack` e `/api/app-ready`: loopback e token.
+  `/api/restore/apply`, `/api/restore-ack`, `/api/app-ready`, `/api/protecao/snapshot`,
+  `/api/copia-verificavel/exportar` e `/api/copia-verificavel/conferir`: loopback e token.
 
 O preflight materializa o estado do IndexedDB no disco, verifica todos os anexos, cria snapshot
 com manifesto SHA-256 e entra em manutenção. O updater só então baixa para `staging/`, valida,
@@ -361,6 +370,14 @@ migrar(bundle)                     -> atalho idempotente; nunca muta o argumento
 prepararSomenteLeitura(bundle)     -> visão inspecionável sem rebaixar schema futuro
 validar(bundle)                    -> {ok, erros:[], avisos:[]}
 
+bundleAposLimpeza(bundle)          -> bundle vazio com auditLog/imports preservados (clones)
+temDadoAProteger(bundle)           -> bool (projetos/programas/pessoas/anexos/visoesSalvas)
+mesclarTrilha(local, doArquivo)    -> {lista, adicionadas, ignoradasPorIdRepetido}
+excluirProjeto(draft, id)          -> payload v1 (projeto, dependências e anexos desfeitos)
+excluirRegistro(draft, tipo, projetoId, itemId) -> payload v1 (item e anexos desfeitos)
+lixeira(bundle)                    -> [{auditId, tipo, ..., restauravel, motivo}]
+restaurarDaLixeira(draft, auditId) -> {tipo, entidade, entidadeId, acao, rotulo, resumo, avisos}
+
 evm(projeto, dataDate?)            -> {BAC,PV,EV,AC,SV,CV,SPI,CPI,EAC,ETC,VAC,TCPI,
                                        pctPlanejado,pctFisico,desvioDias}
 saudeProjeto(projeto)              -> {rag, score, motivos:[]}   rag: verde|ambar|vermelho|azul|cinza
@@ -377,18 +394,33 @@ await init()                       -> abre IndexedDB, carrega disco se disponív
 state                             -> bundle em memória (LEITURA apenas)
 await mutate(acao, fn)             -> fn(draft); persiste; grava audit; emite 'change'
 await salvarAgora(opts?)           -> flush; {forcarDisco:true} não muda a preferência
-await importarBundle(bundle, modo) -> modo: 'substituir'|'mesclar'
+await importarBundle(bundle, modo) -> modo 'substituir': snapshot de proteção verificado + mescla
+                                       auditLog/imports por id (local prevalece); modo 'mesclar'
+                                       sem mudança
+await limparTudo()                 -> snapshot de proteção verificado, depois zera preservando
+                                       auditLog/imports; {ok, snapshotId, dispensado}
+await excluirProjeto(id)           -> exclusão lógica (lixeira); {ok,...} ou {ok:false, erro}
+await excluirRegistro(tipo, projetoId, itemId) -> exclusão lógica de registro; mesmo formato
+lixeira()                          -> M.lixeira(state)
+await restaurarDaLixeira(auditId)  -> {ok:true, avisos:[]} ou {ok:false, erro}
+await exportarCopiaVerificavel(destino) -> {ok, copyId, pasta, arquivos, bytes, manifestSha256}
+await conferirCopiaVerificavel(pasta)   -> {ok, copyId, pasta, conferidoEm, arquivos, erros:[],
+                                            avisos:[]}
+listarCopiasVerificaveis()         -> entradas da trilha com `copia`, mais recentes primeiro
+await consultarBackups()           -> {itens, retencao:{horasHorario, diasDiario}}
+await sugerirDestinosCopia()       -> {destinos:[], ultimoDestino}
 await anexoAdicionar(File, meta)   -> {id,...}   grava blob em IDB (+ disco se online)
 await anexoObter(id)               -> {meta, blob}
-await anexoRemover(id)
+await anexoRemover(id, opts)       -> exige {confirmado:true}; sem isso recusa sem mudar nada
 await anexoUrl(id)                 -> objectURL (revogar depois)
 await inventariarAnexos(opts?)      -> materializa/verifica tamanho e SHA-256
 await prepararAtualizacao()         -> preflight + snapshot + modo manutenção
 await consultarAtualizacao()        -> release estável configurada
 await aplicarAtualizacao()          -> handoff do snapshot selado ao updater
 await sairModoManutencao()
-on(evento, fn) / off(evento, fn)   -> eventos: 'change','status','erro'
+on(evento, fn) / off(evento, fn)   -> eventos: 'change','status','erro','protecao-status'
 statusDisco                        -> {online:bool, ultimoSalvo, erro}
+statusProtecao                     -> {operacao, fase, erro, snapshotId}
 ```
 
 ### `PMO.importar` (30-39)
