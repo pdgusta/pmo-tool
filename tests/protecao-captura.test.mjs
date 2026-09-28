@@ -400,8 +400,8 @@ TIPOS_REGISTRO_PROT03.forEach(function (tipo) {
   verificar('excluirRegistro/restaurarDaLixeira round-trip para o tipo "' + tipo + '"', function () {
     const draft = M.migrar(fixture(4));
     const def = M.CAMPOS_EDICAO[tipo];
-    const destino = M.projetoVazio({ id: 'prj-destino-' + tipo, codigo: 'PRJ-DEST-' + tipo });
-    const projeto = M.projetoVazio({ id: 'prj-host-' + tipo, codigo: 'PRJ-HOST-' + tipo });
+    const destino = M.projetoVazio({ id: 'prj-destino-' + tipo, codigo: 'PRJ-DEST-' + tipo, nome: 'Destino ' + tipo });
+    const projeto = M.projetoVazio({ id: 'prj-host-' + tipo, codigo: 'PRJ-HOST-' + tipo, nome: 'Hospedeiro ' + tipo });
     draft.projetos.push(destino, projeto);
 
     const overItem = { id: 'item-' + tipo };
@@ -481,8 +481,8 @@ verificar('excluirRegistro: item inexistente lanca e nao muta', function () {
 
 verificar('restaurarDaLixeira (registro): dependencia cujo projeto destino sumiu volta com projetoDestinoId null e aviso', function () {
   const draft = M.migrar(fixture(4));
-  const destino = M.projetoVazio({ id: 'prj-destino-sumiu', codigo: 'PRJ-SUMIU' });
-  const projeto = M.projetoVazio({ id: 'prj-host-dep-sumiu', codigo: 'PRJ-HOST-SUMIU' });
+  const destino = M.projetoVazio({ id: 'prj-destino-sumiu', codigo: 'PRJ-SUMIU', nome: 'Destino sumido' });
+  const projeto = M.projetoVazio({ id: 'prj-host-dep-sumiu', codigo: 'PRJ-HOST-SUMIU', nome: 'Hospedeiro dep sumida' });
   draft.projetos.push(destino, projeto);
   const dep = M.dependenciaVazia({ id: 'dep-sumiu', projetoDestinoId: 'prj-destino-sumiu' });
   projeto.dependencias.push(dep);
@@ -501,7 +501,7 @@ verificar('restaurarDaLixeira (registro): dependencia cujo projeto destino sumiu
 
 verificar('restaurarDaLixeira (registro): id ja existente na colecao lanca', function () {
   const draft = M.migrar(fixture(4));
-  const p = M.projetoVazio({ id: 'prj-dup-reg', codigo: 'PRJ-DUP-REG' });
+  const p = M.projetoVazio({ id: 'prj-dup-reg', codigo: 'PRJ-DUP-REG', nome: 'Projeto dup reg' });
   draft.projetos.push(p);
   const issue = M.issueVazia({ id: 'iss-dup', titulo: 'Issue fictícia' });
   p.issues.push(issue);
@@ -552,7 +552,7 @@ verificar('lixeira: ordenacao decrescente por em; empate resolvido pela posicao 
 
 verificar('lixeira/restaurarDaLixeira: excluir, restaurar e excluir de novo -> lixeira mostra so a segunda exclusao (edge probe PROT-03 adjacency)', function () {
   const draft = M.migrar(fixture(4));
-  const p = M.projetoVazio({ id: 'prj-adj-teste', codigo: 'PRJ-ADJ' });
+  const p = M.projetoVazio({ id: 'prj-adj-teste', codigo: 'PRJ-ADJ', nome: 'Projeto adjacencia' });
   draft.projetos.push(p);
 
   const payload1 = M.excluirProjeto(draft, 'prj-adj-teste');
@@ -584,7 +584,7 @@ verificar('lixeira/restaurarDaLixeira (registro): payload com versao desconhecid
 
 verificar('lixeira: projeto-pai excluido depois do registro -> restauravel false ate o projeto voltar (P-13)', function () {
   const draft = M.migrar(fixture(4));
-  const pai = M.projetoVazio({ id: 'prj-pai-teste', codigo: 'PRJ-PAI' });
+  const pai = M.projetoVazio({ id: 'prj-pai-teste', codigo: 'PRJ-PAI', nome: 'Projeto pai' });
   draft.projetos.push(pai);
   const risco = M.riscoVazio({ id: 'rsk-pai-teste', titulo: 'Risco fictício' });
   pai.riscos.push(risco);

@@ -1026,6 +1026,13 @@
 
   model.TIPOS_LIXEIRA = ['projeto'].concat(Object.keys(model.CAMPOS_EDICAO));
 
+  function tituloRegistroLixeira(tipo, item) {
+    const def = model.CAMPOS_EDICAO[tipo];
+    if (!def) { return String(tipo); }
+    const valor = item ? item[def.campoTitulo] : null;
+    return valor ? String(valor) : def.rotulo;
+  }
+
   /**
    * Exclusão lógica de um projeto inteiro (PROT-03, P-09, P-10). Muta o
    * rascunho (chamada dentro de store.mutate) e devolve o payload versão 1:
@@ -1076,6 +1083,119 @@
       dependenciasRemovidas: dependenciasRemovidas,
       anexosDesvinculados: anexosDesvinculados
     };
+  };
+
+  /**
+   * Exclusão lógica de um registro de qualquer um dos tipos de
+   * `model.CAMPOS_EDICAO` (PROT-03, P-09). Muta o rascunho e devolve o
+   * payload versão 1: o item, a coleção, o projeto, a posição e os
+   * `entidadeRef` de anexo desfeitos. O anexo continua vinculado ao mesmo
+   * projeto — só perde o vínculo com o registro que sumiu.
+   */
+  model.excluirRegistro = function (draft, tipo, projetoId, itemId) {
+    const def = model.CAMPOS_EDICAO[tipo];
+    if (!def) { throw new Error('tipo de registro desconhecido: ' + tipo); }
+    const projetos = Array.isArray(draft.projetos) ? draft.projetos : [];
+    const projeto = projetos.find(function (p) { return p && p.id === projetoId; });
+    if (!projeto) { throw new Error('projeto não encontrado'); }
+    const colecao = Array.isArray(projeto[def.colecao]) ? projeto[def.colecao] : [];
+    const indice = colecao.findIndex(function (x) { return x && x.id === itemId; });
+    if (indice === -1) { throw new Error(def.rotulo.toLowerCase() + ' não encontrado(a)'); }
+
+    const itemClone = U.clonar(colecao[indice]);
+
+    const anexosDesvinculados = [];
+    const anexos = Array.isArray(draft.anexos) ? draft.anexos : [];
+    anexos.forEach(function (a) {
+      if (a && a.entidadeRef && a.entidadeRef.tipo === tipo && a.entidadeRef.id === itemId) {
+        anexosDesvinculados.push({ anexoId: a.id, entidadeRef: U.clonar(a.entidadeRef) });
+        a.entidadeRef = null;
+      }
+    });
+
+    colecao.splice(indice, 1);
+    projeto.atualizadoEm = U.agoraIso();
+
+    return {
+      versao: 1, tipo: tipo, colecao: def.colecao, projetoId: projetoId, itemId: itemId,
+      indice: indice, item: itemClone, anexosDesvinculados: anexosDesvinculados
+    };
+  };
+
+  /**
+   * Leitura pura da lixeira: deriva a lista das entradas de `auditLog` que
+   * carregam `payload` (P-24: exclusões antigas sem payload não aparecem).
+   * Nunca muta o bundle. `restauravel`/`motivo` usam as mesmas checagens de
+   * `model.restaurarDaLixeira`, sem mutar nada. Ordena por `em` decrescente;
+   * no empate, a entrada mais adiante na trilha vem primeiro (estável).
+   */
+  model.lixeira = function (bundle) {
+    const b = bundle || {};
+    const trilha = Array.isArray(b.auditLog) ? b.auditLog : [];
+    if (!trilha.length) { return []; }
+
+    const restauradas = Object.create(null);
+    trilha.forEach(function (e) {
+      if (e && e.restauraDe) { restauradas[e.restauraDe] = true; }
+    });
+
+    const projetosBundle = Array.isArray(b.projetos) ? b.projetos : [];
+    const itens = [];
+
+    trilha.forEach(function (entrada, posicao) {
+      if (!entrada || !entrada.payload || restauradas[entrada.id]) { return; }
+      const payload = entrada.payload;
+      if (model.TIPOS_LIXEIRA.indexOf(payload.tipo) === -1) { return; }
+
+      let restauravel = true;
+      let motivo = null;
+      let rotulo;
+      let titulo;
+      let itemId = null;
+
+      if (payload.versao !== 1) {
+        restauravel = false;
+        motivo = 'formato de exclusão desconhecido';
+        const defDesconhecido = model.CAMPOS_EDICAO[payload.tipo];
+        rotulo = payload.tipo === 'projeto' ? 'Projeto' :
+          (defDesconhecido ? defDesconhecido.rotulo : String(payload.tipo));
+        titulo = rotulo;
+        itemId = payload.itemId || null;
+      } else if (payload.tipo === 'projeto') {
+        rotulo = 'Projeto';
+        titulo = (payload.projeto && (payload.projeto.codigo || payload.projeto.nome)) || rotulo;
+        const existe = projetosBundle.some(function (p) { return p && p.id === payload.projetoId; });
+        if (existe) { restauravel = false; motivo = 'já existe um projeto com este id'; }
+      } else {
+        const def = model.CAMPOS_EDICAO[payload.tipo];
+        rotulo = def ? def.rotulo : String(payload.tipo);
+        itemId = payload.itemId;
+        titulo = tituloRegistroLixeira(payload.tipo, payload.item);
+        const projetoPai = projetosBundle.find(function (p) { return p && p.id === payload.projetoId; });
+        if (!projetoPai) {
+          restauravel = false;
+          motivo = 'restaure o projeto primeiro';
+        } else {
+          const colecao = Array.isArray(projetoPai[def.colecao]) ? projetoPai[def.colecao] : [];
+          const existe = colecao.some(function (x) { return x && x.id === payload.itemId; });
+          if (existe) { restauravel = false; motivo = 'já existe um registro com este id'; }
+        }
+      }
+
+      itens.push({
+        auditId: entrada.id, tipo: payload.tipo, rotulo: rotulo, titulo: titulo,
+        projetoId: payload.projetoId || null, itemId: itemId,
+        em: entrada.em || '', ator: entrada.ator || null, resumo: entrada.resumo || null,
+        restauravel: restauravel, motivo: motivo, _posicao: posicao
+      });
+    });
+
+    itens.sort(function (a, b2) {
+      if (a.em !== b2.em) { return a.em < b2.em ? 1 : -1; }
+      return b2._posicao - a._posicao;
+    });
+    itens.forEach(function (x) { delete x._posicao; });
+    return itens;
   };
 
   function restaurarProjetoDaLixeira(draft, payload) {
@@ -1157,6 +1277,60 @@
     };
   }
 
+  function restaurarRegistroDaLixeira(draft, payload) {
+    const def = model.CAMPOS_EDICAO[payload.tipo];
+    const projetos = Array.isArray(draft.projetos) ? draft.projetos : [];
+    const projeto = projetos.find(function (p) { return p && p.id === payload.projetoId; });
+    if (!projeto) { throw new Error('restaure o projeto primeiro'); }
+    if (!Array.isArray(projeto[def.colecao])) { projeto[def.colecao] = []; }
+    const colecao = projeto[def.colecao];
+    const existe = colecao.some(function (x) { return x && x.id === payload.itemId; });
+    if (existe) { throw new Error('já existe um registro com este id'); }
+
+    const avisos = [];
+    const item = U.clonar(payload.item);
+
+    if (payload.tipo === 'dependencia' && item.projetoDestinoId) {
+      const existeDestino = projetos.some(function (p) { return p && p.id === item.projetoDestinoId; });
+      if (!existeDestino) {
+        avisos.push('O projeto de destino desta dependência não existe mais; a referência foi removida.');
+        item.projetoDestinoId = null;
+      }
+    }
+
+    const idx = Math.min(payload.indice, colecao.length);
+    colecao.splice(idx, 0, item);
+    projeto.atualizadoEm = U.agoraIso();
+
+    (payload.anexosDesvinculados || []).forEach(function (a) {
+      const anexosTopo = Array.isArray(draft.anexos) ? draft.anexos : [];
+      const anexo = anexosTopo.find(function (x) { return x && x.id === a.anexoId; });
+      if (!anexo) {
+        avisos.push('O anexo ' + a.anexoId + ' não existe mais no cofre; o vínculo não foi refeito.');
+        return;
+      }
+      if (anexo.entidadeRef) {
+        avisos.push('O anexo ' + a.anexoId + ' já está vinculado a outro registro; o vínculo não foi refeito.');
+        return;
+      }
+      if (anexo.projetoId !== payload.projetoId) {
+        avisos.push('O anexo ' + a.anexoId + ' não pertence mais a este projeto; o vínculo não foi refeito.');
+        return;
+      }
+      anexo.entidadeRef = a.entidadeRef ? U.clonar(a.entidadeRef) : null;
+    });
+
+    const rotulo = def.rotulo;
+    const titulo = tituloRegistroLixeira(payload.tipo, item);
+    const resumo = (projeto.codigo || projeto.nome) + ' — restaurado: ' + titulo +
+      (avisos.length ? ' (' + avisos.join(' ') + ')' : '');
+
+    return {
+      tipo: payload.tipo, entidade: payload.tipo, entidadeId: payload.projetoId,
+      acao: 'Restaurar ' + rotulo.toLowerCase(), rotulo: rotulo, resumo: resumo, avisos: avisos
+    };
+  }
+
   /**
    * Restaura uma exclusão lógica pelo id da entrada de auditLog (PROT-03,
    * P-13). Nunca edita nem apaga a entrada original — só acrescenta. Recusa
@@ -1173,6 +1347,7 @@
     const payload = entrada.payload;
     if (!payload || payload.versao !== 1) { throw new Error('formato de exclusão desconhecido'); }
     if (payload.tipo === 'projeto') { return restaurarProjetoDaLixeira(draft, payload); }
+    if (model.CAMPOS_EDICAO[payload.tipo]) { return restaurarRegistroDaLixeira(draft, payload); }
     throw new Error('formato de exclusão desconhecido');
   };
 
