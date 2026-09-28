@@ -24,6 +24,8 @@
       GET    /templates/<arquivo>           -> cronograma-modelo
       POST   /api/protecao/snapshot         <- snapshot de protecao antes de Limpar/Substituir (token)
       POST   /api/copia-verificavel/exportar <- copia verificavel para pasta escolhida pela PMO (token)
+      POST   /api/copia-verificavel/conferir <- confere copia ja exportada, somente leitura (token)
+      GET    /api/copia-verificavel/sugestoes <- destinos sugeridos e ultimo destino usado (token)
     Ctrl+C encerra.
 #>
 [CmdletBinding()]
@@ -1167,6 +1169,81 @@ function ExportarCopiaVerificavel($pedido) {
     }
 }
 
+# Confere uma copia verificavel ja exportada, apontando arquivo alterado,
+# faltando ou a mais, sem nunca escrever na pasta (P-20, somente leitura).
+# Usa Test-InventarioCopiaExterna (nao Test-PmoInventory) para a pasta do
+# OneDrive poder ser conferida mesmo com os arquivos ja como placeholders de
+# nuvem (P-18).
+function ConferirCopiaVerificavel($pedido) {
+    if (-not $pedido) { throw (NovaExcecaoHttp 400 'pedido de conferencia obrigatorio') }
+    $pastaConferir = Test-PastaExternaPermitida ([string]$pedido.pasta)
+    $nomeFinalConferir = Split-Path -Leaf $pastaConferir
+    if ($nomeFinalConferir -notmatch '^pmo-copia-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$') {
+        throw (NovaExcecaoHttp 400 'a pasta informada nao tem o formato de uma copia verificavel')
+    }
+    $manifestPathConferir = Join-Path $pastaConferir 'manifest.json'
+    $manifestoConferir = $null
+    try { $manifestoConferir = Read-PmoJson $manifestPathConferir $null } catch { $manifestoConferir = $null }
+    if (-not $manifestoConferir -or [int]$manifestoConferir.formatVersion -ne 1 -or [string]$manifestoConferir.kind -ne 'copia-verificavel') {
+        return [pscustomobject]@{
+            ok = $false; copyId = $nomeFinalConferir; pasta = $pastaConferir
+            conferidoEm = (Get-Date).ToUniversalTime().ToString('o')
+            arquivos = 0; manifestSha256 = $null
+            erros = @('manifest.json ausente ou invalido')
+        }
+    }
+    $errosConferir = @(Test-InventarioCopiaExterna $pastaConferir $manifestoConferir.files @('manifest.json'))
+    $manifestSha256Conferir = $null
+    if (Test-Path -LiteralPath $manifestPathConferir -PathType Leaf) { $manifestSha256Conferir = Get-PmoSha256 $manifestPathConferir }
+    return [pscustomobject]@{
+        ok = ($errosConferir.Count -eq 0); copyId = [string]$manifestoConferir.copyId; pasta = $pastaConferir
+        conferidoEm = (Get-Date).ToUniversalTime().ToString('o')
+        arquivos = @($manifestoConferir.files).Count; manifestSha256 = $manifestSha256Conferir
+        erros = $errosConferir
+    }
+}
+
+# Destinos sugeridos para a copia verificavel (P-17), so leitura, nunca cria
+# nada: pasta Documentos e pastas do OneDrive do usuario (quando existem e
+# passam na mesma validacao do destino), mais o ultimo destino usado, lido da
+# trilha em disco.
+function SugerirDestinosCopia() {
+    $candidatosDestino = @(
+        [pscustomobject]@{ id='documentos'; rotulo='Documentos'; caminho=[Environment]::GetFolderPath('MyDocuments') }
+        [pscustomobject]@{ id='onedrive'; rotulo='OneDrive'; caminho=[string]$env:OneDrive }
+        [pscustomobject]@{ id='onedrive-empresa'; rotulo='OneDrive (empresa)'; caminho=[string]$env:OneDriveCommercial }
+        [pscustomobject]@{ id='onedrive-pessoal'; rotulo='OneDrive (pessoal)'; caminho=[string]$env:OneDriveConsumer }
+    )
+    $destinosSugeridos = @()
+    $vistosDestinoSugerido = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($candidatoDestino in $candidatosDestino) {
+        $brutoCandidatoDestino = [string]$candidatoDestino.caminho
+        if ([string]::IsNullOrWhiteSpace($brutoCandidatoDestino)) { continue }
+        $normalizadoCandidatoDestino = $null
+        try { $normalizadoCandidatoDestino = Test-PastaExternaPermitida $brutoCandidatoDestino }
+        catch { continue }
+        if ($vistosDestinoSugerido.Contains($normalizadoCandidatoDestino)) { continue }
+        $null = $vistosDestinoSugerido.Add($normalizadoCandidatoDestino)
+        $destinosSugeridos += [ordered]@{ id=$candidatoDestino.id; rotulo=$candidatoDestino.rotulo; caminho=$normalizadoCandidatoDestino }
+    }
+    $ultimoDestinoSugerido = $null
+    $bundleAtualSugestoes = Read-PmoJson $portJson $null
+    if ($bundleAtualSugestoes -and $bundleAtualSugestoes.auditLog) {
+        $entradasAuditSugestoes = @($bundleAtualSugestoes.auditLog)
+        for ($iSugestao = $entradasAuditSugestoes.Count - 1; $iSugestao -ge 0; $iSugestao--) {
+            $entradaAuditSugestao = $entradasAuditSugestoes[$iSugestao]
+            $copiaPropSugestao = $entradaAuditSugestao.PSObject.Properties['copia']
+            if ($null -eq $copiaPropSugestao -or -not $copiaPropSugestao.Value) { continue }
+            $destinoPropSugestao = $copiaPropSugestao.Value.PSObject.Properties['destino']
+            if ($null -eq $destinoPropSugestao -or [string]::IsNullOrWhiteSpace([string]$destinoPropSugestao.Value)) { continue }
+            try { $ultimoDestinoSugerido = Test-PastaExternaPermitida ([string]$destinoPropSugestao.Value) }
+            catch { $ultimoDestinoSugerido = $null }
+            break
+        }
+    }
+    return [pscustomobject]@{ destinos = $destinosSugeridos; ultimoDestino = $ultimoDestinoSugerido }
+}
+
 function ConsultarAtualizacao() {
     $cfg = Read-PmoJson $installJson $null
     if (-not $cfg -or [string]::IsNullOrWhiteSpace([string]$cfg.repository)) {
@@ -1548,6 +1625,27 @@ try {
                         try { $pedido = $txt | ConvertFrom-Json } catch { throw (NovaExcecaoHttp 400 'pedido de copia verificavel invalido: JSON nao pode ser lido') }
                         $copia = ExportarCopiaVerificavel $pedido
                         ResponderJson $resp 200 ([ordered]@{ ok=$true; copyId=$copia.copyId; pasta=$copia.pasta; arquivos=$copia.arquivos; bytes=$copia.bytes; manifestSha256=$copia.manifestSha256 } | ConvertTo-Json -Depth 20 -Compress)
+                    }
+                }
+            }
+            elseif ($rota -eq '/api/copia-verificavel/conferir' -and $metodo -eq 'POST') {
+                if (ExigirAdministracao $req $resp) {
+                    if ($script:maintenance) { ResponderErro $resp 423 'persistencia bloqueada durante atualizacao' }
+                    else {
+                        $txt = LerCorpoTexto $req $maxAdminJsonBytes
+                        if ([string]::IsNullOrWhiteSpace($txt)) { throw (NovaExcecaoHttp 400 'pedido de conferencia vazio') }
+                        try { $pedido = $txt | ConvertFrom-Json } catch { throw (NovaExcecaoHttp 400 'pedido de conferencia invalido: JSON nao pode ser lido') }
+                        $resultadoConferir = ConferirCopiaVerificavel $pedido
+                        ResponderJson $resp 200 ($resultadoConferir | ConvertTo-Json -Depth 20 -Compress)
+                    }
+                }
+            }
+            elseif ($rota -eq '/api/copia-verificavel/sugestoes' -and $metodo -eq 'GET') {
+                if (ExigirAdministracao $req $resp) {
+                    if ($script:maintenance) { ResponderErro $resp 423 'persistencia bloqueada durante atualizacao' }
+                    else {
+                        $sugestoesDestino = SugerirDestinosCopia
+                        ResponderJson $resp 200 ([ordered]@{ ok=$true; destinos=$sugestoesDestino.destinos; ultimoDestino=$sugestoesDestino.ultimoDestino } | ConvertTo-Json -Depth 20 -Compress)
                     }
                 }
             }

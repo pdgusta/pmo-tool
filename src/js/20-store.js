@@ -146,7 +146,8 @@
   function rotaProtegida(rota, metodo) {
     const m = String(metodo || 'GET').toUpperCase();
     if (m !== 'GET' && m !== 'HEAD') { return true; }
-    return rota === '/api/app-ready' || rota === '/api/restore-pending' || rota === '/api/restore-ack';
+    return rota === '/api/app-ready' || rota === '/api/restore-pending' || rota === '/api/restore-ack' ||
+      rota === '/api/copia-verificavel/sugestoes';
   }
 
   async function apiFetch(rota, opts) {
@@ -951,6 +952,88 @@
       U.toast('Cópia verificável não criada: ' + (e.message || e), 'erro');
       throw e;
     }
+  };
+
+  /**
+   * Confere uma cópia verificável já exportada, apontando arquivo alterado,
+   * faltando, a mais ou manifesto trocado. Somente leitura — nunca grava audit
+   * (P-20).
+   */
+  store.conferirCopiaVerificavel = async function (pasta) {
+    if (!temServidor()) {
+      throw new Error('A conferência da cópia verificável exige o servidor local (abra pelo pmo.ps1).');
+    }
+    const r = await apiFetch('/api/copia-verificavel/conferir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ pasta: pasta }),
+      timeout: 300000
+    });
+    if (!r.ok) {
+      let mensagemServidor = '';
+      try {
+        const corpo = await r.json();
+        mensagemServidor = corpo && corpo.erro ? String(corpo.erro) : '';
+      } catch (e) { /* corpo sem JSON legível */ }
+      throw new Error('Não foi possível conferir a cópia (' + r.status + '): ' + mensagemServidor);
+    }
+    const resposta = await r.json();
+    const erros = (resposta.erros || []).slice();
+    const avisos = [];
+    let ok = !!resposta.ok;
+    const entradaTrilha = (store.state.auditLog || []).slice().reverse()
+      .find(function (a) { return a.copia && a.copia.copyId === resposta.copyId; });
+    if (entradaTrilha) {
+      if (entradaTrilha.copia.manifestSha256 && resposta.manifestSha256 &&
+          entradaTrilha.copia.manifestSha256 !== resposta.manifestSha256) {
+        erros.push('manifesto diferente do registrado na exportação de ' + U.fmtDataHora(entradaTrilha.em));
+        ok = false;
+      }
+    } else {
+      avisos.push('cópia sem registro nesta trilha');
+    }
+    return {
+      ok: ok, copyId: resposta.copyId, pasta: resposta.pasta, conferidoEm: resposta.conferidoEm,
+      arquivos: resposta.arquivos, erros: erros, avisos: avisos
+    };
+  };
+
+  /** Entradas da trilha com `copia`, mais recentes primeiro (G9: sem entradas → []). */
+  store.listarCopiasVerificaveis = function () {
+    return (store.state.auditLog || [])
+      .filter(function (a) { return !!a.copia; })
+      .map(function (a) {
+        return {
+          copyId: a.copia.copyId, pasta: a.copia.pasta, em: a.em, ator: a.ator,
+          arquivos: a.copia.arquivos, bytes: a.copia.bytes, manifestSha256: a.copia.manifestSha256
+        };
+      })
+      .reverse();
+  };
+
+  /** Backups rotativos e a retenção efetiva (P-15), para a tela do 20-10. */
+  store.consultarBackups = async function () {
+    if (!temServidor()) { return { itens: [], retencao: null }; }
+    try {
+      const r = await apiFetch('/api/backups');
+      if (!r.ok) { return { itens: [], retencao: null }; }
+      const j = await r.json();
+      return { itens: j.itens || [], retencao: j.retencao || null };
+    } catch (e) { return { itens: [], retencao: null }; }
+  };
+
+  /**
+   * Destinos sugeridos (Documentos e OneDrive do usuário) e o último destino
+   * usado, para a PMO escolher com um clique em vez de digitar (P-17).
+   */
+  store.sugerirDestinosCopia = async function () {
+    if (!temServidor()) { return { destinos: [], ultimoDestino: null }; }
+    try {
+      const r = await apiFetch('/api/copia-verificavel/sugestoes');
+      if (!r.ok) { return { destinos: [], ultimoDestino: null }; }
+      const j = await r.json();
+      return { destinos: j.destinos || [], ultimoDestino: j.ultimoDestino || null };
+    } catch (e) { return { destinos: [], ultimoDestino: null }; }
   };
 
   /* ============================================================== anexos */

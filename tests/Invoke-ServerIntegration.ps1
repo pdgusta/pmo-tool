@@ -829,6 +829,176 @@ try {
 
     Write-Host 'PROT-05 exportar: OK' -ForegroundColor Green
 
+    # ------------------------------------------- PROT-05: conferir e sugestoes
+    function New-ProtCopiaTrabalho() {
+        $portfolio.meta.salvoEm = (Get-Date).ToUniversalTime().ToString('o')
+        $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+        $bodyNovaCopia = [ordered]@{
+            destino=$copiasDestino; appVersion=$appVersionFixture; schemaVersion=4
+            salvoEm=$portfolio.meta.salvoEm; anexos=$copiaAnexos
+        } | ConvertTo-Json -Depth 10
+        $respNovaCopia = (Invoke-LocalApi '/api/copia-verificavel/exportar' 'POST' $bodyNovaCopia -Admin).Content | ConvertFrom-Json
+        if (-not $respNovaCopia.ok) { throw 'Nao foi possivel criar copia de trabalho para o cenario de conferencia.' }
+        return $respNovaCopia
+    }
+    function Invoke-ProtConferir([string]$Pasta) {
+        $bodyConferirCopia = [ordered]@{ pasta=$Pasta } | ConvertTo-Json -Depth 5
+        return (Invoke-LocalApi '/api/copia-verificavel/conferir' 'POST' $bodyConferirCopia -Admin).Content | ConvertFrom-Json
+    }
+    function Get-ProtHashArvore([string]$Pasta) {
+        $mapaHashArvore = @{}
+        foreach ($arquivoHashArvore in (Get-ChildItem -LiteralPath $Pasta -Recurse -File -Force)) {
+            $mapaHashArvore[$arquivoHashArvore.FullName] = Get-PmoSha256 $arquivoHashArvore.FullName
+        }
+        return $mapaHashArvore
+    }
+    function Test-ProtSugestaoForaDaInstalacao([string]$Candidato) {
+        foreach ($raizInstalacaoTeste in @($data,$config,$state)) {
+            if ((Test-PmoPathEqualOrSubPath $raizInstalacaoTeste $Candidato) -or (Test-PmoPathEqualOrSubPath $Candidato $raizInstalacaoTeste)) { return $false }
+        }
+        return $true
+    }
+
+    # Cópia intacta da Task 1: ok, sem erros, mesma contagem/hash da exportação
+    $conferirFeliz = Invoke-ProtConferir $copiaFelizDir
+    if (-not $conferirFeliz.ok -or @($conferirFeliz.erros).Count -ne 0) { throw 'Conferencia da copia intacta deveria ser ok sem erros.' }
+    if ([int]$conferirFeliz.arquivos -ne [int]$copiaFeliz.arquivos) { throw 'Conferencia da copia intacta com contagem de arquivos diferente da exportacao.' }
+    if ([string]$conferirFeliz.manifestSha256 -ne [string]$copiaFeliz.manifestSha256) { throw 'Conferencia da copia intacta com manifestSha256 diferente da exportacao.' }
+
+    # Conferir nunca cria, altera ou apaga arquivo
+    $hashAntesConferir = Get-ProtHashArvore $copiaFelizDir
+    $null = Invoke-ProtConferir $copiaFelizDir
+    $hashDepoisConferir = Get-ProtHashArvore $copiaFelizDir
+    if ($hashAntesConferir.Keys.Count -ne $hashDepoisConferir.Keys.Count) { throw 'Conferencia alterou a quantidade de arquivos na copia.' }
+    foreach ($chaveHashConferir in $hashAntesConferir.Keys) {
+        if ($hashDepoisConferir[$chaveHashConferir] -ne $hashAntesConferir[$chaveHashConferir]) { throw ('Conferencia alterou o arquivo: ' + $chaveHashConferir) }
+    }
+
+    # Anexo com hash divergente
+    $copiaHashDivergente = New-ProtCopiaTrabalho
+    $anexoNaCopiaHash = Join-Path (Join-Path $copiaHashDivergente.pasta 'attachments') $attachmentId
+    $bytesOriginaisAnexoCopia = [System.IO.File]::ReadAllBytes($anexoNaCopiaHash)
+    $bytesAlteradosAnexoCopia = New-Object byte[] $bytesOriginaisAnexoCopia.Length
+    [Array]::Copy($bytesOriginaisAnexoCopia,$bytesAlteradosAnexoCopia,$bytesOriginaisAnexoCopia.Length)
+    $bytesAlteradosAnexoCopia[0] = $bytesAlteradosAnexoCopia[0] -bxor 255
+    [System.IO.File]::WriteAllBytes($anexoNaCopiaHash,$bytesAlteradosAnexoCopia)
+    $conferirHashDivergente = Invoke-ProtConferir $copiaHashDivergente.pasta
+    if ($conferirHashDivergente.ok) { throw 'Conferencia deveria detectar hash divergente no anexo.' }
+    if ((@($conferirHashDivergente.erros) -join '|') -notmatch [regex]::Escape('hash divergente: attachments/' + $attachmentId)) {
+        throw 'Erro de hash divergente nao apontou o anexo esperado.'
+    }
+
+    # portfolio.json ausente
+    $copiaArquivoAusente = New-ProtCopiaTrabalho
+    Remove-Item -LiteralPath (Join-Path $copiaArquivoAusente.pasta 'portfolio.json') -Force
+    $conferirArquivoAusente = Invoke-ProtConferir $copiaArquivoAusente.pasta
+    if ($conferirArquivoAusente.ok) { throw 'Conferencia deveria detectar portfolio.json ausente.' }
+    if ((@($conferirArquivoAusente.erros) -join '|') -notmatch 'arquivo ausente: portfolio\.json') {
+        throw 'Erro de arquivo ausente nao apontou portfolio.json.'
+    }
+
+    # arquivo extra nao declarado
+    $copiaArquivoExtra = New-ProtCopiaTrabalho
+    [System.IO.File]::WriteAllText((Join-Path $copiaArquivoExtra.pasta 'extra-nao-declarado.txt'), 'extra', (New-Object System.Text.UTF8Encoding($false)))
+    $conferirArquivoExtra = Invoke-ProtConferir $copiaArquivoExtra.pasta
+    if ($conferirArquivoExtra.ok) { throw 'Conferencia deveria detectar arquivo extra nao declarado.' }
+    if ((@($conferirArquivoExtra.erros) -join '|') -notmatch [regex]::Escape('arquivo fisico nao declarado: extra-nao-declarado.txt')) {
+        throw 'Erro de arquivo extra nao apontou o arquivo esperado.'
+    }
+
+    # manifest.json ausente: ok:false, status 200
+    $copiaManifestoAusente = New-ProtCopiaTrabalho
+    Remove-Item -LiteralPath (Join-Path $copiaManifestoAusente.pasta 'manifest.json') -Force
+    $conferirManifestoAusenteResp = Invoke-LocalApi '/api/copia-verificavel/conferir' 'POST' ([ordered]@{ pasta=$copiaManifestoAusente.pasta } | ConvertTo-Json -Depth 5) -Admin
+    if ($conferirManifestoAusenteResp.StatusCode -ne 200) { throw 'Conferencia com manifesto ausente deveria responder 200.' }
+    $conferirManifestoAusente = $conferirManifestoAusenteResp.Content | ConvertFrom-Json
+    if ($conferirManifestoAusente.ok) { throw 'Conferencia com manifesto ausente deveria ser ok:false.' }
+    if ((@($conferirManifestoAusente.erros) -join '|') -notmatch 'manifest\.json ausente ou invalido') {
+        throw 'Erro de manifesto ausente nao apontou a mensagem esperada.'
+    }
+
+    # pasta fora do formato pmo-copia-, relativa ou dentro da instalacao: 400
+    try {
+        $null = Invoke-LocalApi '/api/copia-verificavel/conferir' 'POST' ([ordered]@{ pasta=$copiasDestino } | ConvertTo-Json -Depth 5) -Admin
+        throw 'Conferencia com pasta fora do formato pmo-copia deveria ser recusada.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 400) { throw }
+    }
+    try {
+        $null = Invoke-LocalApi '/api/copia-verificavel/conferir' 'POST' ([ordered]@{ pasta='copias\relativo' } | ConvertTo-Json -Depth 5) -Admin
+        throw 'Conferencia com pasta relativa deveria ser recusada.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 400) { throw }
+    }
+    try {
+        $null = Invoke-LocalApi '/api/copia-verificavel/conferir' 'POST' ([ordered]@{ pasta=$data } | ConvertTo-Json -Depth 5) -Admin
+        throw 'Conferencia com pasta dentro da instalacao deveria ser recusada.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 400) { throw }
+    }
+
+    # Sem token: 403
+    try {
+        $null = Invoke-LocalApi '/api/copia-verificavel/conferir' 'POST' ([ordered]@{ pasta=$copiaFelizDir } | ConvertTo-Json -Depth 5)
+        throw 'Conferencia sem token deveria ser bloqueada.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 403) { throw }
+    }
+
+    # GET /api/backups continua com ok, itens e retencao
+    $backupsAposCopia = (Invoke-LocalApi '/api/backups' 'GET' $null -Admin).Content | ConvertFrom-Json
+    if (-not $backupsAposCopia.ok -or $null -eq $backupsAposCopia.itens -or $null -eq $backupsAposCopia.retencao) {
+        throw 'GET /api/backups deveria continuar com ok, itens e retencao.'
+    }
+
+    # Sugestoes de destino (P-17): sem token 403
+    try {
+        $null = Invoke-LocalApi '/api/copia-verificavel/sugestoes' 'GET' $null
+        throw 'Sugestoes de destino sem token deveriam ser bloqueadas.'
+    } catch {
+        if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 403) { throw }
+    }
+
+    # Registra na trilha a exportacao feliz com copia.destino, como o PUT do bundle ja faz nos outros blocos
+    $portfolio.auditLog += [ordered]@{
+        id='aud-copia-1'; em='2026-08-02T00:10:00Z'; ator='PMO Lead'; acao='Exportar cópia verificável'
+        entidade='copia'; entidadeId=[string]$copiaFeliz.copyId; resumo='fixture de sugestoes'; campos=$null
+        copia=[ordered]@{ copyId=[string]$copiaFeliz.copyId; destino=$copiasDestino; pasta=$copiaFelizDir
+            manifestSha256=[string]$copiaFeliz.manifestSha256; arquivos=[int]$copiaFeliz.arquivos; bytes=[int64]$copiaFeliz.bytes }
+    }
+    $portfolio.meta.salvoEm = (Get-Date).ToUniversalTime().ToString('o')
+    $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+
+    $itensAntesSugestoes = @(Get-ChildItem -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue).Count
+    $sugestoesResp = (Invoke-LocalApi '/api/copia-verificavel/sugestoes' 'GET' $null -Admin).Content | ConvertFrom-Json
+    $itensDepoisSugestoes = @(Get-ChildItem -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue).Count
+    if ($itensAntesSugestoes -ne $itensDepoisSugestoes) { throw 'Rota de sugestoes criou item em disco (deveria ser somente leitura).' }
+    if (-not $sugestoesResp.ok) { throw 'Rota de sugestoes deveria responder ok.' }
+    foreach ($destinoSugerido in @($sugestoesResp.destinos)) {
+        if (-not (Test-Path -LiteralPath ([string]$destinoSugerido.caminho) -PathType Container)) {
+            throw ('Destino sugerido nao existe como diretorio: ' + $destinoSugerido.caminho)
+        }
+        if (-not (Test-ProtSugestaoForaDaInstalacao ([string]$destinoSugerido.caminho))) {
+            throw ('Destino sugerido fica dentro ou acima da instalacao isolada do teste: ' + $destinoSugerido.caminho)
+        }
+    }
+    if ([string]$sugestoesResp.ultimoDestino -ne $copiasDestino) {
+        throw ('ultimoDestino deveria ser a pasta da ultima copia registrada na trilha: ' + [string]$sugestoesResp.ultimoDestino)
+    }
+
+    # Prova real da P-18 (situacao 2), so leitura: OneDrive real da maquina, se existir
+    if (-not [string]::IsNullOrWhiteSpace($env:OneDrive) -and (Test-Path -LiteralPath $env:OneDrive -PathType Container)) {
+        $oneDriveNormalizadoTeste = Get-PmoNormalizedFullPath $env:OneDrive
+        $achouOneDriveTeste = @($sugestoesResp.destinos | Where-Object { (Get-PmoNormalizedFullPath ([string]$_.caminho)) -eq $oneDriveNormalizadoTeste })
+        if ($achouOneDriveTeste.Count -eq 0) {
+            throw 'OneDrive real presente no ambiente mas nao apareceu nas sugestoes de destino (prova real da P-18).'
+        }
+    } else {
+        Write-Host 'OneDrive real ausente: pulado' -ForegroundColor Yellow
+    }
+
+    Write-Host 'PROT-05 copia verificavel: OK' -ForegroundColor Green
+
     Write-Host 'Integracao do servidor, auth, snapshot, restore, rollback e app-ready: OK' -ForegroundColor Green
 } finally {
     if ($healthProcess -and -not $healthProcess.HasExited) { $healthProcess.Kill(); $healthProcess.WaitForExit(5000) | Out-Null }
