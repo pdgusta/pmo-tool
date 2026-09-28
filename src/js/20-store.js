@@ -721,12 +721,45 @@
           resumo: novos + ' novos, ' + atualizados + ' atualizados' });
       }, { entidade: 'bundle', resumo: 'mesclagem de bundle' });
     }
-    return store.mutate('Substituir portfólio por bundle importado', function (d) {
-      Object.keys(novo).forEach(function (k) { d[k] = novo[k]; });
-      d.imports = (d.imports || []).concat([{ id: U.uid('imp'), em: U.agoraIso(),
-        kind: 'bundle', fileName: (bundle && bundle.__fileName) || 'bundle.json',
-        resumo: novo.projetos.length + ' projetos substituíram o portfólio' }]);
-    }, { entidade: 'bundle', resumo: 'substituição total' });
+    // modo 'substituir' (PROT-02, D-32 item 2): so roda depois de um snapshot
+    // de protecao verificado; a trilha local (auditLog/imports) e mesclada
+    // com a do arquivo por id, nunca sobrescrita (achado A-3).
+    try {
+      const snap = await snapshotProtecao('substituir');
+      const meta = { entidade: 'bundle', resumo: '' };
+      if (snap.snapshotId) { meta.snapshotId = snap.snapshotId; }
+      const r = await store.mutate('Substituir portfólio por bundle importado', function (d) {
+        const resAud = M.mesclarTrilha(d.auditLog, novo.auditLog);
+        const resImp = M.mesclarTrilha(d.imports, novo.imports);
+        Object.keys(novo).forEach(function (k) {
+          if (k === 'auditLog' || k === 'imports') { return; }
+          d[k] = novo[k];
+        });
+        d.auditLog = resAud.lista;
+        d.imports = resImp.lista.concat([{ id: U.uid('imp'), em: U.agoraIso(),
+          kind: 'bundle', fileName: (bundle && bundle.__fileName) || 'bundle.json',
+          resumo: novo.projetos.length + ' projetos substituíram o portfólio' }]);
+        meta.resumo = 'substituição total' +
+          (snap.dispensado ? '; sem servidor e sem dado a proteger' : '; snapshot verificado ' + snap.snapshotId) +
+          '; +' + resAud.adicionadas + ' eventos e +' + resImp.adicionadas +
+          ' importações do arquivo; ' + (resAud.ignoradasPorIdRepetido + resImp.ignoradasPorIdRepetido) +
+          ' ignorados por id repetido';
+      }, meta);
+      if (!r.ok) {
+        const erro = new Error(r.erro || 'Não foi possível substituir o portfólio.');
+        erro.jaNotificado = true;
+        throw erro;
+      }
+      emitirProtecao('substituir', 'concluido', { snapshotId: snap.snapshotId });
+      return { ok: true, snapshotId: snap.snapshotId, dispensado: snap.dispensado };
+    } catch (e) {
+      emitirProtecao('substituir', 'falhou', { erro: String(e.message || e) });
+      emissor.emitir('erro', { onde: 'protecao', erro: String(e.message || e) });
+      if (!e.jaNotificado) {
+        U.toast('Substituição cancelada: ' + (e.message || e), 'erro');
+      }
+      throw e;
+    }
   };
 
   /* ===================================================== proteção (PROT-01) */
