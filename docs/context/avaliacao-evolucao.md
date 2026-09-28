@@ -781,19 +781,20 @@ da release).
 
 Revista por D-27 em 27/09/2026.
 
-### D-03 — PowerShell 5.1 só no bootstrap e no instalador
+### D-03 — PowerShell 5.1 na edição local: entrada, servidor e updater
 
 **Status:** Ratificada em 27/09/2026
 
 **Em linguagem simples:** a porta de entrada continua a mesma chave que já funciona em qualquer
-Windows; só o que está lá dentro muda.
+Windows; na edição local, o motor lá dentro também continua o mesmo, e só a edição corporativa
+(v2) troca de motor.
 
-**Decisão:** Em PowerShell 5.1 ficam **apenas** o bootstrap e o instalador: `pmo.ps1`,
-`atualizar.ps1`, `pmo-instalar.ps1` (entrada sem pré-requisito em qualquer Windows; bootstrap
-estável pela G12). Na edição local, servidor e updater continuam em PowerShell 5.1 e não trocam de
-runtime (D-27); a migração de servidor e updater para Node só existe na edição corporativa (v2) e,
-se o updater transacional (journals, fail-closed) migrar, migra com os mesmos testes de falha
-simulada.
+**Decisão:** Na edição local, ficam em PowerShell 5.1 os scripts de entrada — o bootstrap e o
+instalador: `pmo.ps1`, `atualizar.ps1`, `pmo-instalar.ps1` (entrada sem pré-requisito em
+qualquer Windows; bootstrap estável pela G12) — e também o servidor (`serve.ps1`) e o updater,
+que não trocam de runtime (G3, D-27); a migração de servidor e updater para Node só existe na
+edição corporativa (v2) e, se o updater transacional (journals, fail-closed) migrar, migra com os
+mesmos testes de falha simulada.
 
 **Justificativa:** G12 exige um bootstrap estável que resolve `active.json` sem pré-requisito —
 manter `pmo.ps1`, `atualizar.ps1` e `tools/pmo-instalar.ps1` em PS 5.1 preserva essa garantia em
