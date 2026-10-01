@@ -192,7 +192,20 @@ $appVersion = if ($releaseInfo -and $releaseInfo.version) { [string]$releaseInfo
     if ([string]::IsNullOrWhiteSpace($versaoDev)) { throw 'Nao foi possivel resolver a versao da aplicacao.' }
     $versaoDev
 }
-$schemaVersion = if ($releaseInfo -and $releaseInfo.schemaVersion) { [int]$releaseInfo.schemaVersion } elseif ($releaseInfo -and $releaseInfo.schema -and $null -ne $releaseInfo.schema.write) { [int]$releaseInfo.schema.write } else { 4 }
+# release.json declara o schema em schema.write; schemaVersion e aceito por
+# compatibilidade. Le pelas PSObject.Properties: sob Set-StrictMode 2.0 (herdado
+# de portable-common.ps1) acessar propriedade inexistente lanca excecao.
+$schemaVersion = 4
+if ($releaseInfo) {
+    $schemaVersionProp = $releaseInfo.PSObject.Properties['schemaVersion']
+    $schemaProp = $releaseInfo.PSObject.Properties['schema']
+    if ($null -ne $schemaVersionProp -and $schemaVersionProp.Value) {
+        $schemaVersion = [int]$schemaVersionProp.Value
+    } elseif ($null -ne $schemaProp -and $schemaProp.Value) {
+        $writeProp = $schemaProp.Value.PSObject.Properties['write']
+        if ($null -ne $writeProp -and $null -ne $writeProp.Value) { $schemaVersion = [int]$writeProp.Value }
+    }
+}
 $buildId = if ($releaseInfo -and $releaseInfo.commit) { [string]$releaseInfo.commit } else { 'development' }
 
 # ------------------------------------------------------------------------- MIME
