@@ -167,6 +167,49 @@ try {
     }
     if (-not $healthProcess.WaitForExit(10000)) { $healthProcess.Kill(); throw 'HealthOnly nao encerrou apos responder.' }
 
+    # Runtime empacotado: o release.json real declara o schema em schema.write e
+    # nao tem schemaVersion. Sob Set-StrictMode 2.0 o servidor nao pode quebrar
+    # ao ler esse formato (falha encontrada no QA do 20-07).
+    $pacoteRoot = Join-Path $temp 'runtime-pacote'
+    $pacoteData = Join-Path $temp 'pacote-data'
+    $pacoteConfig = Join-Path $temp 'pacote-config'
+    $pacoteState = Join-Path $temp 'pacote-state'
+    New-Item -ItemType Directory -Path (Join-Path $pacoteRoot 'tools'),(Join-Path $pacoteRoot 'dist'),$pacoteData,$pacoteConfig,$pacoteState -Force | Out-Null
+    Copy-Item -LiteralPath $serve -Destination (Join-Path $pacoteRoot 'serve.ps1')
+    Copy-Item -LiteralPath (Join-Path $root 'tools\portable-common.ps1') -Destination (Join-Path $pacoteRoot 'tools\portable-common.ps1')
+    Copy-Item -LiteralPath (Join-Path $root 'dist\pmo-tool.html') -Destination (Join-Path $pacoteRoot 'dist\pmo-tool.html')
+    Write-PmoJsonAtomic (Join-Path $pacoteRoot 'release.json') ([ordered]@{
+        formatVersion = 1; product = 'PMO Tool'; version = '9.9.9'; channel = 'stable'; commit = 'teste-pacote'
+        schema = [ordered]@{ readMin = 1; readMax = 4; write = 4 }
+    })
+    $pacotePort = $Port + 4
+    $pacotePsi = New-Object System.Diagnostics.ProcessStartInfo
+    $pacotePsi.FileName = 'powershell.exe'
+    $pacotePsi.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $pacoteRoot 'serve.ps1') + '" -Porta ' + $pacotePort + ' -DataDir "' + $pacoteData + '" -ConfigDir "' + $pacoteConfig + '" -StateDir "' + $pacoteState + '" -HealthOnly -SemBuild -SemBrowser'
+    $pacotePsi.UseShellExecute = $false
+    $pacotePsi.CreateNoWindow = $true
+    $pacotePsi.RedirectStandardOutput = $true
+    $pacotePsi.RedirectStandardError = $true
+    $pacoteProcess = New-Object System.Diagnostics.Process
+    $pacoteProcess.StartInfo = $pacotePsi
+    if (-not $pacoteProcess.Start()) { throw 'Nao foi possivel iniciar o runtime empacotado.' }
+    $pacoteHealth = $null
+    for ($i=0; $i -lt 40; $i++) {
+        Start-Sleep -Milliseconds 250
+        try { $pacoteHealth = (Invoke-LocalApi '/api/health' -TargetPort $pacotePort).Content | ConvertFrom-Json; break }
+        catch { if ($pacoteProcess.HasExited) { break } }
+    }
+    if (-not $pacoteHealth -or -not $pacoteHealth.ok) {
+        $pacoteFailure = if ($pacoteProcess.HasExited) { $pacoteProcess.StandardError.ReadToEnd() } else { '' }
+        if (-not $pacoteProcess.HasExited) { $pacoteProcess.Kill() }
+        throw ('Runtime empacotado (release.json com schema.write) nao subiu. ' + $pacoteFailure)
+    }
+    if ([int]$pacoteHealth.schemaVersion -ne 4 -or [string]$pacoteHealth.appVersion -ne '9.9.9' -or [string]$pacoteHealth.build -ne 'teste-pacote') {
+        throw 'Runtime empacotado nao leu versao, schema.write e commit do release.json.'
+    }
+    if (-not $pacoteProcess.WaitForExit(10000)) { $pacoteProcess.Kill(); throw 'Runtime empacotado HealthOnly nao encerrou apos responder.' }
+    Write-Host 'Runtime empacotado (schema.write sem schemaVersion): OK'
+
     $app = Invoke-LocalApi '/'
     if ($app.Content -notmatch [regex]::Escape($token) -or $app.Content -notmatch [regex]::Escape($activationId)) {
         throw 'Token administrativo ou activationId nao foi injetado no HTML.'
