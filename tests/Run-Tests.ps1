@@ -290,6 +290,15 @@ try {
             throw "Erro de sintaxe em $script`: $($erros[0])"
         }
     }
+    # P-26/P3: a espera bloqueante do HttpListener impede o Ctrl+C no 5.1.
+    # O loop do serve.ps1 precisa aceitar com BeginGetContext/EndGetContext.
+    $fonteServe = [System.IO.File]::ReadAllText((Join-Path $raiz 'serve.ps1'), [System.Text.Encoding]::UTF8)
+    if ($fonteServe -match '\.GetContext\s*\(') {
+        throw 'serve.ps1 nao pode chamar a espera bloqueante do HttpListener (use BeginGetContext com WaitOne curto).'
+    }
+    if ($fonteServe -notmatch '\.BeginGetContext\(' -or $fonteServe -notmatch '\.EndGetContext\(' -or $fonteServe -notmatch 'AsyncWaitHandle\.WaitOne\(') {
+        throw 'serve.ps1 deve aceitar conexoes com BeginGetContext, AsyncWaitHandle.WaitOne e EndGetContext.'
+    }
     foreach ($json in @(
         (Join-Path $raiz 'config\install.example.json'),
         (Join-Path $raiz 'state\active.example.json'),

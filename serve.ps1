@@ -1498,7 +1498,14 @@ if (-not $SemBrowser) {
 
 try {
     while ($listener.IsListening) {
-        $ctx  = $listener.GetContext()
+        # A espera bloqueante do HttpListener prende a thread dentro do .NET e o
+        # Windows PowerShell 5.1 so processa Ctrl+C entre instrucoes. Aceitar de
+        # forma assincrona e esperar em fatias curtas devolve o controle ao
+        # PowerShell a cada 250 ms; Ctrl+C interrompe o loop e o finally fecha
+        # listener e mutex.
+        $aceite = $listener.BeginGetContext($null, $null)
+        while (-not $aceite.AsyncWaitHandle.WaitOne(250)) { }
+        $ctx  = $listener.EndGetContext($aceite)
         $req  = $ctx.Request
         $resp = $ctx.Response
         $script:contadorReq++
