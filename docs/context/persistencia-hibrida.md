@@ -108,9 +108,12 @@ snapshot; com dado a proteger e sem servidor, é recusada com motivo (premissa P
 ## Retenção dos backups rotativos
 
 Os backups automáticos de `portfolio.json` (`data/backups/portfolio-*.json`, um a cada gravação)
-seguem retenção por janela de tempo, não por contagem: um arquivo por hora nas últimas 48 horas e
-um por dia até 90 dias, em UTC, sempre mantendo o mais novo de cada balde; o backup mais recente e
-qualquer arquivo com data futura nunca são apagados — premissa P-14. As janelas são configuráveis
+seguem retenção por janela de tempo, não só por contagem (premissa P-14, revista pelo dono). Os
+30 backups mais recentes ficam sempre (piso). Fora do piso, os arquivos caem em baldes de uma hora
+nas últimas 48 horas e de um dia até 90 dias, em UTC, e cada balde guarda **o mais antigo e o mais
+novo**: o mais antigo preserva o estado de antes de uma rajada de gravações na mesma hora, que de
+outro modo seria apagado. Arquivo com data futura nunca é apagado; arquivo com mais de 90 dias sai,
+exceto se estiver no piso. As janelas são configuráveis
 só para cima em `config/install.json`, pelas chaves `retention.portfolioBackupsHourlyHours` e
 `retention.portfolioBackupsDailyDays`; um valor abaixo do piso 48/90 é elevado ao padrão e a chave
 antiga `retention.portfolioBackups` (contagem fixa) é ignorada sem erro.

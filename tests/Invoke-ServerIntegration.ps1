@@ -624,19 +624,36 @@ try {
     $horaTruncada = New-Object DateTime($agoraProt.Year,$agoraProt.Month,$agoraProt.Day,$agoraProt.Hour,0,0,[DateTimeKind]::Utc)
     $diaTruncado = New-Object DateTime($agoraProt.Year,$agoraProt.Month,$agoraProt.Day,0,0,0,[DateTimeKind]::Utc)
 
-    # Grupo 1 - rajada: 40 PUT seguidos na hora corrente; so o(s) mais novo(s) por hora ficam
+    # Grupo 1 - rajada (P-14 revista): o estado de antes da sessao sobrevive a uma
+    # rajada de gravacoes na mesma hora. O disco guarda um estado marcado; a sessao
+    # comeca sem backup nesta hora; 40 PUT seguidos. O primeiro PUT copia o estado
+    # marcado, que e o MAIS ANTIGO do balde e precisa ficar. Ficam tambem o piso
+    # dos 30 mais recentes e o mais novo do balde fora do piso.
+    $marcaAntesDaSessao = (Get-Date).ToUniversalTime().AddMilliseconds(-7).ToString('o')
+    $portfolio.meta.salvoEm = $marcaAntesDaSessao
+    $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+    Get-ChildItem -LiteralPath $bkpDirTeste -Filter 'portfolio-*.json' -File -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
     $fixtureUmaHora = New-ProtBackupFixture 'uma-hora-atras' ($horaTruncada.AddHours(-1).AddMinutes(30))
     for ($i = 0; $i -lt 40; $i++) {
         $portfolio.meta.salvoEm = (Get-Date).ToUniversalTime().ToString('o')
         $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
     }
     $reaisRajada = @(Get-ProtRealBackups)
-    if ($reaisRajada.Count -lt 1 -or $reaisRajada.Count -gt 2) {
-        throw ('Rajada nao respeitou o balde por hora: ' + $reaisRajada.Count + ' sobreviventes reais.')
+    # 30 do piso + o mais novo e o mais antigo fora do piso; ate 2 a mais se a
+    # rajada atravessar a virada da hora (mais um balde com seus dois extremos).
+    if ($reaisRajada.Count -lt 32 -or $reaisRajada.Count -gt 34) {
+        throw ('Rajada nao respeitou piso de 30 + extremos do balde: ' + $reaisRajada.Count + ' sobreviventes reais.')
+    }
+    $comEstadoAnterior = @($reaisRajada | Where-Object {
+        [System.IO.File]::ReadAllText($_.FullName, [System.Text.Encoding]::UTF8).Contains($marcaAntesDaSessao)
+    })
+    if ($comEstadoAnterior.Count -ne 1) {
+        throw 'O backup com o estado de antes da sessao nao sobreviveu a rajada na mesma hora (P-14: guardar o mais antigo do balde).'
     }
     if (-not (Test-Path -LiteralPath $fixtureUmaHora)) { throw 'Fixture de 1h atras nao sobreviveu a rajada.' }
 
-    # Grupo 2 - hora: k de 2 a 46 (k=1 ja coberto por 'uma-hora-atras'); k=5 tem tres extras, so +40min fica
+    # Grupo 2 - hora: k de 2 a 46 (k=1 ja coberto por 'uma-hora-atras'); k=5 tem tres extras, ficam +10min (mais antigo) e +40min (mais novo)
     $fixturesHora = @{}
     for ($k = 2; $k -le 46; $k++) {
         if ($k -eq 5) { continue }
@@ -647,7 +664,7 @@ try {
     $h5Mais20 = New-ProtBackupFixture 'h5-mais20' ($horaTruncada.AddHours(-5).AddMinutes(20))
     $h5Mais40 = New-ProtBackupFixture 'h5-mais40' ($horaTruncada.AddHours(-5).AddMinutes(40))
 
-    # Grupo 3 - dia: d de 4 a 88; d=10 tem tres extras, so +20h fica; d de 92 a 100 sai
+    # Grupo 3 - dia: d de 4 a 88; d=10 tem tres extras, ficam +2h (mais antigo) e +20h (mais novo); d de 92 a 100 sai
     $fixturesDia = @{}
     for ($d = 4; $d -le 88; $d++) {
         $fixturesDia[$d] = New-ProtBackupFixture ('d-' + $d) ($diaTruncado.AddDays(-$d).AddHours(12))
@@ -672,8 +689,8 @@ try {
         if ($k -eq 5) { continue }
         if (-not (Test-Path -LiteralPath $fixturesHora[$k])) { throw ('Fixture de hora k=' + $k + ' deveria ter sobrevivido.') }
     }
-    if (Test-Path -LiteralPath $fixturesHora[5]) { throw 'Fixture h-5 (+30min) deveria ter sido removida (nao e a mais nova da hora).' }
-    if (Test-Path -LiteralPath $h5Mais10) { throw 'Fixture h5-mais10 deveria ter sido removida.' }
+    if (Test-Path -LiteralPath $fixturesHora[5]) { throw 'Fixture h-5 (+30min) deveria ter sido removida (nao e a mais nova nem a mais antiga da hora).' }
+    if (-not (Test-Path -LiteralPath $h5Mais10)) { throw 'Fixture h5-mais10 (a mais antiga da hora k=5) deveria ter sobrevivido.' }
     if (Test-Path -LiteralPath $h5Mais20) { throw 'Fixture h5-mais20 deveria ter sido removida.' }
     if (-not (Test-Path -LiteralPath $h5Mais40)) { throw 'Fixture h5-mais40 (a mais nova da hora k=5) deveria ter sobrevivido.' }
 
@@ -681,8 +698,8 @@ try {
         if ($d -eq 10) { continue }
         if (-not (Test-Path -LiteralPath $fixturesDia[$d])) { throw ('Fixture de dia d=' + $d + ' deveria ter sobrevivido.') }
     }
-    if (Test-Path -LiteralPath $fixturesDia[10]) { throw 'Fixture d-10 (+12h) deveria ter sido removida (nao e a mais nova do dia).' }
-    if (Test-Path -LiteralPath $d10Mais2) { throw 'Fixture d10-mais2 deveria ter sido removida.' }
+    if (Test-Path -LiteralPath $fixturesDia[10]) { throw 'Fixture d-10 (+12h) deveria ter sido removida (nao e a mais nova nem a mais antiga do dia).' }
+    if (-not (Test-Path -LiteralPath $d10Mais2)) { throw 'Fixture d10-mais2 (a mais antiga do dia d=10) deveria ter sobrevivido.' }
     if (Test-Path -LiteralPath $d10Mais6) { throw 'Fixture d10-mais6 deveria ter sido removida.' }
     if (-not (Test-Path -LiteralPath $d10Mais20)) { throw 'Fixture d10-mais20 (a mais nova do dia d=10) deveria ter sobrevivido.' }
 
@@ -727,6 +744,28 @@ try {
     $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
     if (-not (Test-Path -LiteralPath $fixtureConfig72)) {
         throw 'Fixture a 60h com janela de 72h deveria ter sobrevivido como balde por hora.'
+    }
+
+    # Grupo 6 - piso (P-14 revista): os 30 backups mais recentes ficam sempre,
+    # mesmo mais velhos que a janela diaria; fora do piso, eles saem.
+    Get-ChildItem -LiteralPath $bkpDirTeste -Filter 'portfolio-*.json' -File -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+    $fixturesVelhas = @()
+    foreach ($dVelho in @(130, 140, 150)) {
+        $fixturesVelhas += New-ProtBackupFixture ('velho-' + $dVelho) ($diaTruncado.AddDays(-$dVelho).AddHours(12))
+    }
+    $portfolio.meta.salvoEm = (Get-Date).ToUniversalTime().ToString('o')
+    $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+    foreach ($fixtureVelha in $fixturesVelhas) {
+        if (-not (Test-Path -LiteralPath $fixtureVelha)) { throw 'Backup mais velho que a janela, mas dentro do piso dos 30 mais recentes, deveria ter ficado.' }
+    }
+    for ($nRecente = 2; $nRecente -le 31; $nRecente++) {
+        $null = New-ProtBackupFixture ('recente-' + $nRecente) ($horaTruncada.AddHours(-$nRecente).AddMinutes(15))
+    }
+    $portfolio.meta.salvoEm = (Get-Date).ToUniversalTime().ToString('o')
+    $null = Invoke-LocalApi '/api/portfolio' 'PUT' ($portfolio | ConvertTo-Json -Depth 20) -Admin
+    foreach ($fixtureVelha in $fixturesVelhas) {
+        if (Test-Path -LiteralPath $fixtureVelha) { throw 'Backup mais velho que a janela e fora do piso dos 30 mais recentes deveria ter saido.' }
     }
 
     Write-Host 'PROT-04 retencao por janela: OK' -ForegroundColor Green

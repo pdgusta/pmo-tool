@@ -413,10 +413,14 @@ function Get-RetencaoBackups() {
     return [pscustomobject]@{ horasHorario = $horas; diasDiario = $dias }
 }
 
-# Retencao por janela de tempo (D-32 item 3, PROT-04): um backup por hora nas
-# ultimas N horas e um por dia ate M dias, sempre mantendo o mais recente e
-# qualquer arquivo com data futura. So considera portfolio-*.json direto em
-# $bkpDir (nunca data/backups/snapshots/ nem outro arquivo).
+# Retencao por janela de tempo (D-32 item 3, PROT-04, premissa P-14 revista):
+# os $script:PisoBackupsPortfolio backups mais recentes ficam sempre (piso).
+# Fora do piso, um balde por hora nas ultimas N horas e um por dia ate M dias,
+# em UTC, guardando o MAIS ANTIGO e o mais novo de cada balde: o mais antigo
+# preserva o estado de antes de uma rajada de gravacoes na mesma hora. Arquivo
+# com data futura fica; mais velho que M dias sai, exceto o piso. So considera
+# portfolio-*.json direto em $bkpDir (nunca data/backups/snapshots/).
+$script:PisoBackupsPortfolio = 30
 function LimparBackupsPorJanela() {
     $retencao = Get-RetencaoBackups
     $agora = (Get-Date).ToUniversalTime()
@@ -424,9 +428,15 @@ function LimparBackupsPorJanela() {
         Sort-Object -Property @{Expression='LastWriteTimeUtc';Descending=$true}, @{Expression='Name';Descending=$true})
     if ($arquivos.Count -eq 0) { return }
     $manter = New-Object 'System.Collections.Generic.HashSet[string]'
-    $null = $manter.Add($arquivos[0].FullName)
-    $baldes = @{}
+    $maisNovo = @{}
+    $maisAntigo = @{}
+    $posicao = 0
     foreach ($arquivo in $arquivos) {
+        $posicao++
+        if ($posicao -le $script:PisoBackupsPortfolio) {
+            $null = $manter.Add($arquivo.FullName)
+            continue
+        }
         $modificado = $arquivo.LastWriteTimeUtc
         if ($modificado -gt $agora) {
             $null = $manter.Add($arquivo.FullName)
@@ -440,11 +450,13 @@ function LimparBackupsPorJanela() {
         } else {
             continue
         }
-        if (-not $baldes.ContainsKey($chave)) {
-            $baldes[$chave] = $arquivo
-            $null = $manter.Add($arquivo.FullName)
-        }
+        # Lista em ordem decrescente: o primeiro do balde e o mais novo e o
+        # ultimo visto e o mais antigo.
+        if (-not $maisNovo.ContainsKey($chave)) { $maisNovo[$chave] = $arquivo.FullName }
+        $maisAntigo[$chave] = $arquivo.FullName
     }
+    foreach ($chave in $maisNovo.Keys) { $null = $manter.Add([string]$maisNovo[$chave]) }
+    foreach ($chave in $maisAntigo.Keys) { $null = $manter.Add([string]$maisAntigo[$chave]) }
     foreach ($arquivo in $arquivos) {
         if ($manter.Contains($arquivo.FullName)) { continue }
         if (Test-PmoSubPath $bkpDir $arquivo.FullName) {
