@@ -1103,6 +1103,31 @@
     }
   }
 
+  // Vinculo divergente com a instalacao (premissa P-25): o Store abriu em
+  // somente leitura com a copia do disco desta instalacao. Trocar de
+  // instalacao e acao explicita. Texto provisorio: a copy final e do Artesao.
+  async function oferecerTrocaDeInstalacao() {
+    const aceitar = await app.confirmar('Dados de outra instalação neste navegador',
+      S.motivoSomenteLeitura + ' Ao continuar, a cópia do navegador é baixada como arquivo JSON e ' +
+      'guardada também no próprio navegador; depois o navegador passa a mostrar os dados desta instalação. ' +
+      'Os anexos guardados no navegador não são apagados.',
+      { ok: 'Baixar a cópia e seguir esta instalação', cancelar: 'Agora não' });
+    if (!aceitar) {
+      U.toast('Somente leitura: ' + S.motivoSomenteLeitura + ' Recarregue a página para decidir de novo.',
+        'warn', { duracao: 30000 });
+      return;
+    }
+    try {
+      const r = await S.adotarInstalacaoAtual();
+      U.toast((r.arquivo ? 'Cópia do navegador baixada (' + r.arquivo + '). ' : '') +
+        'Recarregando com os dados desta instalação…', 'ok', { duracao: 8000 });
+      setTimeout(function () { location.reload(); }, 1500);
+    } catch (e) {
+      U.toast('A troca de instalação não foi concluída e a cópia do navegador continua lá: ' +
+        (e.message || String(e)), 'erro', { duracao: 20000 });
+    }
+  }
+
   async function boot() {
     try {
       app.tema(temaAtual());
@@ -1142,8 +1167,10 @@
 
       if (S.somenteLeitura) {
         document.documentElement.setAttribute('data-somente-leitura', '1');
-        U.toast('Modo somente leitura: ' + S.motivoSomenteLeitura +
-          ' Nenhuma alteração será gravada por esta versão.', 'warn', { duracao: 30000 });
+        if (!S.instalacaoDivergente) {
+          U.toast('Modo somente leitura: ' + S.motivoSomenteLeitura +
+            ' Nenhuma alteração será gravada por esta versão.', 'warn', { duracao: 30000 });
+        }
       } else {
         document.documentElement.removeAttribute('data-somente-leitura');
       }
@@ -1169,6 +1196,12 @@
 
       q('app').removeAttribute('data-carregando');
 
+      if (S.instalacaoDivergente) {
+        // Intencao de restore/rollback na URL nao atravessa a troca de instalacao.
+        consumirParametrosDeRecuperacao();
+        await oferecerTrocaDeInstalacao();
+        return;
+      }
       if (await verificarRecuperacaoNoInicio()) { return; }
       await verificarAtualizacaoNoInicio();
 

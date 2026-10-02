@@ -210,6 +210,60 @@ try {
     if (-not $pacoteProcess.WaitForExit(10000)) { $pacoteProcess.Kill(); throw 'Runtime empacotado HealthOnly nao encerrou apos responder.' }
     Write-Host 'Runtime empacotado (schema.write sem schemaVersion): OK'
 
+    # P-25: id estavel da instalacao em /api/health, guardado sob o StateDir.
+    $idPrincipal = [string]$health.installId
+    if ($idPrincipal -notmatch '^[0-9a-f]{32}$') { throw '/api/health nao expos um installId valido.' }
+    $idPrincipalArquivo = Read-PmoJson (Join-Path $state 'install-id.json') $null
+    if (-not $idPrincipalArquivo -or [string]$idPrincipalArquivo.installId -ne $idPrincipal) {
+        throw 'installId de /api/health nao corresponde a state/install-id.json.'
+    }
+    if (@(Get-ChildItem -LiteralPath $data -Recurse -File -Filter 'install-id.json' -ErrorAction SilentlyContinue).Count -ne 0) {
+        throw 'install-id.json nao pode morar sob o DataDir.'
+    }
+    if ($null -ne $isolatedHealth.installId -or (Test-Path -LiteralPath (Join-Path $healthState 'install-id.json'))) {
+        throw 'HealthOnly deve so ler o id da instalacao, nunca cria-lo.'
+    }
+    function Get-InstallIdPorReinicio([string]$StateDirTeste, [int]$PortaTeste) {
+        $psiId = New-Object System.Diagnostics.ProcessStartInfo
+        $psiId.FileName = 'powershell.exe'
+        $psiId.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $pacoteRoot 'serve.ps1') + '" -Porta ' + $PortaTeste +
+            ' -DataDir "' + $pacoteData + '" -ConfigDir "' + $pacoteConfig + '" -StateDir "' + $StateDirTeste + '" -SemBuild -SemBrowser'
+        $psiId.UseShellExecute = $false
+        $psiId.CreateNoWindow = $true
+        # Saida curta (banner e poucas linhas): redirecionada para nao poluir o log do teste.
+        $psiId.RedirectStandardOutput = $true
+        $psiId.RedirectStandardError = $true
+        $procId = New-Object System.Diagnostics.Process
+        $procId.StartInfo = $psiId
+        if (-not $procId.Start()) { throw 'Nao foi possivel iniciar o servidor do teste de installId.' }
+        try {
+            $saudeId = $null
+            for ($j=0; $j -lt 60; $j++) {
+                Start-Sleep -Milliseconds 250
+                try { $saudeId = (Invoke-LocalApi '/api/health' -TargetPort $PortaTeste).Content | ConvertFrom-Json; break }
+                catch { if ($procId.HasExited) { break } }
+            }
+            if (-not $saudeId -or -not $saudeId.ok) { throw 'Servidor do teste de installId nao respondeu.' }
+            return [string]$saudeId.installId
+        } finally {
+            if (-not $procId.HasExited) { $procId.Kill(); $procId.WaitForExit(5000) | Out-Null }
+        }
+    }
+    $idPacote1 = Get-InstallIdPorReinicio $pacoteState ($Port + 5)
+    $idPacote2 = Get-InstallIdPorReinicio $pacoteState ($Port + 5)
+    if ($idPacote1 -notmatch '^[0-9a-f]{32}$' -or $idPacote1 -ne $idPacote2) {
+        throw 'installId deveria ser estavel entre reinicios com o mesmo StateDir.'
+    }
+    if ($idPacote1 -eq $idPrincipal) { throw 'StateDirs diferentes deveriam ter installIds diferentes.' }
+    [System.IO.File]::WriteAllText((Join-Path $pacoteState 'install-id.json'), '{"installId":"invalido"}', (New-Object System.Text.UTF8Encoding($false)))
+    $idCorrompidoFalhou = $false
+    try { $null = Get-InstallIdPorReinicio $pacoteState ($Port + 5) } catch { $idCorrompidoFalhou = $true }
+    if (-not $idCorrompidoFalhou) { throw 'install-id.json invalido deveria impedir o servidor de subir (sem regenerar em silencio).' }
+    if ([System.IO.File]::ReadAllText((Join-Path $pacoteState 'install-id.json')) -notmatch 'invalido') {
+        throw 'install-id.json invalido nao pode ser regravado automaticamente.'
+    }
+    Write-Host 'P-25 installId estavel por StateDir: OK'
+
     $app = Invoke-LocalApi '/'
     if ($app.Content -notmatch [regex]::Escape($token) -or $app.Content -notmatch [regex]::Escape($activationId)) {
         throw 'Token administrativo ou activationId nao foi injetado no HTML.'

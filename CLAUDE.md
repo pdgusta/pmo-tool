@@ -255,6 +255,7 @@ PMO-Tool/
   state/active.json
   state/update.json
   state/update.lock             <- efêmero durante preflight/update
+  state/install-id.json         <- id estável da instalação (P-25); criado pelo servidor
   versions/<semver>/
     serve.ps1
     dist/pmo-tool.html
@@ -377,6 +378,7 @@ excluirProjeto(draft, id)          -> payload v1 (projeto, dependências e anexo
 excluirRegistro(draft, tipo, projetoId, itemId) -> payload v1 (item e anexos desfeitos)
 lixeira(bundle)                    -> [{auditId, tipo, ..., restauravel, motivo}]
 restaurarDaLixeira(draft, auditId) -> {tipo, entidade, entidadeId, acao, rotulo, resumo, avisos}
+decidirVinculoInstalacao(idGuardado, idServidor) -> 'sem-servidor'|'vincular'|'ok'|'divergente'
 
 evm(projeto, dataDate?)            -> {BAC,PV,EV,AC,SV,CV,SPI,CPI,EAC,ETC,VAC,TCPI,
                                        pctPlanejado,pctFisico,desvioDias}
@@ -421,6 +423,11 @@ await sairModoManutencao()
 on(evento, fn) / off(evento, fn)   -> eventos: 'change','status','erro','protecao-status'
 statusDisco                        -> {online:bool, ultimoSalvo, erro}
 statusProtecao                     -> {operacao, fase, erro, snapshotId}
+instalacao                         -> {estado:'sem-servidor'|'vinculada'|'divergente', idServidor,
+                                       idGuardado}; 'divergente' abre em somente leitura (P-25)
+await adotarInstalacaoAtual()       -> só com vínculo divergente: baixa a cópia do navegador como
+                                       bundle JSON, depois troca pela cópia do disco desta
+                                       instalação e grava o novo id; {ok, arquivo, installId}
 ```
 
 ### `PMO.importar` (30-39)

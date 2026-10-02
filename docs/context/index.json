@@ -666,7 +666,10 @@
         "/api/copia-verificavel/conferir",
         "function\\s+CriarSnapshotProtecao",
         "function\\s+LimparBackupsPorJanela",
-        "portfolioBackupsHourlyHours"
+        "portfolioBackupsHourlyHours",
+        "PisoBackupsPortfolio",
+        "install-id\\.json",
+        "function\\s+Get-PmoInstallId"
       ]
     },
     {
@@ -679,7 +682,9 @@
         "snapshotProtecao\\('substituir'\\)",
         "store\\.restaurarDaLixeira\\s*=\\s*async function",
         "store\\.exportarCopiaVerificavel\\s*=\\s*async function",
-        "store\\.conferirCopiaVerificavel\\s*=\\s*async function"
+        "store\\.conferirCopiaVerificavel\\s*=\\s*async function",
+        "store\\.adotarInstalacaoAtual\\s*=\\s*async function",
+        "M\\.decidirVinculoInstalacao\\("
       ]
     },
     {

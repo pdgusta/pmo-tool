@@ -142,6 +142,7 @@ $appReadyJson = Join-Path $stateDir 'app-ready.json'
 $restorePendingJson = Join-Path $stateDir 'restore-pending.json'
 $restoreAckJson = Join-Path $stateDir 'restore-ack.json'
 $restoreJournalJson = Join-Path $stateDir 'restore.json'
+$installIdJson = Join-Path $stateDir 'install-id.json'
 $recoveryRoot = Join-Path $dataDir 'recovery'
 $utf8SemBom = New-Object System.Text.UTF8Encoding($false)
 $script:maintenance = $false
@@ -166,7 +167,7 @@ foreach ($d in $diretoriosCriaveis) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
     $null = Assert-PmoPathWithoutReparse $d
 }
-foreach ($highRiskPath in @($portJson,$installJson,$activeJson,$updateJson,$updateLock,$appReadyJson,$restorePendingJson,$restoreAckJson,$restoreJournalJson)) {
+foreach ($highRiskPath in @($portJson,$installJson,$activeJson,$updateJson,$updateLock,$appReadyJson,$restorePendingJson,$restoreAckJson,$restoreJournalJson,$installIdJson)) {
     $null = Assert-PmoPathWithoutReparse $highRiskPath
 }
 
@@ -1460,11 +1461,39 @@ function ConfirmarAppReady($reported) {
     return $ready
 }
 
+# Id estavel da instalacao (premissa P-25). Mora em state/install-id.json, sob o
+# StateDir desta instalacao: nunca em versions/, nunca em data/, nunca no ZIP.
+# O navegador guarda o id com que sincronizou e falha fechado se ele mudar, para
+# a copia do IndexedDB nao atravessar instalacoes na mesma origem. Arquivo
+# presente e invalido e erro bloqueante: regenerar em silencio trocaria o id.
+function Get-PmoInstallId([bool]$Criar) {
+    if (Test-Path -LiteralPath $installIdJson -PathType Leaf) {
+        $registro = $null
+        try { $registro = Read-PmoJson $installIdJson $null } catch { $registro = $null }
+        $valor = ''
+        if ($registro -and ($registro.PSObject.Properties.Name -contains 'installId')) { $valor = [string]$registro.installId }
+        if ($valor -notmatch '^[0-9a-f]{32}$') {
+            throw ('Id da instalacao invalido em ' + $installIdJson + '. Corrija ou restaure o arquivo; ele nao e recriado automaticamente.')
+        }
+        return $valor
+    }
+    if (-not $Criar) { return $null }
+    $novo = [Guid]::NewGuid().ToString('N')
+    Write-PmoJsonAtomic $installIdJson ([ordered]@{ formatVersion=1; installId=$novo; criadoEm=(Get-Date).ToUniversalTime().ToString('o') })
+    return $novo
+}
+
 # ---------------------------------------------------------------------- listener
 $serveRuntimeMutex = $null
 if (-not $HealthOnly) {
     $serveRuntimeMutex = Enter-PmoMutex $installRoot 'runtime' 0
     if (-not $serveRuntimeMutex) { throw 'Outra instancia do PMO Tool ja esta em execucao.' }
+}
+# Criado so sob o mutex do runtime; o HealthOnly do updater apenas le.
+try { $script:installId = Get-PmoInstallId (-not $HealthOnly) }
+catch {
+    Exit-PmoMutex $serveRuntimeMutex
+    throw
 }
 $listener = New-Object System.Net.HttpListener
 $prefixo  = "http://localhost:$Porta/"
@@ -1548,6 +1577,7 @@ try {
                     ',"build":"' + (JsonEscapar $buildId) + '"' +
                     ',"schemaVersion":' + $schemaVersion +
                     ',"activeVersion":"' + (JsonEscapar $versaoAtiva) + '"' +
+                    ',"installId":' + $(if ($script:installId) { '"' + (JsonEscapar $script:installId) + '"' } else { 'null' }) +
                     ',"temPortfolio":' + $temDados.ToString().ToLower() +
                     ',"dataReadable":' + (Test-Path -LiteralPath $dataDir).ToString().ToLower() +
                     ',"dataWritable":' + (PodeEscreverDiretorio $dataDir).ToString().ToLower() +

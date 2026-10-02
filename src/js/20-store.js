@@ -18,6 +18,9 @@
   const DB_NOME = 'pmo-tool';
   const DB_VERSAO = 1;
   const CHAVE_BUNDLE = 'portfolio';
+  // Id da instalacao com que este navegador sincronizou (premissa P-25). Fica
+  // numa chave propria do IndexedDB, fora do bundle persistido.
+  const CHAVE_INSTALACAO = 'instalacao-vinculada';
   const LIMITE_UNDO = 25;
   const DEBOUNCE_DISCO = 1200;
 
@@ -35,6 +38,10 @@
     statusProtecao: { operacao: null, fase: 'ocioso', erro: null, snapshotId: null },
     statusDisco: { online: false, ultimoSalvo: null, erro: null, salvando: false, pendente: false },
     statusIdb: { online: false, erro: null },
+    // Vinculo com a instalacao (P-25): estado 'sem-servidor' | 'vinculada' |
+    // 'divergente'. Somente leitura para a UI.
+    instalacao: { estado: 'sem-servidor', idServidor: null, idGuardado: null },
+    instalacaoDivergente: false,
     on: emissor.on,
     off: emissor.off
   };
@@ -45,6 +52,7 @@
   let _timerDisco = null;
   let _atorAtual = 'PMO Lead';
   let _bundleOrigemBruto = null;
+  let _installIdServidor = null;
 
   function motivoBloqueio() {
     if (store.somenteLeitura) {
@@ -200,6 +208,15 @@
       const r = await apiFetch('/api/health', { timeout: 5000 });
       store.statusDisco.online = r.ok;
       store.statusDisco.erro = r.ok ? null : 'Servidor respondeu ' + r.status + '.';
+      _installIdServidor = null;
+      if (r.ok) {
+        try {
+          const saude = await r.json();
+          if (saude && typeof saude.installId === 'string' && /^[0-9a-f]{32}$/.test(saude.installId)) {
+            _installIdServidor = saude.installId;
+          }
+        } catch (e) { /* health sem JSON legivel: segue sem vinculo */ }
+      }
       return r.ok;
     } catch (e) {
       store.statusDisco.online = false;
@@ -341,6 +358,57 @@
     return true;
   }
 
+  /* ============================================== vinculo com a instalacao */
+
+  function motivoInstalacaoDivergente(idGuardado, idServidor) {
+    return 'Este navegador guarda dados de outra instalação do PMO Tool (id ' +
+      String(idGuardado).slice(0, 8) + '…), diferente da que está servindo esta página (id ' +
+      String(idServidor).slice(0, 8) + '…). Para não misturar as duas, nada é gravado até você ' +
+      'baixar a cópia do navegador e passar a seguir esta instalação.';
+  }
+
+  async function lerInstalacaoGuardada() {
+    if (!_db) { return null; }
+    try {
+      const reg = await idbGet('kv', CHAVE_INSTALACAO);
+      const id = reg && reg.v ? String(reg.v.installId || '') : '';
+      return id || null;
+    } catch (e) { return null; }
+  }
+
+  async function gravarInstalacaoGuardada(installId, anterior) {
+    if (!_db || !installId) { return false; }
+    await idbOp('kv', 'readwrite', function (os) {
+      os.put({ k: CHAVE_INSTALACAO, v: { installId: installId, vinculadoEm: U.agoraIso(), anterior: anterior || null } });
+    });
+    return true;
+  }
+
+  /**
+   * Decide o vinculo antes de qualquer sincronizacao (P-25). 'divergente'
+   * falha fechado: o init carrega so a copia do disco desta instalacao, em
+   * somente leitura, sem comparar datas com a copia do navegador e sem PUT.
+   */
+  async function avaliarVinculoInstalacao() {
+    const idGuardado = await lerInstalacaoGuardada();
+    const idServidor = store.statusDisco.online ? _installIdServidor : null;
+    const decisao = M.decidirVinculoInstalacao(idGuardado, idServidor);
+    store.instalacaoDivergente = false;
+    if (decisao === 'vincular') {
+      try { await gravarInstalacaoGuardada(idServidor, null); }
+      catch (e) { if (window.console) { console.warn('[PMO] vinculo da instalacao nao gravado', e); } }
+      store.instalacao = { estado: 'vinculada', idServidor: idServidor, idGuardado: idServidor };
+    } else if (decisao === 'ok') {
+      store.instalacao = { estado: 'vinculada', idServidor: idServidor, idGuardado: idGuardado };
+    } else if (decisao === 'divergente') {
+      store.instalacao = { estado: 'divergente', idServidor: idServidor, idGuardado: idGuardado };
+      store.instalacaoDivergente = true;
+    } else {
+      store.instalacao = { estado: 'sem-servidor', idServidor: null, idGuardado: idGuardado };
+    }
+    return decisao;
+  }
+
   /* ================================================================= init */
 
   /**
@@ -356,12 +424,17 @@
     store.statusAtualizacao = { fase: 'ocioso', erro: null };
     _db = await abrirDb();
     await checarServidor();
-    await sincronizarRestorePendente();
+    const vinculo = await avaliarVinculoInstalacao();
+    const divergente = vinculo === 'divergente';
+    // Com a copia do navegador ligada a outra instalacao, nem a restauracao
+    // pendente desta instalacao toca o IndexedDB: ela continua pendente e roda
+    // na proxima abertura, depois de adotarInstalacaoAtual().
+    if (!divergente) { await sincronizarRestorePendente(); }
 
     let doIdb = null;
     let doDisco = null;
 
-    if (_db) {
+    if (_db && !divergente) {
       try {
         const reg = await idbGet('kv', CHAVE_BUNDLE);
         if (reg && reg.v) { doIdb = reg.v; }
@@ -474,6 +547,9 @@
         store.somenteLeitura = true;
         store.motivoSomenteLeitura = 'As cópias persistidas divergem e suas datas não permitem determinar com segurança qual é a mais recente.';
       }
+    } else if (divergente) {
+      store.state = M.portfolioVazio();
+      _bundleOrigemBruto = U.clonar(store.state);
     } else if (o.semear && typeof o.semear === 'function') {
       const semente = o.semear();
       _bundleOrigemBruto = U.clonar(semente);
@@ -484,6 +560,13 @@
     } else {
       store.state = M.portfolioVazio();
       _bundleOrigemBruto = U.clonar(store.state);
+    }
+
+    if (divergente) {
+      // Falha fechado (P-25): mostra so a copia desta instalacao, sem gravar
+      // nada no navegador nem no disco ate a adocao explicita.
+      store.somenteLeitura = true;
+      store.motivoSomenteLeitura = motivoInstalacaoDivergente(store.instalacao.idGuardado, store.instalacao.idServidor);
     }
 
     store.origemCarga = origem;
@@ -1081,6 +1164,50 @@
   };
 
   /** Backups rotativos e a retenção efetiva (P-15), para a tela do 20-10. */
+  /**
+   * Troca de instalacao explicita (P-25). So existe com o vinculo divergente.
+   * Primeiro baixa a copia do navegador como bundle JSON (e guarda outra no
+   * IndexedDB, numa chave propria); so depois troca a copia do navegador pela
+   * copia do disco desta instalacao e grava o novo id. Os blobs de anexos do
+   * IndexedDB nao sao apagados. A UI recarrega a pagina em seguida.
+   */
+  store.adotarInstalacaoAtual = async function () {
+    const vinculo = store.instalacao || {};
+    if (vinculo.estado !== 'divergente' || !vinculo.idServidor) {
+      throw new Error('Este navegador já segue a instalação que serve esta página.');
+    }
+    if (!_db) { throw new Error('IndexedDB indisponível: não há cópia do navegador a trocar.'); }
+    const reg = await idbGet('kv', CHAVE_BUNDLE);
+    const copiaNavegador = reg && reg.v ? reg.v : null;
+    const carimbo = U.agoraIso().replace(/[^0-9]/g, '').slice(0, 14);
+    let arquivo = null;
+    if (copiaNavegador) {
+      arquivo = 'pmo-copia-do-navegador-' + String(vinculo.idGuardado || 'sem-id').slice(0, 8) + '-' + carimbo + '.json';
+      U.download(arquivo, JSON.stringify(copiaNavegador, null, 2), 'application/json');
+      await idbOp('kv', 'readwrite', function (os) {
+        os.put({ k: 'outra-instalacao-' + String(vinculo.idGuardado || 'sem-id') + '-' + carimbo,
+          v: U.clonar(copiaNavegador), criadoEm: U.agoraIso(), installId: vinculo.idGuardado || null });
+      });
+    }
+    const r = await apiFetch('/api/portfolio', { timeout: 60000 });
+    let doDisco = null;
+    if (r.status === 200) {
+      const txt = await r.text();
+      if (txt && txt.trim()) { doDisco = JSON.parse(txt); }
+    } else if (r.status !== 204) {
+      throw new Error('Não consegui ler a cópia do disco desta instalação (' + r.status + '). Nada foi trocado no navegador.');
+    }
+    await idbOp('kv', 'readwrite', function (os) {
+      if (doDisco) { os.put({ k: CHAVE_BUNDLE, v: doDisco }); }
+      else { os.delete(CHAVE_BUNDLE); }
+      os.put({ k: CHAVE_INSTALACAO, v: { installId: vinculo.idServidor, vinculadoEm: U.agoraIso(),
+        anterior: vinculo.idGuardado || null } });
+    });
+    store.instalacao = { estado: 'vinculada', idServidor: vinculo.idServidor, idGuardado: vinculo.idServidor };
+    store.instalacaoDivergente = false;
+    return { ok: true, arquivo: arquivo, installId: vinculo.idServidor, anterior: vinculo.idGuardado || null };
+  };
+
   store.consultarBackups = async function () {
     if (!temServidor()) { return { itens: [], retencao: null }; }
     try {

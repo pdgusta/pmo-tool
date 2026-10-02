@@ -21,6 +21,7 @@ PMO-Tool/
   state/restore.json
   state/restore-pending.json
   state/restore-ack.json
+  state/install-id.json
   versions/<semver>/
     serve.ps1
     dist/pmo-tool.html
@@ -40,7 +41,9 @@ PMO-Tool/
 ```
 
 Arquivos operacionais em `state/` e `data/recovery/` aparecem somente quando a operação
-correspondente existe; não fazem parte do pacote inicial de runtime.
+correspondente existe; não fazem parte do pacote inicial de runtime. `state/install-id.json` é
+criado pelo servidor na primeira execução da instalação e guarda o id estável que liga a cópia do
+navegador a ela (premissa P-25; ver `persistencia-hibrida.md`).
 
 ## Propriedade e mutabilidade
 

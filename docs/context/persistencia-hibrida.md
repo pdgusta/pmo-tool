@@ -22,6 +22,32 @@ instantes iguais com conteúdo diferente — o Store carrega a cópia do disco a
 emite conflito visível e abre em modo somente leitura até reconciliação explícita. O bundle bruto
 escolhido permanece separado do bundle migrado, e schema futuro também bloqueia gravações.
 
+## Vínculo do navegador com a instalação
+
+A cópia do navegador (IndexedDB) fica ligada ao id da instalação — premissa P-25. O servidor
+guarda um id estável em `state/install-id.json`, sob o `StateDir` daquela instalação (nunca em
+`versions/`, em `data/` nem no ZIP), cria o arquivo de forma atômica na primeira execução sob o
+mutex de runtime e o expõe como `installId` em `GET /api/health`. O checkout de desenvolvimento e
+cada instalação portátil têm ids distintos porque seus `StateDir` diferem. `-HealthOnly` só lê o
+id; arquivo presente e inválido impede o servidor de subir, em vez de ser regravado em silêncio.
+
+O Store guarda no IndexedDB, na chave `instalacao-vinculada` do store `kv` (fora do bundle
+persistido), o id com que sincronizou, e decide com `PMO.model.decidirVinculoInstalacao` antes de
+qualquer sincronização:
+
+- servidor sem id (`file://`, versão antiga) — nada muda;
+- navegador sem id guardado (instalação existente) — liga-se na primeira abertura, sem migração;
+- mesmo id — fluxo normal acima;
+- id diferente — falha fechado: não compara datas entre instalações, não grava a cópia do
+  navegador nesta instalação, não aplica restauração pendente ao IndexedDB, mostra só a cópia do
+  disco desta instalação e abre em somente leitura com o motivo em `motivoBloqueio`.
+
+Trocar de instalação é ação explícita: `store.adotarInstalacaoAtual()` primeiro baixa a cópia do
+navegador como bundle JSON (e guarda outra no IndexedDB, chave `outra-instalacao-<id>-<carimbo>`),
+só depois troca a cópia do navegador pela cópia do disco desta instalação e grava o novo id. Os
+blobs de anexos do IndexedDB não são apagados, e o disco da instalação não é alterado; a UI
+recarrega a página em seguida.
+
 ## Mutações e gravação
 
 `Store.mutate(acao, fn, meta)` é a única porta de mutação funcional:
@@ -166,6 +192,8 @@ mutação pendente; cópia durável de arquivo e diretório; raiz ancestral, `co
 junction; raiz de volume com `cwd` externo; delete gerenciado contendo junction em um descendente;
 reinício após cada fase persistida; falhas do snapshot de proteção (selo divergente, SHA-256 de
 anexo divergente, corpo inválido, manutenção ativa, espaço insuficiente) sem deixar pasta
-incompleta; rajada de escritas cobrindo os baldes de hora e de dia da retenção de backups; e a
+incompleta; rajada de escritas cobrindo os baldes de hora e de dia da retenção de backups, com o
+estado de antes da rajada preservado e o piso dos 30 mais recentes; `installId` estável entre
+reinícios com o mesmo `StateDir` e distinto entre `StateDir` diferentes; e a
 conferência da cópia verificável apontando arquivo alterado, faltando, a mais ou manifesto
 trocado.

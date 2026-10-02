@@ -804,6 +804,25 @@
     };
   };
 
+  /**
+   * Vínculo da cópia do navegador com a instalação (premissa P-25). Recebe o
+   * id da instalação guardado no IndexedDB (ou vazio) e o id exposto pelo
+   * servidor em /api/health (ou vazio). Função pura:
+   *   'sem-servidor' -> servidor sem id (file://, HealthOnly, versão antiga):
+   *                     nada a decidir, o comportamento atual continua;
+   *   'vincular'     -> navegador sem id guardado: liga-se em silêncio;
+   *   'ok'           -> mesmo id;
+   *   'divergente'   -> a cópia do navegador é de outra instalação: falha
+   *                     fechado, sem "a mais nova vence" entre instalações.
+   */
+  model.decidirVinculoInstalacao = function (idGuardado, idServidor) {
+    const servidor = typeof idServidor === 'string' ? idServidor.trim() : '';
+    const guardado = typeof idGuardado === 'string' ? idGuardado.trim() : '';
+    if (!servidor) { return 'sem-servidor'; }
+    if (!guardado) { return 'vincular'; }
+    return guardado === servidor ? 'ok' : 'divergente';
+  };
+
   /* ==================================================== campos editáveis
      Descreve, por tipo de registro, o que o editor genérico deve renderizar.
      É a única fonte de verdade do formulário: acrescentar um campo aqui o faz

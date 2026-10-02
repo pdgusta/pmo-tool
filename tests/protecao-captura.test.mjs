@@ -626,4 +626,31 @@ verificar('lixeira: apos M.mesclarTrilha, exclusoes dos dois lados aparecem junt
   assert.deepStrictEqual(ids, ['aud-mesc-arquivo-1', 'aud-mesc-local-1']);
 });
 
+/* ============================================== decidirVinculoInstalacao (P-25) */
+
+const ID_A = '0123456789abcdef0123456789abcdef';
+const ID_B = 'fedcba9876543210fedcba9876543210';
+
+verificar('vinculo: servidor sem id (file://, HealthOnly, versao antiga) nao decide nada', function () {
+  assert.strictEqual(M.decidirVinculoInstalacao(null, null), 'sem-servidor');
+  assert.strictEqual(M.decidirVinculoInstalacao(ID_A, null), 'sem-servidor');
+  assert.strictEqual(M.decidirVinculoInstalacao(ID_A, ''), 'sem-servidor');
+  assert.strictEqual(M.decidirVinculoInstalacao(ID_A, undefined), 'sem-servidor');
+});
+
+verificar('vinculo: navegador sem id guardado se liga em silencio ao servidor', function () {
+  assert.strictEqual(M.decidirVinculoInstalacao(null, ID_A), 'vincular');
+  assert.strictEqual(M.decidirVinculoInstalacao('', ID_A), 'vincular');
+  assert.strictEqual(M.decidirVinculoInstalacao(undefined, ID_A), 'vincular');
+});
+
+verificar('vinculo: mesmo id segue normal', function () {
+  assert.strictEqual(M.decidirVinculoInstalacao(ID_A, ID_A), 'ok');
+});
+
+verificar('vinculo: id diferente falha fechado (divergente)', function () {
+  assert.strictEqual(M.decidirVinculoInstalacao(ID_A, ID_B), 'divergente');
+  assert.strictEqual(M.decidirVinculoInstalacao(ID_B, ID_A), 'divergente');
+});
+
 console.log('protecao-captura: OK (' + n + ' verificacoes)');
