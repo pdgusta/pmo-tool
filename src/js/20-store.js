@@ -1477,7 +1477,14 @@
         body: JSON.stringify(pedido),
         timeout: 120000
       });
-      if (!r.ok) { throw new Error('Snapshot recusado pelo servidor (' + r.status + ').'); }
+      if (!r.ok) {
+        let motivoServidor = '';
+        try {
+          const corpo = await r.json();
+          motivoServidor = corpo && corpo.erro ? ': ' + String(corpo.erro) : '';
+        } catch (e) { /* corpo sem JSON legível */ }
+        throw new Error('Snapshot recusado pelo servidor (' + r.status + ')' + motivoServidor + '.');
+      }
       servidorSelou = true;
       const snapshot = await r.json();
       if (snapshot && snapshot.ok === false) {
