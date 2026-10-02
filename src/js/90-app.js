@@ -22,6 +22,8 @@
      dado de portfólio, então não vai para settings nem para o disco. */
   const rolagemPorRota = {};
   let soltarFocoModal = null;
+  // Modal bloqueante (aviso de entrega ao updater): sem Fechar, sem Escape.
+  let modalBloqueante = false;
   let soltarFocoDrawer = null;
 
   function q(id) { return document.getElementById(id); }
@@ -233,16 +235,18 @@
     if (o.rodapeEsq) { pe.appendChild(U.el('div', { class: 'modal__pe-esq' }, o.rodapeEsq)); }
     if (o.acoes && o.acoes.length) {
       o.acoes.forEach(function (a) { if (a) { pe.appendChild(a); } });
-    } else if (!o.semFechar) {
+    } else if (!o.semFechar && !o.bloqueante) {
       pe.appendChild(vw.botao('Fechar', { onClick: app.fecharModal }));
     }
+    modalBloqueante = !!o.bloqueante;
     fundo.hidden = false;
     if (soltarFocoModal) { soltarFocoModal(); }
-    soltarFocoModal = U.prenderFoco(m, app.fecharModal);
+    soltarFocoModal = U.prenderFoco(m, modalBloqueante ? null : app.fecharModal);
     return m;
   };
 
   app.fecharModal = function () {
+    if (modalBloqueante) { return; }
     q('modal-fundo').hidden = true;
     U.limpar(q('modal-corpo'));
     U.limpar(q('modal-pe'));
@@ -773,7 +777,7 @@
         alvo.tagName === 'SELECT' || alvo.isContentEditable);
 
       if (e.key === 'Escape') {
-        if (!q('modal-fundo').hidden) { app.fecharModal(); return; }
+        if (!q('modal-fundo').hidden) { if (!modalBloqueante) { app.fecharModal(); } return; }
         if (!q('drawer').hidden) { app.fecharDrawer(); return; }
       }
 
@@ -1034,11 +1038,36 @@
     }
   }
 
+  // prepareRestore/prepareRollback sao uma intencao de uso unico vinda do
+  // pmo.ps1. Saem da URL assim que lidos: um F5 nao reabre a operacao, nem
+  // contra outro servidor que venha a ocupar a mesma origem.
+  function consumirParametrosDeRecuperacao() {
+    try {
+      const url = new URL(location.href);
+      url.searchParams.delete('prepareRestore');
+      url.searchParams.delete('prepareRollback');
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    } catch (e) { /* sem History API: segue sem limpar */ }
+  }
+
+  // Depois do 202 o servidor encerra para o updater trabalhar e nada o reabre.
+  // Esta aba guarda o estado anterior em memoria e fica bloqueada (o Store
+  // continua em manutencao e recusa escrita); o resultado so aparece numa nova
+  // abertura pelo pmo.ps1. Texto provisorio: a copy final e do Artesao.
+  function avisarEntregaAoUpdater(operacao) {
+    document.documentElement.setAttribute('data-somente-leitura', '1');
+    app.abrirModal(operacao + ' entregue ao atualizador', U.el('div', { class: 'pilha pilha--2' }, [
+      U.el('p', { class: 'txt-peq', text: 'O estado atual foi protegido em um snapshot e o servidor local foi encerrado para o atualizador trabalhar.' }),
+      U.el('p', { class: 'txt-peq', text: 'Esta aba ainda mostra os dados antigos e não grava mais nada. Feche todas as abas do PMO Tool, aguarde alguns segundos e abra de novo com .\\pmo.ps1 (sem parâmetros), em uma única aba.' })
+    ]), { estreito: true, bloqueante: true });
+  }
+
   async function verificarRecuperacaoNoInicio() {
     const params = new URLSearchParams(location.search || '');
     const querRollback = params.get('prepareRollback') === '1';
     const snapshotAlvo = String(params.get('prepareRestore') || '');
     if (!querRollback && !snapshotAlvo) { return false; }
+    consumirParametrosDeRecuperacao();
     if (S.somenteLeitura || !S.statusDisco.online) {
       U.toast('Rollback/restauracao exigem persistencia hibrida gravavel.', 'erro', { duracao: 20000 });
       return true;
@@ -1054,6 +1083,7 @@
         const preparadoRestore = await S.prepararRestauracao(snapshotAlvo);
         if (!preparadoRestore || !preparadoRestore.ok) { throw new Error('Preflight da restauracao nao foi concluido.'); }
         await S.aplicarRestauracao();
+        avisarEntregaAoUpdater('Restauração');
         return true;
       }
       const aceitarRollback = await app.confirmar('Voltar para a versao anterior',
@@ -1064,6 +1094,7 @@
       const preparadoRollback = await S.prepararRollback();
       if (!preparadoRollback || !preparadoRollback.ok) { throw new Error('Preflight do rollback nao foi concluido.'); }
       await S.aplicarRollback();
+      avisarEntregaAoUpdater('Rollback');
       return true;
     } catch (e) {
       U.toast('Operacao cancelada com o estado atual preservado: ' + (e.message || String(e)), 'erro', { duracao: 20000 });
