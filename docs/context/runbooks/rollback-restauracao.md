@@ -55,19 +55,61 @@ O snapshot de proteção (Fase 20, premissa P-04) não é o snapshot de update: 
 `data/backups/snapshots/<snapshotId>/`, criado antes de "Limpar portfólio" ou "Substituir
 portfólio por bundle importado". Contenha e preserve como na seção 1.
 
-1. Localize o `snapshotId` na entrada de audit da própria operação ("Limpar portfólio" ou
+Os comandos abaixo usam `C:\Exemplo\PMO-Tool` como pasta da instalação; troque pelo caminho real.
+Tudo roda **dentro da pasta da instalação**, nunca na pasta do repositório: o checkout de
+desenvolvimento tem outros dados, outro id de instalação e, na mesma origem, abriria o navegador
+contra a instalação errada.
+
+1. **Pare todo servidor do PMO Tool.** Feche cada janela do PowerShell que roda `pmo.ps1` ou
+   `serve.ps1` com Ctrl+C — inclusive um servidor do checkout de desenvolvimento — e feche todas as
+   abas do PMO Tool no navegador.
+2. **Confirme a porta 8090 livre.** O comando abaixo não deve listar nada; se listar, ainda há um
+   servidor ativo, e a restauração não começa:
+
+   ```powershell
+   Get-NetTCPConnection -LocalPort 8090 -State Listen -ErrorAction SilentlyContinue
+   ```
+
+3. **Localize o `snapshotId`** na entrada de audit da própria operação ("Limpar portfólio" ou
    "Substituir portfólio por bundle importado" registram o campo `snapshotId`).
-2. Confira a pasta com `Test-PmoInventory` contra `manifest.json` antes de mexer em qualquer coisa.
-3. Copie a pasta inteira para `data/update-backups/<snapshotId>/` com `Copy-PmoDirectoryDurable` —
-   o restaurador atual só lê snapshots de `data/update-backups/`; o caminho é manual nesta fase.
-4. Rode:
+4. **Confira e copie o snapshot** para `data\update-backups\<snapshotId>\`. O restaurador atual só
+   lê snapshots de `data\update-backups\`; o caminho é manual nesta fase. Use caminhos absolutos:
 
-```powershell
-.\pmo.ps1 -RestaurarSnapshot <snapshotId>
-```
+   ```powershell
+   cd C:\Exemplo\PMO-Tool
+   . .\tools\portable-common.ps1
+   $id = '<snapshotId>'
+   $origem = Join-Path (Get-Location).Path "data\backups\snapshots\$id"
+   $destino = Join-Path (Get-Location).Path "data\update-backups\$id"
+   $manifesto = Read-PmoJson (Join-Path $origem 'manifest.json') $null
+   Test-PmoInventory $origem $manifesto.files @('manifest.json')   # nao deve listar erro
+   Copy-PmoDirectoryDurable -Source $origem -Destination $destino
+   ```
 
-5. Compare `snapshotId`, contagens (`manifest.json.contagens`) e SHA-256 de cada arquivo
-   (`manifest.json.files`) com o que a restauração produziu — os mesmos critérios da seção 3.
+5. **Peça a restauração, ainda dentro da pasta da instalação:**
+
+   ```powershell
+   .\pmo.ps1 -RestaurarSnapshot <snapshotId>
+   ```
+
+6. Na aba que abrir, clique em **"Proteger estado atual e restaurar"**. O app protege o estado
+   atual num snapshot novo e entrega a restauração ao atualizador.
+7. **Espere o servidor parar e a aba avisar que é preciso reabrir.** O servidor encerra sozinho
+   para o atualizador trabalhar; a aba fica somente leitura com o aviso de fechar as abas e
+   reabrir com `.\pmo.ps1`. Não dê F5 nessa aba: feche-a.
+8. **Reabra com `.\pmo.ps1` (sem parâmetros), em uma única aba.** Na abertura, o Store substitui e
+   confere o IndexedDB e o servidor registra `restore-ack`.
+9. **Confira o diagnóstico:**
+
+   ```powershell
+   .\pmo.ps1 -Diagnostico
+   ```
+
+   `restorePending` precisa ser `false`. Se continuar `true`, a abertura não concluiu a
+   sincronização: não edite nada e siga o runbook de incidente.
+10. **Compare com o manifesto do snapshot alvo:** `snapshotId`, contagens
+    (`manifest.json.contagens`) e SHA-256 de cada arquivo (`manifest.json.files`) contra o que a
+    restauração produziu — os mesmos critérios da seção 3.
 
 ### E — Recuperar item excluído (lixeira)
 
